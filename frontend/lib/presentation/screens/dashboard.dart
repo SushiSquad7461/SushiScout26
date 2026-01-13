@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:drift/drift.dart' as drift;
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
+import 'dart:io';
 import '../../data/local/db.dart';
 import '../../data/local/preferences.dart';
 import 'scouting_wizard.dart';
@@ -30,6 +33,60 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     );
   }
 
+  Future<void> _exportCsv(BuildContext context, WidgetRef ref) async {
+    final matches = await widget.db.select(widget.db.matchEntries).get();
+    if (matches.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("No matches to export.")));
+      return;
+    }
+
+    // Generate CSV String
+    final header =
+        "Match,Team,Alliance,Auto Fuel,Auto Tower L1,Teleop Fuel,Teleop Tower Level,Defense,Driver Skill,Comments,Synced\n";
+    final rows = matches
+        .map((m) {
+          return "${m.matchNumber},${m.teamNumber},${m.alliance},${m.autoFuel},${m.autoTowerL1},${m.teleopFuel},${m.teleopTowerLevel},${m.defenseRating},${m.driverSkill},\"${m.comments.replaceAll('\n', ' ')}\",${m.isSynced}";
+        })
+        .join("\n");
+
+    final csvContent = header + rows;
+
+    // Save & Share using platform channels (requires services, imported below)
+    try {
+      // We need to implement this via a service or inline.
+      // For cleanliness, I'll assume we import specific packages or just do it here if simple.
+      // Since I have share_plus and path_provider, I need to look up how to use them.
+      // But I need the imports first.
+
+      await _shareFile(csvContent);
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Export failed: $e")));
+    }
+  }
+
+  Future<void> _shareFile(String content) async {
+    try {
+      final directory = await getTemporaryDirectory();
+      final file = File('${directory.path}/sushiscout26_export.csv');
+      await file.writeAsString(content);
+
+      await Share.shareXFiles([
+        XFile(file.path),
+      ], text: 'SushiScout 26 Match Data');
+    } catch (e) {
+      debugPrint("Sharing failed: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("Error sharing file: $e")));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final settings = ref.watch(settingsProvider);
@@ -45,6 +102,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           ],
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.download),
+            tooltip: "Export CSV",
+            onPressed: () => _exportCsv(context, ref),
+          ),
           IconButton(
             icon: const Icon(Icons.settings),
             onPressed: () => _openSettings(context),
@@ -211,6 +273,66 @@ class _SettingsSheetState extends ConsumerState<_SettingsSheet> {
             ),
             onChanged: (val) =>
                 ref.read(settingsProvider.notifier).setEventCode(val),
+          ),
+          const SizedBox(height: 16),
+          const SizedBox(height: 16),
+          // Theme Mode Selector
+          DropdownButtonFormField<String>(
+            value: ref.watch(settingsProvider)[PrefKeys.themeMode] ?? 'system',
+            decoration: const InputDecoration(
+              labelText: "Theme Mode",
+              border: OutlineInputBorder(),
+              prefixIcon: Icon(Icons.brightness_6),
+            ),
+            items: const [
+              DropdownMenuItem(value: 'system', child: Text("System")),
+              DropdownMenuItem(value: 'light', child: Text("Light")),
+              DropdownMenuItem(value: 'dark', child: Text("Dark")),
+            ],
+            onChanged: (val) {
+              if (val != null) {
+                ref.read(settingsProvider.notifier).setThemeMode(val);
+              }
+            },
+          ),
+          const SizedBox(height: 16),
+          // Color Seed Selector
+          const Text(
+            "App Color Theme",
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _ColorSeedChip(
+                  label: 'Salmon',
+                  value: 'salmon',
+                  color: const Color(0xFFFA8072),
+                ),
+                _ColorSeedChip(
+                  label: 'Blue',
+                  value: 'blue',
+                  color: Colors.blue,
+                ),
+                _ColorSeedChip(
+                  label: 'Green',
+                  value: 'green',
+                  color: Colors.green,
+                ),
+                _ColorSeedChip(
+                  label: 'Purple',
+                  value: 'purple',
+                  color: Colors.purple,
+                ),
+                _ColorSeedChip(
+                  label: 'Orange',
+                  value: 'orange',
+                  color: Colors.orange,
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 16),
           TextField(

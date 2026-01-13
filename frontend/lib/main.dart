@@ -22,19 +22,37 @@ void main() async {
   );
 }
 
-class SushiScoutApp extends StatelessWidget {
+class SushiScoutApp extends ConsumerWidget {
   final AppDatabase db;
   const SushiScoutApp({super.key, required this.db});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final settings = ref.watch(settingsProvider);
+    final themeModeStr = settings[PrefKeys.themeMode] ?? 'system';
+    final colorSeedStr = settings[PrefKeys.colorSeed] ?? 'salmon';
+
+    final ThemeMode mode = switch (themeModeStr) {
+      'light' => ThemeMode.light,
+      'dark' => ThemeMode.dark,
+      _ => ThemeMode.system,
+    };
+
+    final Color seedColor = switch (colorSeedStr) {
+      'blue' => Colors.blue,
+      'green' => Colors.green,
+      'purple' => Colors.purple,
+      'orange' => Colors.orange,
+      _ => const Color(0xFFFA8072), // Salmon
+    };
+
     return MaterialApp(
       title: 'SushiScout 26',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFFFA8072), // Salmon/Sushi Color
+          seedColor: seedColor,
           brightness: Brightness.light,
         ),
         textTheme: GoogleFonts.interTextTheme(),
@@ -42,12 +60,12 @@ class SushiScoutApp extends StatelessWidget {
       darkTheme: ThemeData(
         useMaterial3: true,
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFFFA8072),
+          seedColor: seedColor,
           brightness: Brightness.dark,
         ),
         textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme),
       ),
-      themeMode: ThemeMode.system,
+      themeMode: mode,
       home: DashboardScreen(db: db),
     );
   }

@@ -7,6 +7,8 @@ class PrefKeys {
   static const String scouterName = 'scouter_name';
   static const String eventCode = 'event_code';
   static const String themeMode = 'theme_mode'; // 'system', 'light', 'dark'
+  static const String colorSeed =
+      'color_seed'; // 'salmon', 'blue', 'green', 'purple'
 }
 
 // Provider for SharedPreferences instance (overridden in main)
@@ -15,17 +17,21 @@ final sharedPreferencesProvider = Provider<SharedPreferences>((ref) {
 });
 
 // Settings Notifier
-class SettingsNotifier extends StateNotifier<Map<String, String>> {
-  final SharedPreferences _prefs;
+class SettingsNotifier extends Notifier<Map<String, String>> {
+  late SharedPreferences _prefs;
 
-  SettingsNotifier(this._prefs)
-    : super({
-        PrefKeys.serverIp:
-            _prefs.getString(PrefKeys.serverIp) ?? 'http://10.0.0.5:8000',
-        PrefKeys.scouterName: _prefs.getString(PrefKeys.scouterName) ?? '',
-        PrefKeys.eventCode: _prefs.getString(PrefKeys.eventCode) ?? '2026TEST',
-        PrefKeys.themeMode: _prefs.getString(PrefKeys.themeMode) ?? 'system',
-      });
+  @override
+  Map<String, String> build() {
+    _prefs = ref.watch(sharedPreferencesProvider);
+    return {
+      PrefKeys.serverIp:
+          _prefs.getString(PrefKeys.serverIp) ?? 'http://10.0.0.5:8000',
+      PrefKeys.scouterName: _prefs.getString(PrefKeys.scouterName) ?? '',
+      PrefKeys.eventCode: _prefs.getString(PrefKeys.eventCode) ?? '2026TEST',
+      PrefKeys.themeMode: _prefs.getString(PrefKeys.themeMode) ?? 'system',
+      PrefKeys.colorSeed: _prefs.getString(PrefKeys.colorSeed) ?? 'salmon',
+    };
+  }
 
   Future<void> setServerIp(String value) async {
     await _prefs.setString(PrefKeys.serverIp, value);
@@ -41,10 +47,19 @@ class SettingsNotifier extends StateNotifier<Map<String, String>> {
     await _prefs.setString(PrefKeys.eventCode, value);
     state = {...state, PrefKeys.eventCode: value};
   }
+
+  Future<void> setThemeMode(String value) async {
+    await _prefs.setString(PrefKeys.themeMode, value);
+    state = {...state, PrefKeys.themeMode: value};
+  }
+
+  Future<void> setColorSeed(String value) async {
+    await _prefs.setString(PrefKeys.colorSeed, value);
+    state = {...state, PrefKeys.colorSeed: value};
+  }
 }
 
 final settingsProvider =
-    StateNotifierProvider<SettingsNotifier, Map<String, String>>((ref) {
-      final prefs = ref.watch(sharedPreferencesProvider);
-      return SettingsNotifier(prefs);
-    });
+    NotifierProvider<SettingsNotifier, Map<String, String>>(
+      SettingsNotifier.new,
+    );
