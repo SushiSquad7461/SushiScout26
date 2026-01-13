@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  backend:
+    build: ./backend
+    container_name: sushiscout_backend
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:sushisecret@db:5432/sushiscout26
+      # Paste your Google Credentials JSON string in production env vars or .env file
+      - GOOGLE_SERVICE_ACCOUNT_JSON={} 
+    depends_on:
+      - db
+    restart: always
+
+  db:
+    image: postgres:15-alpine
+    container_name: sushiscout_db
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=sushisecret
+      - POSTGRES_DB=sushiscout26
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: always
+
+volumes:
+  postgres_data:
