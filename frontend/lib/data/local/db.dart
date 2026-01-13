@@ -41,6 +41,8 @@ class MatchEntries extends Table {
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
+  AppDatabase.forTesting(QueryExecutor connection) : super(connection);
+
   @override
   int get schemaVersion => 1;
 

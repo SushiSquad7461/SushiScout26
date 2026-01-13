@@ -1,30 +1,80 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
-import 'package:frontend/main.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:drift/native.dart';
+import 'package:frontend/main.dart'; // Ensure this exposes MyApp or similar, need to check
+import 'package:frontend/data/local/db.dart';
+import 'package:frontend/presentation/screens/scouting_wizard.dart'; // Verify this import path
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  late AppDatabase db;
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+  setUp(() {
+    db = AppDatabase.forTesting(NativeDatabase.memory());
+  });
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
+  tearDown(() async {
+    await db.close();
+  });
+
+  testWidgets('Scouting Wizard step navigation and data entry', (
+    WidgetTester tester,
+  ) async {
+    // We need to wrap in ProviderScope for Riverpod
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(home: ScoutingWizard(db: db)),
+      ),
+    );
+
+    // Step 1: Setup
+    // Assuming ScoutingWizard starts at Setup step
+    // Check if we need to find specific widgets.
+    // The snippet used 'Scouter Name' text field.
+
+    // Note: If ScoutingWizard expects arguments or specific providers, we might need to adjust.
+    // Assuming ScoutingWizard takes `db` as a parameter based on the snippet.
+
+    expect(
+      find.text('Scouter Name'),
+      findsOneWidget,
+    ); // Verify we are on the page
+
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Scouter Name'),
+      'Tester',
+    );
+    // 'Match #' might be a TextField label
+    await tester.enterText(find.widgetWithText(TextField, 'Match #'), '42');
+
+    await tester.tap(find.text('Next'));
+    await tester.pumpAndSettle();
+
+    // Step 2: Auto
+    expect(find.text('Autonomous'), findsOneWidget);
+    // Assuming there is a button to add fuel. The snippet says `find.widgetWithIcon(FilledButton, Icons.add)`
+    // We'll try to find an add icon.
+    await tester.tap(find.byIcon(Icons.add).first);
     await tester.pump();
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    await tester.tap(find.text('Next'));
+    await tester.pumpAndSettle();
+
+    // Step 3: Teleop
+    expect(find.text('Teleop'), findsOneWidget);
+    await tester.tap(find.text('Next'));
+    await tester.pumpAndSettle();
+
+    // Step 4: Endgame
+    // Maybe verify 'Endgame' text
+    expect(find.text('Endgame'), findsOneWidget);
+
+    await tester.tap(find.text('Submit'));
+    await tester.pumpAndSettle();
+
+    // Verify saved
+    final matches = await db.select(db.matchEntries).get();
+    expect(matches.length, 1);
+    expect(matches.first.matchNumber, 42);
   });
 }

@@ -40,7 +40,7 @@ class _ScoutingWizardState extends State<ScoutingWizard> {
     if (_currentStep < 3) {
       _pageController.nextPage(
         duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOutEmphasized,
+        curve: Curves.easeInOut,
       );
       setState(() => _currentStep++);
     } else {
@@ -52,7 +52,7 @@ class _ScoutingWizardState extends State<ScoutingWizard> {
     if (_currentStep > 0) {
       _pageController.previousPage(
         duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOutEmphasized,
+        curve: Curves.easeInOut,
       );
       setState(() => _currentStep--);
     }
@@ -260,7 +260,7 @@ class _ScoutingWizardState extends State<ScoutingWizard> {
                 ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<int>(
-                  value: _teleopTower,
+                  initialValue: _teleopTower,
                   decoration: const InputDecoration(
                     border: OutlineInputBorder(),
                   ),
