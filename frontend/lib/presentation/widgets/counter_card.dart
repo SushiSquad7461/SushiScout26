@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 class CounterCard extends StatelessWidget {
   final String label;
@@ -35,7 +36,12 @@ class CounterCard extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 FilledButton.tonal(
-                  onPressed: value > 0 ? () => onChanged(value - 1) : null,
+                  onPressed: value > 0
+                      ? () {
+                          HapticFeedback.lightImpact();
+                          onChanged(value - 1);
+                        }
+                      : null,
                   child: const Icon(Icons.remove),
                 ),
                 const SizedBox(width: 24),
@@ -45,7 +51,10 @@ class CounterCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 24),
                 FilledButton.tonal(
-                  onPressed: () => onChanged(value + 1),
+                  onPressed: () {
+                    HapticFeedback.lightImpact();
+                    onChanged(value + 1);
+                  },
                   child: const Icon(Icons.add),
                 ),
               ],

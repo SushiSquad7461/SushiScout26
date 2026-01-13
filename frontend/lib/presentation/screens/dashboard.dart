@@ -93,37 +93,65 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             );
           }
 
-          return ListView.builder(
-            itemCount: matches.length,
-            itemBuilder: (context, index) {
-              final match = matches[index];
-              return ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: match.alliance == 'Red'
-                      ? Colors.red.withOpacity(0.2)
-                      : Colors.blue.withOpacity(0.2),
-                  child: Text(
-                    "${match.matchNumber}",
-                    style: TextStyle(
-                      color: match.alliance == 'Red' ? Colors.red : Colors.blue,
-                      fontWeight: FontWeight.bold,
-                    ),
+          return LayoutBuilder(
+            builder: (context, constraints) {
+              if (constraints.maxWidth > 600) {
+                // Desktop/Tablet Grid
+                return GridView.builder(
+                  padding: const EdgeInsets.all(16),
+                  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                    maxCrossAxisExtent: 400,
+                    childAspectRatio: 3 / 1, // Wide cards
+                    crossAxisSpacing: 16,
+                    mainAxisSpacing: 16,
                   ),
-                ),
-                title: Text("Team ${match.teamNumber}"),
-                subtitle: Text(
-                  "Auto: ${match.autoFuel} | Tele: ${match.teleopFuel}",
-                ),
-                trailing: match.isSynced
-                    ? const Icon(Icons.check_circle, color: Colors.green)
-                    : const Icon(
-                        Icons.cloud_upload_outlined,
-                        color: Colors.orange,
-                      ),
-              );
+                  itemCount: matches.length,
+                  itemBuilder: (context, index) =>
+                      _MatchCard(match: matches[index]),
+                );
+              } else {
+                // Mobile List
+                return ListView.builder(
+                  itemCount: matches.length,
+                  itemBuilder: (context, index) =>
+                      _MatchCard(match: matches[index]),
+                );
+              }
             },
           );
         },
+      ),
+    );
+  }
+}
+
+class _MatchCard extends StatelessWidget {
+  final MatchEntry match;
+  const _MatchCard({required this.match});
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 1,
+      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundColor: match.alliance == 'Red'
+              ? Colors.red.withValues(alpha: 0.2)
+              : Colors.blue.withValues(alpha: 0.2),
+          child: Text(
+            "${match.matchNumber}",
+            style: TextStyle(
+              color: match.alliance == 'Red' ? Colors.red : Colors.blue,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+        title: Text("Team ${match.teamNumber}"),
+        subtitle: Text("Auto: ${match.autoFuel} | Tele: ${match.teleopFuel}"),
+        trailing: match.isSynced
+            ? const Icon(Icons.check_circle, color: Colors.green)
+            : const Icon(Icons.cloud_upload_outlined, color: Colors.orange),
       ),
     );
   }

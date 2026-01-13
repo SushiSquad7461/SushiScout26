@@ -46,6 +46,24 @@ class _ScoutingWizardState extends ConsumerState<ScoutingWizard> {
   }
 
   void _nextPage() {
+    // Validation for Setup Step
+    if (_currentStep == 0) {
+      if (_matchNumberCtrl.text.isEmpty ||
+          int.tryParse(_matchNumberCtrl.text) == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Please enter a valid Match Number")),
+        );
+        return;
+      }
+      if (_teamNumberCtrl.text.isEmpty ||
+          int.tryParse(_teamNumberCtrl.text) == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Please enter a valid Team Number")),
+        );
+        return;
+      }
+    }
+
     if (_currentStep < 3) {
       _pageController.nextPage(
         duration: const Duration(milliseconds: 300),
