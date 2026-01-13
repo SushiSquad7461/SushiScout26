@@ -41,6 +41,7 @@ dependencies:
   dio: ^5.9.0
   uuid: ^4.5.2
   google_fonts: ^7.0.0
+  shared_preferences: ^2.5.4
 
 dev_dependencies:
   flutter_test:

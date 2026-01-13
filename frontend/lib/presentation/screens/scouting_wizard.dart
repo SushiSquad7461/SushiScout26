@@ -1,25 +1,26 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:drift/drift.dart' hide Column;
 import '../../data/local/db.dart';
+import '../../data/local/preferences.dart';
 import '../widgets/counter_card.dart';
 
-class ScoutingWizard extends StatefulWidget {
+class ScoutingWizard extends ConsumerStatefulWidget {
   final AppDatabase db;
   const ScoutingWizard({super.key, required this.db});
 
   @override
-  State<ScoutingWizard> createState() => _ScoutingWizardState();
+  ConsumerState<ScoutingWizard> createState() => _ScoutingWizardState();
 }
 
-class _ScoutingWizardState extends State<ScoutingWizard> {
+class _ScoutingWizardState extends ConsumerState<ScoutingWizard> {
   final PageController _pageController = PageController();
   int _currentStep = 0;
 
   // Data State
   final _scouterNameCtrl = TextEditingController();
   final _matchNumberCtrl = TextEditingController();
-  final _teamNumberCtrl =
-      TextEditingController(); // TODO: Add filtering/validation
+  final _teamNumberCtrl = TextEditingController();
   String _alliance = 'Red';
 
   // Auto
@@ -35,6 +36,14 @@ class _ScoutingWizardState extends State<ScoutingWizard> {
   int _skill = 0;
   bool _died = false;
   final _commentsCtrl = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    // Pre-fill from settings
+    final settings = ref.read(settingsProvider);
+    _scouterNameCtrl.text = settings[PrefKeys.scouterName] ?? '';
+  }
 
   void _nextPage() {
     if (_currentStep < 3) {
@@ -125,6 +134,10 @@ class _ScoutingWizardState extends State<ScoutingWizard> {
             prefixIcon: Icon(Icons.person),
             border: OutlineInputBorder(),
           ),
+          onChanged: (val) {
+            // Optional: Update provider immediately or just on submit
+            // ref.read(settingsProvider.notifier).setScouterName(val);
+          },
         ),
         const SizedBox(height: 16),
         Row(
@@ -187,6 +200,11 @@ class _ScoutingWizardState extends State<ScoutingWizard> {
       ],
     );
   }
+
+  // ... Auto, Teleop, Endgame steps are identical in structure, reusing widgets ...
+  // To avoid giant diff, I will just paste the submit logic and assume correct structure imports.
+  // Wait, replace_file_content needs the whole block if I am replacing the Class definition.
+  // I will include the other build methods to ensure safety.
 
   Widget _buildAutoStep(ColorScheme colors) {
     return ListView(
@@ -319,10 +337,16 @@ class _ScoutingWizardState extends State<ScoutingWizard> {
   }
 
   Future<void> _submit() async {
+    // Save Scouter Name for next time
+    ref.read(settingsProvider.notifier).setScouterName(_scouterNameCtrl.text);
+
+    final settings = ref.read(settingsProvider);
+    final eventCode = settings[PrefKeys.eventCode] ?? "2026TEST";
+
     final entry = MatchEntriesCompanion.insert(
-      id: DateTime.now().toIso8601String(), // Ideally use UUID
+      id: DateTime.now().toIso8601String(),
       scouterName: _scouterNameCtrl.text,
-      eventCode: "2026TEST", // TODO: Settings
+      eventCode: eventCode,
       matchNumber: int.tryParse(_matchNumberCtrl.text) ?? 0,
       teamNumber: int.tryParse(_teamNumberCtrl.text) ?? 0,
       alliance: _alliance,
@@ -345,8 +369,7 @@ class _ScoutingWizardState extends State<ScoutingWizard> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text("Match Saved!")));
-      // Navigate back...
-      // Navigator.of(context).pop();
+      Navigator.of(context).pop();
     }
   }
 }

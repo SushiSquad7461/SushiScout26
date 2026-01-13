@@ -4,9 +4,22 @@ import 'package:google_fonts/google_fonts.dart';
 import 'data/local/db.dart';
 import 'presentation/screens/scouting_wizard.dart';
 
-void main() {
+import 'package:shared_preferences/shared_preferences.dart';
+import 'data/local/preferences.dart';
+import 'presentation/screens/dashboard.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
   final db = AppDatabase();
-  runApp(ProviderScope(child: SushiScoutApp(db: db)));
+  final prefs = await SharedPreferences.getInstance();
+
+  runApp(
+    ProviderScope(
+      overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
+      child: SushiScoutApp(db: db),
+    ),
+  );
 }
 
 class SushiScoutApp extends StatelessWidget {
@@ -35,39 +48,7 @@ class SushiScoutApp extends StatelessWidget {
         textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme),
       ),
       themeMode: ThemeMode.system,
-      home: HomeScreen(db: db),
-    );
-  }
-}
-
-class HomeScreen extends StatelessWidget {
-  final AppDatabase db;
-  const HomeScreen({super.key, required this.db});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text("SushiScout 26")),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.ramen_dining, size: 64, color: Color(0xFFFA8072)),
-            const SizedBox(height: 24),
-            FilledButton.icon(
-              onPressed: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (context) => ScoutingWizard(db: db),
-                  ),
-                );
-              },
-              icon: const Icon(Icons.add),
-              label: const Text("Scout Match"),
-            ),
-          ],
-        ),
-      ),
+      home: DashboardScreen(db: db),
     );
   }
 }

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:drift/native.dart';
-import 'package:frontend/main.dart'; // Ensure this exposes MyApp or similar, need to check
+// Ensure this exposes MyApp or similar, need to check
 import 'package:frontend/data/local/db.dart';
 import 'package:frontend/presentation/screens/scouting_wizard.dart'; // Verify this import path
 
