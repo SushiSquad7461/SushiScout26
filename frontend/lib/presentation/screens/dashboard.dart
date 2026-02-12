@@ -14,6 +14,7 @@ import '../factories/scouting_form_factory.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../data/repositories/firestore_repository.dart';
 import '../theme/app_theme.dart';
+import '../widgets/sync_status_indicator.dart';
 
 class DashboardScreen extends ConsumerStatefulWidget {
   final ScoutingRepository repository;
@@ -104,6 +105,18 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     }
   }
 
+  Future<void> _onRefresh() async {
+    AppHaptics.medium();
+    final eventCode =
+        ref.read(settingsProvider)[PrefKeys.eventCode] ?? "Unknown";
+    // Force refresh by re-creating the stream
+    setState(() {
+      _matchesStream = widget.repository.watchMatches(eventCode);
+    });
+    // Wait a moment for the stream to update
+    await Future.delayed(const Duration(milliseconds: 500));
+  }
+
   @override
   Widget build(BuildContext context) {
     final settings = ref.watch(settingsProvider);
@@ -112,12 +125,23 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final colorScheme = theme.colorScheme;
 
     return Scaffold(
-      body: CustomScrollView(
-        slivers: [
+      body: RefreshIndicator(
+        onRefresh: _onRefresh,
+        color: colorScheme.primary,
+        backgroundColor: colorScheme.surface,
+        displacement: 80,
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
           // M3 Large App Bar with collapsing behavior
           SliverAppBar.medium(
             title: const Text("SushiScout 26"),
             actions: [
+              // Sync status indicator
+              const Padding(
+                padding: EdgeInsets.only(right: 8),
+                child: Center(child: SyncStatusIndicator(compact: true)),
+              ),
               // Export button
               IconButton(
                 icon: const Icon(Icons.download_rounded),
@@ -305,6 +329,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           // Bottom padding for FAB
           const SliverPadding(padding: EdgeInsets.only(bottom: 88)),
         ],
+      ),
       ),
       floatingActionButton: ScaleAnimation(
         child: FloatingActionButton.extended(
