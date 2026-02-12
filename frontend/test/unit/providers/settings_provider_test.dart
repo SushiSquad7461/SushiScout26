@@ -26,7 +26,7 @@ void main() {
       final settings = container.read(settingsProvider);
 
       expect(settings[PrefKeys.scouterName], '');
-      expect(settings[PrefKeys.eventCode], '');
+      expect(settings[PrefKeys.eventCode], '2026TEST');
       expect(settings[PrefKeys.themeMode], 'system');
       expect(settings[PrefKeys.colorSeed], 'salmon');
     });
