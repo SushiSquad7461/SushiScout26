@@ -17,6 +17,8 @@ import '../../data/repositories/firestore_repository.dart';
 import '../theme/app_theme.dart';
 import '../widgets/sync_status_indicator.dart';
 
+import '../widgets/match_search_delegate.dart';
+
 class DashboardScreen extends ConsumerStatefulWidget {
   final ScoutingRepository repository;
   const DashboardScreen({super.key, required this.repository});
@@ -142,6 +144,21 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               const Padding(
                 padding: EdgeInsets.only(right: 8),
                 child: Center(child: SyncStatusIndicator(compact: true)),
+              ),
+              // Search button
+              IconButton(
+                icon: const Icon(Icons.search),
+                tooltip: "Search Matches",
+                onPressed: () async {
+                  final eventCode = ref.read(settingsProvider)[PrefKeys.eventCode] ?? "Unknown";
+                  final matches = await widget.repository.getMatches(eventCode);
+                  if (context.mounted) {
+                    showSearch(
+                      context: context,
+                      delegate: MatchSearchDelegate(matches),
+                    );
+                  }
+                },
               ),
               // Statistics button
               IconButton(
