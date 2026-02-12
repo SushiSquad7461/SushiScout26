@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../../core/validation/form_validators.dart';
 import '../../data/models/match_report.dart';
-import '../../data/repositories/firestore_repository.dart';
+import '../../data/repositories/hybrid_repository.dart';
 import '../widgets/scouting_form_widget.dart';
 import '../widgets/match_timer.dart';
 import '../widgets/counter_card.dart';
@@ -28,6 +29,8 @@ class FrcRebuiltForm extends ScoutingFormWidget {
 class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm> {
   final PageController _pageController = PageController();
   final MatchTimerController _timerController = MatchTimerController();
+  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+  
   int _currentPage = 0;
 
   // Form Data
@@ -68,10 +71,14 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm> {
   }
 
   void _nextPage() {
-    if (_currentPage < 4) {
-      if (_currentPage == 0) {
-        _timerController.start();
+    if (_currentPage == 0) {
+      if (!_formKey.currentState!.validate()) {
+        return;
       }
+      _timerController.start();
+    }
+
+    if (_currentPage < 4) {
       _pageController.nextPage(
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeInOut,
@@ -101,17 +108,20 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm> {
         bottom: MatchTimer(controller: _timerController),
       ),
       body: SafeArea(
-        child: PageView(
-          controller: _pageController,
-          physics: const NeverScrollableScrollPhysics(),
-          onPageChanged: (idx) => setState(() => _currentPage = idx),
-          children: [
-            _buildPage("Setup", _buildSetup(context)),
-            _buildPage("Autonomous", _buildAuto(context)),
-            _buildPage("Teleop", _buildTeleop(context)),
-            _buildPage("Endgame", _buildEndgame(context)),
-            _buildPage("Review & Submit", _buildReview(context)),
-          ],
+        child: Form(
+          key: _formKey,
+          child: PageView(
+            controller: _pageController,
+            physics: const NeverScrollableScrollPhysics(),
+            onPageChanged: (idx) => setState(() => _currentPage = idx),
+            children: [
+              _buildPage("Setup", _buildSetup(context)),
+              _buildPage("Autonomous", _buildAuto(context)),
+              _buildPage("Teleop", _buildTeleop(context)),
+              _buildPage("Endgame", _buildEndgame(context)),
+              _buildPage("Review & Submit", _buildReview(context)),
+            ],
+          ),
         ),
       ),
       bottomNavigationBar: _buildBottomBar(context, colorScheme),
@@ -213,39 +223,50 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        TextField(
+        TextFormField(
           controller: _scouterNameCtrl,
           decoration: const InputDecoration(
             labelText: "Scouter Name",
             prefixIcon: Icon(Icons.person_outline),
+            border: OutlineInputBorder(),
           ),
           textInputAction: TextInputAction.next,
+          validator: (v) => FormValidators.required(v, "Scouter Name"),
+          autovalidateMode: AutovalidateMode.onUserInteraction,
         ),
         const SizedBox(height: AppTheme.spacingMd),
 
         Row(
           children: [
             Expanded(
-              child: TextField(
+              child: TextFormField(
                 controller: _matchNumberCtrl,
                 keyboardType: TextInputType.number,
                 decoration: const InputDecoration(
                   labelText: "Match #",
                   prefixIcon: Icon(Icons.tag),
+                  border: OutlineInputBorder(),
                 ),
                 textInputAction: TextInputAction.next,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                validator: FormValidators.matchNumber,
+                autovalidateMode: AutovalidateMode.onUserInteraction,
               ),
             ),
             const SizedBox(width: AppTheme.spacingMd),
             Expanded(
-              child: TextField(
+              child: TextFormField(
                 controller: _teamNumberCtrl,
                 keyboardType: TextInputType.number,
                 decoration: const InputDecoration(
                   labelText: "Team #",
                   prefixIcon: Icon(Icons.groups_outlined),
+                  border: OutlineInputBorder(),
                 ),
                 textInputAction: TextInputAction.done,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                validator: FormValidators.teamNumber,
+                autovalidateMode: AutovalidateMode.onUserInteraction,
               ),
             ),
           ],
@@ -282,6 +303,10 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm> {
     );
   }
 
+  // ... (Auto, Teleop, Endgame, Review, Submit methods need update)
+  // I will update the rest in the next block to ensure full file replacement or just critical parts.
+  // Actually, I can replace the rest as well to update _submit.
+  
   Widget _buildAuto(BuildContext context) {
     return Column(
       children: [
@@ -347,10 +372,11 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm> {
       children: [
         // Climb dropdown
         DropdownButtonFormField<int>(
-          initialValue: _teleopTower,
+          value: _teleopTower,
           decoration: const InputDecoration(
             labelText: "Climb Result",
             prefixIcon: Icon(Icons.trending_up),
+            border: OutlineInputBorder(),
           ),
           items: const [
             DropdownMenuItem(value: 0, child: Text("No Climb")),
@@ -382,12 +408,13 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm> {
 
         const SizedBox(height: AppTheme.spacingMd),
 
-        TextField(
+        TextFormField(
           controller: _commentsCtrl,
           decoration: const InputDecoration(
             labelText: "Comments",
             alignLabelWithHint: true,
             prefixIcon: Icon(Icons.comment_outlined),
+            border: OutlineInputBorder(),
           ),
           maxLines: 3,
         ),
@@ -541,7 +568,7 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm> {
     };
 
     final report = MatchReport(
-      id: '',
+      id: "${widget.eventId}_qm${_matchNumberCtrl.text}_${_teamNumberCtrl.text}",
       matchId: "${widget.eventId}_qm${_matchNumberCtrl.text}",
       matchNumber: int.tryParse(_matchNumberCtrl.text) ?? 0,
       teamNumber: int.tryParse(_teamNumberCtrl.text) ?? 0,
@@ -554,10 +581,8 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm> {
       isSynced: false,
     );
 
-    final repo = FirestoreRepository(FirebaseFirestore.instance);
-
     try {
-      await repo.createMatch(widget.eventId, report);
+      await ref.read(hybridRepositoryProvider).createMatch(widget.eventId, report);
       if (mounted) {
         ScaffoldMessenger.of(
           context,

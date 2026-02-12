@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../../core/validation/form_validators.dart';
 import '../../data/models/match_report.dart';
-import '../../data/repositories/firestore_repository.dart';
+import '../../data/repositories/hybrid_repository.dart';
 import '../widgets/scouting_form_widget.dart';
 import '../widgets/match_timer.dart';
 import '../widgets/counter_card.dart';
@@ -28,6 +29,8 @@ class FtcDecodeForm extends ScoutingFormWidget {
 class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm> {
   final PageController _pageController = PageController();
   final MatchTimerController _timerController = MatchTimerController();
+  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+  
   int _currentPage = 0;
 
   // Form Data
@@ -70,10 +73,14 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm> {
   }
 
   void _nextPage() {
-    if (_currentPage < 4) {
-      if (_currentPage == 0) {
-        _timerController.start();
+    if (_currentPage == 0) {
+      if (!_formKey.currentState!.validate()) {
+        return;
       }
+      _timerController.start();
+    }
+
+    if (_currentPage < 4) {
       _pageController.nextPage(
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeInOut,
@@ -103,17 +110,20 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm> {
         bottom: MatchTimer(controller: _timerController),
       ),
       body: SafeArea(
-        child: PageView(
-          controller: _pageController,
-          physics: const NeverScrollableScrollPhysics(),
-          onPageChanged: (idx) => setState(() => _currentPage = idx),
-          children: [
-            _buildPage("Setup", _buildSetup(context)),
-            _buildPage("Autonomous", _buildAuto(context)),
-            _buildPage("Teleop", _buildTeleop(context)),
-            _buildPage("Endgame", _buildEndgame(context)),
-            _buildPage("Review & Submit", _buildReview(context)),
-          ],
+        child: Form(
+          key: _formKey,
+          child: PageView(
+            controller: _pageController,
+            physics: const NeverScrollableScrollPhysics(),
+            onPageChanged: (idx) => setState(() => _currentPage = idx),
+            children: [
+              _buildPage("Setup", _buildSetup(context)),
+              _buildPage("Autonomous", _buildAuto(context)),
+              _buildPage("Teleop", _buildTeleop(context)),
+              _buildPage("Endgame", _buildEndgame(context)),
+              _buildPage("Review & Submit", _buildReview(context)),
+            ],
+          ),
         ),
       ),
       bottomNavigationBar: _buildBottomBar(context, colorScheme),
@@ -212,39 +222,50 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        TextField(
+        TextFormField(
           controller: _scouterNameCtrl,
           decoration: const InputDecoration(
             labelText: "Scouter Name",
             prefixIcon: Icon(Icons.person_outline),
+            border: OutlineInputBorder(),
           ),
           textInputAction: TextInputAction.next,
+          validator: (v) => FormValidators.required(v, "Scouter Name"),
+          autovalidateMode: AutovalidateMode.onUserInteraction,
         ),
         const SizedBox(height: AppTheme.spacingMd),
 
         Row(
           children: [
             Expanded(
-              child: TextField(
+              child: TextFormField(
                 controller: _matchNumberCtrl,
                 keyboardType: TextInputType.number,
                 decoration: const InputDecoration(
                   labelText: "Match #",
                   prefixIcon: Icon(Icons.tag),
+                  border: OutlineInputBorder(),
                 ),
                 textInputAction: TextInputAction.next,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                validator: FormValidators.matchNumber,
+                autovalidateMode: AutovalidateMode.onUserInteraction,
               ),
             ),
             const SizedBox(width: AppTheme.spacingMd),
             Expanded(
-              child: TextField(
+              child: TextFormField(
                 controller: _teamNumberCtrl,
                 keyboardType: TextInputType.number,
                 decoration: const InputDecoration(
                   labelText: "Team #",
                   prefixIcon: Icon(Icons.groups_outlined),
+                  border: OutlineInputBorder(),
                 ),
                 textInputAction: TextInputAction.done,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                validator: FormValidators.teamNumber,
+                autovalidateMode: AutovalidateMode.onUserInteraction,
               ),
             ),
           ],
@@ -369,10 +390,11 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         DropdownButtonFormField<String>(
-          initialValue: _baseExpansion,
+          value: _baseExpansion,
           decoration: const InputDecoration(
             labelText: "Base Expansion",
             prefixIcon: Icon(Icons.open_in_full),
+            border: OutlineInputBorder(),
           ),
           items: const [
             DropdownMenuItem(value: 'None', child: Text("None")),
@@ -396,12 +418,13 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm> {
 
         const SizedBox(height: AppTheme.spacingMd),
 
-        TextField(
+        TextFormField(
           controller: _commentsCtrl,
           decoration: const InputDecoration(
             labelText: "Comments",
             alignLabelWithHint: true,
             prefixIcon: Icon(Icons.comment_outlined),
+            border: OutlineInputBorder(),
           ),
           maxLines: 3,
         ),
@@ -563,7 +586,7 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm> {
     };
 
     final report = MatchReport(
-      id: '',
+      id: "${widget.eventId}_qm${_matchNumberCtrl.text}_${_teamNumberCtrl.text}",
       matchId: "${widget.eventId}_qm${_matchNumberCtrl.text}",
       matchNumber: int.tryParse(_matchNumberCtrl.text) ?? 0,
       teamNumber: int.tryParse(_teamNumberCtrl.text) ?? 0,
@@ -576,10 +599,8 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm> {
       isSynced: false,
     );
 
-    final repo = FirestoreRepository(FirebaseFirestore.instance);
-
     try {
-      await repo.createMatch(widget.eventId, report);
+      await ref.read(hybridRepositoryProvider).createMatch(widget.eventId, report);
       if (mounted) {
         ScaffoldMessenger.of(
           context,
