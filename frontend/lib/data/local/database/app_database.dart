@@ -1,10 +1,9 @@
-import 'dart:io';
 import 'package:drift/drift.dart';
-import 'package:drift/native.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:path/path.dart' as p;
 
 import 'tables.dart';
+import 'connection/unsupported.dart'
+    if (dart.library.io) 'connection/native.dart'
+    if (dart.library.html) 'connection/web.dart';
 
 export 'tables.dart';
 
@@ -16,7 +15,7 @@ part 'app_database.g.dart';
 /// Supports offline-first architecture with sync capabilities.
 @DriftDatabase(tables: [LocalMatchReports, LocalEvents, SyncQueue, SyncConflicts])
 class AppDatabase extends _$AppDatabase {
-  AppDatabase() : super(_openConnection());
+  AppDatabase() : super(connect());
   
   AppDatabase.forTesting(DatabaseConnection connection) : super(connection);
 
@@ -232,10 +231,3 @@ class AppDatabase extends _$AppDatabase {
   }
 }
 
-LazyDatabase _openConnection() {
-  return LazyDatabase(() async {
-    final dbFolder = await getApplicationDocumentsDirectory();
-    final file = File(p.join(dbFolder.path, 'sushiscout.sqlite'));
-    return NativeDatabase(file);
-  });
-}

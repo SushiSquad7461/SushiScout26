@@ -31,6 +31,9 @@ class _TeamComparisonScreenState extends ConsumerState<TeamComparisonScreen> {
       body: FutureBuilder<List<MatchReport>>(
         future: repo.getMatches(eventCode),
         builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return Center(child: Text("Error: ${snapshot.error}"));
+          }
           if (!snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
