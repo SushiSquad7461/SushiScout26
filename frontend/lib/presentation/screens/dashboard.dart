@@ -1,70 +1,88 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:drift/drift.dart' as drift;
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'dart:io';
-import '../../data/local/db.dart';
 import '../../data/local/preferences.dart';
-import 'scouting_wizard.dart';
+import '../../data/repositories/scouting_repository.dart';
+import '../../data/models/match_report.dart';
+import '../../data/models/event.dart';
+import 'match_details.dart';
+import 'trash_screen.dart';
+import '../factories/scouting_form_factory.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../data/repositories/firestore_repository.dart';
+import '../theme/app_theme.dart';
 
 class DashboardScreen extends ConsumerStatefulWidget {
-  final AppDatabase db;
-  const DashboardScreen({super.key, required this.db});
+  final ScoutingRepository repository;
+  const DashboardScreen({super.key, required this.repository});
 
   @override
   ConsumerState<DashboardScreen> createState() => _DashboardScreenState();
 }
 
 class _DashboardScreenState extends ConsumerState<DashboardScreen> {
-  late Stream<List<MatchEntry>> _matchesStream;
+  late Stream<List<MatchReport>> _matchesStream;
 
   @override
   void initState() {
     super.initState();
-    _matchesStream = widget.db.select(widget.db.matchEntries).watch();
+    final eventCode =
+        ref.read(settingsProvider)[PrefKeys.eventCode] ?? "Unknown";
+    _matchesStream = widget.repository.watchMatches(eventCode);
   }
 
   void _openSettings(BuildContext context) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      builder: (context) => _SettingsSheet(),
-    );
+      useSafeArea: true,
+      builder: (context) => const _SettingsSheet(),
+    ).then((_) {
+      final eventCode =
+          ref.read(settingsProvider)[PrefKeys.eventCode] ?? "Unknown";
+      setState(() {
+        _matchesStream = widget.repository.watchMatches(eventCode);
+      });
+    });
   }
 
   Future<void> _exportCsv(BuildContext context, WidgetRef ref) async {
-    final matches = await widget.db.select(widget.db.matchEntries).get();
+    final eventCode =
+        ref.read(settingsProvider)[PrefKeys.eventCode] ?? "Unknown";
+    final matches = await widget.repository.getMatches(eventCode);
+
+    if (!mounted) return;
+
     if (matches.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("No matches to export.")));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text("No matches to export."),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
       return;
     }
 
-    // Generate CSV String
-    final header =
-        "Match,Team,Alliance,Auto Fuel,Auto Tower L1,Teleop Fuel,Teleop Tower Level,Defense,Driver Skill,Comments,Synced\n";
+    final header = "Match,Team,Alliance,GameData,Comments,Synced\n";
     final rows = matches
-        .map((m) {
-          return "${m.matchNumber},${m.teamNumber},${m.alliance},${m.autoFuel},${m.autoTowerL1},${m.teleopFuel},${m.teleopTowerLevel},${m.defenseRating},${m.driverSkill},\"${m.comments.replaceAll('\n', ' ')}\",${m.isSynced}";
-        })
+        .map(
+          (m) =>
+              "${m.matchNumber},${m.teamNumber},${m.alliance},\"${m.gameData.toString().replaceAll('"', "'")}\",\"${m.comments.replaceAll('\n', ' ')}\",${m.isSynced}",
+        )
         .join("\n");
 
     final csvContent = header + rows;
 
-    // Save & Share using platform channels (requires services, imported below)
     try {
-      // We need to implement this via a service or inline.
-      // For cleanliness, I'll assume we import specific packages or just do it here if simple.
-      // Since I have share_plus and path_provider, I need to look up how to use them.
-      // But I need the imports first.
-
       await _shareFile(csvContent);
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Export failed: $e")));
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("Export failed: $e")));
+      }
     }
   }
 
@@ -74,9 +92,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       final file = File('${directory.path}/sushiscout26_export.csv');
       await file.writeAsString(content);
 
-      await Share.shareXFiles([
-        XFile(file.path),
-      ], text: 'SushiScout 26 Match Data');
+      await SharePlus.instance.share(ShareParams(files: [XFile(file.path)]));
     } catch (e) {
       debugPrint("Sharing failed: $e");
       if (mounted) {
@@ -91,141 +107,420 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   Widget build(BuildContext context) {
     final settings = ref.watch(settingsProvider);
     final eventCode = settings[PrefKeys.eventCode] ?? "Unknown Event";
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
 
     return Scaffold(
-      appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text("SushiScout 26"),
-            Text(eventCode, style: Theme.of(context).textTheme.labelSmall),
-          ],
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.download),
-            tooltip: "Export CSV",
-            onPressed: () => _exportCsv(context, ref),
-          ),
-          IconButton(
-            icon: const Icon(Icons.settings),
-            onPressed: () => _openSettings(context),
-          ),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (context) => ScoutingWizard(db: widget.db),
-            ),
-          );
-        },
-        label: const Text("Scout Match"),
-        icon: const Icon(Icons.add),
-      ),
-      body: StreamBuilder<List<MatchEntry>>(
-        stream: _matchesStream,
-        builder: (context, snapshot) {
-          if (snapshot.hasError) {
-            return Center(child: Text("Error: ${snapshot.error}"));
-          }
-          if (!snapshot.hasData) {
-            return const Center(child: CircularProgressIndicator());
-          }
-
-          final matches = snapshot.data!;
-          if (matches.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(
-                    Icons.ramen_dining,
-                    size: 64,
-                    color: Color(0xFFFA8072),
+      body: CustomScrollView(
+        slivers: [
+          // M3 Large App Bar with collapsing behavior
+          SliverAppBar.medium(
+            title: const Text("SushiScout 26"),
+            actions: [
+              // Export button
+              IconButton(
+                icon: const Icon(Icons.download_rounded),
+                tooltip: "Export CSV",
+                onPressed: () => _exportCsv(context, ref),
+              ),
+              // More options menu
+              PopupMenuButton<String>(
+                icon: const Icon(Icons.more_vert),
+                onSelected: (value) {
+                  switch (value) {
+                    case 'trash':
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              TrashScreen(repository: widget.repository),
+                        ),
+                      );
+                      break;
+                    case 'settings':
+                      _openSettings(context);
+                      break;
+                  }
+                },
+                itemBuilder: (context) => [
+                  const PopupMenuItem(
+                    value: 'trash',
+                    child: ListTile(
+                      leading: Icon(Icons.auto_delete_outlined),
+                      title: Text("Trash"),
+                      contentPadding: EdgeInsets.zero,
+                      visualDensity: VisualDensity.compact,
+                    ),
                   ),
-                  const SizedBox(height: 16),
-                  Text(
-                    "No matches scouted yet.",
-                    style: Theme.of(context).textTheme.titleMedium,
+                  const PopupMenuItem(
+                    value: 'settings',
+                    child: ListTile(
+                      leading: Icon(Icons.settings_outlined),
+                      title: Text("Settings"),
+                      contentPadding: EdgeInsets.zero,
+                      visualDensity: VisualDensity.compact,
+                    ),
                   ),
                 ],
               ),
-            );
-          }
-
-          return LayoutBuilder(
-            builder: (context, constraints) {
-              if (constraints.maxWidth > 600) {
-                // Desktop/Tablet Grid
-                return GridView.builder(
-                  padding: const EdgeInsets.all(16),
-                  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                    maxCrossAxisExtent: 400,
-                    childAspectRatio: 3 / 1, // Wide cards
-                    crossAxisSpacing: 16,
-                    mainAxisSpacing: 16,
+            ],
+            bottom: PreferredSize(
+              preferredSize: const Size.fromHeight(40),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.only(
+                  left: AppTheme.spacingMd,
+                  right: AppTheme.spacingMd,
+                  bottom: AppTheme.spacingSm,
+                ),
+                child: Chip(
+                  avatar: Icon(
+                    Icons.event,
+                    size: 18,
+                    color: colorScheme.onSecondaryContainer,
                   ),
-                  itemCount: matches.length,
-                  itemBuilder: (context, index) =>
-                      _MatchCard(match: matches[index]),
-                );
-              } else {
-                // Mobile List
-                return ListView.builder(
-                  itemCount: matches.length,
-                  itemBuilder: (context, index) =>
-                      _MatchCard(match: matches[index]),
+                  label: Text(eventCode),
+                  backgroundColor: colorScheme.secondaryContainer,
+                  labelStyle: TextStyle(
+                    color: colorScheme.onSecondaryContainer,
+                  ),
+                  side: BorderSide.none,
+                ),
+              ),
+            ),
+          ),
+
+          // Match list
+          StreamBuilder<List<MatchReport>>(
+            stream: _matchesStream,
+            builder: (context, snapshot) {
+              if (snapshot.hasError) {
+                return SliverFillRemaining(
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.error_outline,
+                          size: 64,
+                          color: colorScheme.error,
+                        ),
+                        const SizedBox(height: AppTheme.spacingMd),
+                        Text(
+                          "Error loading matches",
+                          style: theme.textTheme.titleMedium,
+                        ),
+                        const SizedBox(height: AppTheme.spacingSm),
+                        Text(
+                          "${snapshot.error}",
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 );
               }
+
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const SliverFillRemaining(
+                  child: Center(child: CircularProgressIndicator()),
+                );
+              }
+
+              final matches = snapshot.data ?? [];
+
+              if (matches.isEmpty) {
+                return SliverFillRemaining(
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(24),
+                          decoration: BoxDecoration(
+                            color: colorScheme.primaryContainer.withValues(
+                              alpha: 0.3,
+                            ),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.ramen_dining_rounded,
+                            size: 64,
+                            color: colorScheme.primary,
+                          ),
+                        ),
+                        const SizedBox(height: AppTheme.spacingLg),
+                        Text(
+                          "No matches scouted yet",
+                          style: theme.textTheme.titleLarge?.copyWith(
+                            color: colorScheme.onSurface,
+                          ),
+                        ),
+                        const SizedBox(height: AppTheme.spacingSm),
+                        Text(
+                          "Tap the button below to scout your first match",
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }
+
+              return SliverPadding(
+                padding: const EdgeInsets.all(AppTheme.spacingMd),
+                sliver: SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                    (context, index) => Padding(
+                      padding: const EdgeInsets.only(
+                        bottom: AppTheme.spacingSm,
+                      ),
+                      child: _MatchCard(match: matches[index]),
+                    ),
+                    childCount: matches.length,
+                  ),
+                ),
+              );
             },
+          ),
+
+          // Bottom padding for FAB
+          const SliverPadding(padding: EdgeInsets.only(bottom: 88)),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () async {
+          final eventCode =
+              ref.read(settingsProvider)[PrefKeys.eventCode] ?? "Unknown";
+          final event = await widget.repository.getEvent(eventCode);
+
+          if (!mounted) return;
+
+          if (event == null) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  "Event '$eventCode' not found. Defaulting to FRC.",
+                ),
+              ),
+            );
+            final dummyEvent = Event(
+              id: eventCode,
+              name: "Dummy/Offline Event",
+              programType: "FRC",
+              tbaKey: eventCode,
+              startDate: DateTime.now(),
+            );
+
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (context) => ScoutingFormFactory.create(dummyEvent),
+              ),
+            );
+            return;
+          }
+
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) => ScoutingFormFactory.create(event),
+            ),
           );
         },
+        icon: const Icon(Icons.add_rounded),
+        label: const Text("Scout Match"),
       ),
     );
   }
 }
 
-class _MatchCard extends StatelessWidget {
-  final MatchEntry match;
+/// Material 3 styled match card
+class _MatchCard extends ConsumerWidget {
+  final MatchReport match;
   const _MatchCard({required this.match});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    // Build summary from game data
+    String summary = "";
+    if (match.gameData.containsKey('auto_fuel')) {
+      summary =
+          "Auto: ${match.gameData['auto_fuel']} • Tele: ${match.gameData['teleop_fuel']}";
+    } else if (match.gameData.containsKey('artifacts_auto')) {
+      summary =
+          "Auto: ${match.gameData['artifacts_auto']} • Tele: ${match.gameData['artifacts_teleop']}";
+    } else {
+      summary = "No data recorded";
+    }
+
+    final allianceColor = match.alliance == 'Red' ? Colors.red : Colors.blue;
+
     return Card(
-      elevation: 1,
-      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: match.alliance == 'Red'
-              ? Colors.red.withValues(alpha: 0.2)
-              : Colors.blue.withValues(alpha: 0.2),
-          child: Text(
-            "${match.matchNumber}",
-            style: TextStyle(
-              color: match.alliance == 'Red' ? Colors.red : Colors.blue,
-              fontWeight: FontWeight.bold,
+      elevation: 0,
+      color: colorScheme.surfaceContainerLow,
+      child: InkWell(
+        onTap: () {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) => MatchDetailsScreen(match: match),
             ),
+          );
+        },
+        onLongPress: () => _showContextMenu(context, ref),
+        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
+        child: Padding(
+          padding: const EdgeInsets.all(AppTheme.spacingMd),
+          child: Row(
+            children: [
+              // Match number badge
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: allianceColor.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(AppTheme.buttonRadius),
+                ),
+                child: Center(
+                  child: Text(
+                    "${match.matchNumber}",
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      color: allianceColor,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+
+              const SizedBox(width: AppTheme.spacingMd),
+
+              // Match info
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          "Team ${match.teamNumber}",
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(width: AppTheme.spacingSm),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: allianceColor.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            match.alliance,
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: allianceColor,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      summary,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Sync status
+              Icon(
+                match.isSynced
+                    ? Icons.cloud_done_rounded
+                    : Icons.cloud_upload_outlined,
+                color: match.isSynced
+                    ? colorScheme.primary
+                    : colorScheme.outline,
+                size: 24,
+              ),
+            ],
           ),
         ),
-        title: Text("Team ${match.teamNumber}"),
-        subtitle: Text("Auto: ${match.autoFuel} | Tele: ${match.teleopFuel}"),
-        trailing: match.isSynced
-            ? const Icon(Icons.check_circle, color: Colors.green)
-            : const Icon(Icons.cloud_upload_outlined, color: Colors.orange),
       ),
     );
   }
+
+  void _showContextMenu(BuildContext context, WidgetRef ref) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: Icon(Icons.info_outline, color: colorScheme.primary),
+              title: const Text("View Details"),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => MatchDetailsScreen(match: match),
+                  ),
+                );
+              },
+            ),
+            ListTile(
+              leading: Icon(Icons.delete_outline, color: colorScheme.error),
+              title: Text(
+                "Move to Trash",
+                style: TextStyle(color: colorScheme.error),
+              ),
+              onTap: () {
+                Navigator.pop(context);
+                _moveToTrash(context, ref);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _moveToTrash(BuildContext context, WidgetRef ref) async {
+    final eventCode = ref.read(settingsProvider)[PrefKeys.eventCode];
+    if (eventCode == null || eventCode.isEmpty) return;
+
+    final repo = FirestoreRepository(FirebaseFirestore.instance);
+    await repo.trashMatch(eventCode, match.id);
+
+    if (context.mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Match moved to trash")));
+    }
+  }
 }
 
+/// Material 3 settings bottom sheet
 class _SettingsSheet extends ConsumerStatefulWidget {
+  const _SettingsSheet();
+
   @override
   ConsumerState<_SettingsSheet> createState() => _SettingsSheetState();
 }
 
 class _SettingsSheetState extends ConsumerState<_SettingsSheet> {
-  final _serverIpCtrl = TextEditingController();
   final _scouterNameCtrl = TextEditingController();
   final _eventCodeCtrl = TextEditingController();
 
@@ -233,130 +528,232 @@ class _SettingsSheetState extends ConsumerState<_SettingsSheet> {
   void initState() {
     super.initState();
     final settings = ref.read(settingsProvider);
-    _serverIpCtrl.text = settings[PrefKeys.serverIp] ?? '';
     _scouterNameCtrl.text = settings[PrefKeys.scouterName] ?? '';
     _eventCodeCtrl.text = settings[PrefKeys.eventCode] ?? '';
   }
 
   @override
+  void dispose() {
+    _scouterNameCtrl.dispose();
+    _eventCodeCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.of(context).viewInsets.bottom,
-        left: 24,
-        right: 24,
-        top: 24,
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return DraggableScrollableSheet(
+      initialChildSize: 0.7,
+      minChildSize: 0.5,
+      maxChildSize: 0.95,
+      expand: false,
+      builder: (context, scrollController) => SingleChildScrollView(
+        controller: scrollController,
+        padding: EdgeInsets.only(
+          left: AppTheme.spacingLg,
+          right: AppTheme.spacingLg,
+          bottom: MediaQuery.of(context).viewInsets.bottom + AppTheme.spacingLg,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: AppTheme.spacingSm),
+
+            // Header
+            Text(
+              "Settings",
+              style: theme.textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+
+            const SizedBox(height: AppTheme.spacingLg),
+
+            // Profile section
+            _SectionHeader(title: "Profile"),
+            const SizedBox(height: AppTheme.spacingSm),
+
+            TextField(
+              controller: _scouterNameCtrl,
+              decoration: const InputDecoration(
+                labelText: "Your Name",
+                prefixIcon: Icon(Icons.person_outline),
+              ),
+              onChanged: (val) =>
+                  ref.read(settingsProvider.notifier).setScouterName(val),
+            ),
+
+            const SizedBox(height: AppTheme.spacingMd),
+
+            TextField(
+              controller: _eventCodeCtrl,
+              decoration: const InputDecoration(
+                labelText: "Event Code",
+                prefixIcon: Icon(Icons.event_outlined),
+                helperText: "e.g., 2026casj",
+              ),
+              onChanged: (val) =>
+                  ref.read(settingsProvider.notifier).setEventCode(val),
+            ),
+
+            const SizedBox(height: AppTheme.spacingLg),
+
+            // Appearance section
+            _SectionHeader(title: "Appearance"),
+            const SizedBox(height: AppTheme.spacingSm),
+
+            _buildThemeSelector(context),
+
+            const SizedBox(height: AppTheme.spacingMd),
+
+            Text(
+              "Color Theme",
+              style: theme.textTheme.labelLarge?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: AppTheme.spacingSm),
+            _buildColorSelector(context),
+
+            const SizedBox(height: AppTheme.spacingXl),
+
+            // Done button
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text("Done"),
+              ),
+            ),
+          ],
+        ),
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
+    );
+  }
+
+  Widget _buildThemeSelector(BuildContext context) {
+    final currentTheme =
+        ref.watch(settingsProvider)[PrefKeys.themeMode] ?? 'system';
+
+    return SegmentedButton<String>(
+      segments: const [
+        ButtonSegment(
+          value: 'system',
+          icon: Icon(Icons.brightness_auto),
+          label: Text('Auto'),
+        ),
+        ButtonSegment(
+          value: 'light',
+          icon: Icon(Icons.light_mode_outlined),
+          label: Text('Light'),
+        ),
+        ButtonSegment(
+          value: 'dark',
+          icon: Icon(Icons.dark_mode_outlined),
+          label: Text('Dark'),
+        ),
+      ],
+      selected: {currentTheme},
+      onSelectionChanged: (selection) {
+        ref.read(settingsProvider.notifier).setThemeMode(selection.first);
+      },
+    );
+  }
+
+  Widget _buildColorSelector(BuildContext context) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
         children: [
-          Text("Settings", style: Theme.of(context).textTheme.headlineSmall),
-          const SizedBox(height: 24),
-          TextField(
-            controller: _scouterNameCtrl,
-            decoration: const InputDecoration(
-              labelText: "Your Name",
-              border: OutlineInputBorder(),
-              prefixIcon: Icon(Icons.person),
-            ),
-            onChanged: (val) =>
-                ref.read(settingsProvider.notifier).setScouterName(val),
+          _ColorSeedChip(
+            label: 'Salmon',
+            value: 'salmon',
+            color: AppTheme.salmonSeed,
           ),
-          const SizedBox(height: 16),
-          TextField(
-            controller: _eventCodeCtrl,
-            decoration: const InputDecoration(
-              labelText: "Event Code",
-              border: OutlineInputBorder(),
-              prefixIcon: Icon(Icons.event),
-            ),
-            onChanged: (val) =>
-                ref.read(settingsProvider.notifier).setEventCode(val),
+          const SizedBox(width: AppTheme.spacingSm),
+          _ColorSeedChip(
+            label: 'Blue',
+            value: 'blue',
+            color: AppTheme.blueSeed,
           ),
-          const SizedBox(height: 16),
-          const SizedBox(height: 16),
-          // Theme Mode Selector
-          DropdownButtonFormField<String>(
-            value: ref.watch(settingsProvider)[PrefKeys.themeMode] ?? 'system',
-            decoration: const InputDecoration(
-              labelText: "Theme Mode",
-              border: OutlineInputBorder(),
-              prefixIcon: Icon(Icons.brightness_6),
-            ),
-            items: const [
-              DropdownMenuItem(value: 'system', child: Text("System")),
-              DropdownMenuItem(value: 'light', child: Text("Light")),
-              DropdownMenuItem(value: 'dark', child: Text("Dark")),
-            ],
-            onChanged: (val) {
-              if (val != null) {
-                ref.read(settingsProvider.notifier).setThemeMode(val);
-              }
-            },
+          const SizedBox(width: AppTheme.spacingSm),
+          _ColorSeedChip(
+            label: 'Green',
+            value: 'green',
+            color: AppTheme.greenSeed,
           ),
-          const SizedBox(height: 16),
-          // Color Seed Selector
-          const Text(
-            "App Color Theme",
-            style: TextStyle(fontWeight: FontWeight.bold),
+          const SizedBox(width: AppTheme.spacingSm),
+          _ColorSeedChip(
+            label: 'Purple',
+            value: 'purple',
+            color: AppTheme.purpleSeed,
           ),
-          const SizedBox(height: 8),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                _ColorSeedChip(
-                  label: 'Salmon',
-                  value: 'salmon',
-                  color: const Color(0xFFFA8072),
-                ),
-                _ColorSeedChip(
-                  label: 'Blue',
-                  value: 'blue',
-                  color: Colors.blue,
-                ),
-                _ColorSeedChip(
-                  label: 'Green',
-                  value: 'green',
-                  color: Colors.green,
-                ),
-                _ColorSeedChip(
-                  label: 'Purple',
-                  value: 'purple',
-                  color: Colors.purple,
-                ),
-                _ColorSeedChip(
-                  label: 'Orange',
-                  value: 'orange',
-                  color: Colors.orange,
-                ),
-              ],
-            ),
+          const SizedBox(width: AppTheme.spacingSm),
+          _ColorSeedChip(
+            label: 'Orange',
+            value: 'orange',
+            color: AppTheme.orangeSeed,
           ),
-          const SizedBox(height: 16),
-          TextField(
-            controller: _serverIpCtrl,
-            decoration: const InputDecoration(
-              labelText: "Server URL",
-              border: OutlineInputBorder(),
-              prefixIcon: Icon(Icons.cloud),
-              hintText: "http://10.0.0.X:8000",
-            ),
-            onChanged: (val) =>
-                ref.read(settingsProvider.notifier).setServerIp(val),
-          ),
-          const SizedBox(height: 24),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text("Done"),
-            ),
-          ),
-          const SizedBox(height: 24),
         ],
       ),
+    );
+  }
+}
+
+class _SectionHeader extends StatelessWidget {
+  final String title;
+  const _SectionHeader({required this.title});
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      title,
+      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+        color: Theme.of(context).colorScheme.primary,
+        fontWeight: FontWeight.w600,
+      ),
+    );
+  }
+}
+
+class _ColorSeedChip extends ConsumerWidget {
+  final String label;
+  final String value;
+  final Color color;
+
+  const _ColorSeedChip({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final currentSeed =
+        ref.watch(settingsProvider)[PrefKeys.colorSeed] ?? 'salmon';
+    final isSelected = currentSeed == value;
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return FilterChip(
+      label: Text(label),
+      selected: isSelected,
+      checkmarkColor: Colors.white,
+      selectedColor: color,
+      backgroundColor: colorScheme.surfaceContainerHighest,
+      labelStyle: TextStyle(
+        color: isSelected ? Colors.white : colorScheme.onSurface,
+        fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+      ),
+      side: isSelected
+          ? BorderSide.none
+          : BorderSide(color: colorScheme.outline),
+      onSelected: (selected) {
+        if (selected) {
+          ref.read(settingsProvider.notifier).setColorSeed(value);
+        }
+      },
     );
   }
 }

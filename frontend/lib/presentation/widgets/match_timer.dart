@@ -1,0 +1,246 @@
+import 'dart:async';
+import 'package:flutter/material.dart';
+import '../theme/app_theme.dart';
+
+/// Controller for programmatically starting the match timer.
+class MatchTimerController extends ChangeNotifier {
+  void start() {
+    notifyListeners();
+  }
+}
+
+/// Material 3 styled match timer widget.
+///
+/// Features:
+/// - Visual phase indicator (Auto, Teleop, Endgame)
+/// - M3 color tokens for phase colors
+/// - Linear progress indicator
+/// - 48dp minimum touch targets for controls
+/// - Long-press to reset functionality
+class MatchTimer extends StatefulWidget implements PreferredSizeWidget {
+  final VoidCallback? onMatchFinished;
+  final MatchTimerController? controller;
+
+  const MatchTimer({super.key, this.onMatchFinished, this.controller});
+
+  @override
+  State<MatchTimer> createState() => _MatchTimerState();
+
+  @override
+  Size get preferredSize => const Size.fromHeight(64);
+}
+
+class _MatchTimerState extends State<MatchTimer> {
+  Timer? _timer;
+  int _secondsRemaining = 135; // 2:15 total duration
+  bool _isRunning = false;
+  static const int _totalDuration = 135;
+
+  String get _currentPhase {
+    if (!_isRunning && _secondsRemaining == _totalDuration) return "PRE-MATCH";
+    if (_secondsRemaining > 120) return "AUTO"; // First 15s
+    if (_secondsRemaining <= 0) return "FINISHED";
+    if (_secondsRemaining <= 30) return "ENDGAME"; // Last 30s
+    return "TELEOP";
+  }
+
+  Color _getPhaseColor(ColorScheme colorScheme) {
+    switch (_currentPhase) {
+      case "AUTO":
+        return colorScheme.tertiary;
+      case "TELEOP":
+        return colorScheme.primary;
+      case "ENDGAME":
+        return colorScheme.error;
+      case "FINISHED":
+        return colorScheme.error;
+      default:
+        return colorScheme.outline;
+    }
+  }
+
+  Color _getPhaseContainerColor(ColorScheme colorScheme) {
+    switch (_currentPhase) {
+      case "AUTO":
+        return colorScheme.tertiaryContainer;
+      case "TELEOP":
+        return colorScheme.primaryContainer;
+      case "ENDGAME":
+        return colorScheme.errorContainer;
+      case "FINISHED":
+        return colorScheme.errorContainer;
+      default:
+        return colorScheme.surfaceContainerHighest;
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    widget.controller?.addListener(_handleControllerStart);
+  }
+
+  @override
+  void dispose() {
+    widget.controller?.removeListener(_handleControllerStart);
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  void _handleControllerStart() {
+    if (!_isRunning && _secondsRemaining == _totalDuration) {
+      _startTimer();
+    }
+  }
+
+  void _toggleTimer() {
+    if (_isRunning) {
+      _stopTimer();
+    } else {
+      if (_secondsRemaining <= 0) _resetTimer();
+      _startTimer();
+    }
+  }
+
+  void _startTimer() {
+    setState(() => _isRunning = true);
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) return;
+      if (_secondsRemaining > 0) {
+        setState(() => _secondsRemaining--);
+      } else {
+        _stopTimer();
+        widget.onMatchFinished?.call();
+      }
+    });
+  }
+
+  void _stopTimer() {
+    _timer?.cancel();
+    if (mounted) setState(() => _isRunning = false);
+  }
+
+  void _resetTimer() {
+    _stopTimer();
+    if (mounted) setState(() => _secondsRemaining = _totalDuration);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final phaseColor = _getPhaseColor(colorScheme);
+    final containerColor = _getPhaseContainerColor(colorScheme);
+
+    final minutes = _secondsRemaining ~/ 60;
+    final seconds = (_secondsRemaining % 60).toString().padLeft(2, '0');
+    final progress = 1.0 - (_secondsRemaining / _totalDuration);
+
+    return Container(
+      height: 64,
+      decoration: BoxDecoration(
+        color: containerColor.withValues(alpha: 0.5),
+        border: Border(
+          bottom: BorderSide(color: colorScheme.outlineVariant, width: 1),
+        ),
+      ),
+      child: Column(
+        children: [
+          // Progress indicator
+          TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0, end: progress),
+            duration: const Duration(milliseconds: 300),
+            builder: (context, value, _) {
+              return LinearProgressIndicator(
+                value: value,
+                backgroundColor: Colors.transparent,
+                valueColor: AlwaysStoppedAnimation<Color>(phaseColor),
+                minHeight: 4,
+              );
+            },
+          ),
+
+          // Controls row
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppTheme.spacingMd,
+              ),
+              child: Row(
+                children: [
+                  // Play/Pause button (48dp minimum)
+                  IconButton(
+                    onPressed: _toggleTimer,
+                    icon: Icon(
+                      _isRunning
+                          ? Icons.pause_rounded
+                          : Icons.play_arrow_rounded,
+                    ),
+                    iconSize: 28,
+                    style: IconButton.styleFrom(
+                      foregroundColor: phaseColor,
+                      minimumSize: const Size(48, 48),
+                    ),
+                    tooltip: _isRunning ? "Pause" : "Start",
+                  ),
+
+                  const SizedBox(width: AppTheme.spacingSm),
+
+                  // Phase label
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppTheme.spacingSm,
+                      vertical: AppTheme.spacingXs,
+                    ),
+                    decoration: BoxDecoration(
+                      color: phaseColor.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(AppTheme.spacingSm),
+                    ),
+                    child: Text(
+                      _currentPhase,
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        color: phaseColor,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                  ),
+
+                  const Spacer(),
+
+                  // Timer display (long-press to reset)
+                  Tooltip(
+                    message: "Long press to reset",
+                    child: GestureDetector(
+                      onLongPress: _resetTimer,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: AppTheme.spacingMd,
+                          vertical: AppTheme.spacingSm,
+                        ),
+                        decoration: BoxDecoration(
+                          color: phaseColor.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(
+                            AppTheme.cardRadius,
+                          ),
+                        ),
+                        child: Text(
+                          "$minutes:$seconds",
+                          style: theme.textTheme.headlineSmall?.copyWith(
+                            color: phaseColor,
+                            fontWeight: FontWeight.bold,
+                            fontFeatures: const [FontFeature.tabularFigures()],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

@@ -1,30 +1,39 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
-import 'data/local/db.dart';
-import 'presentation/screens/scouting_wizard.dart';
-
+import 'package:firebase_core/firebase_core.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'firebase_options.dart';
+import 'data/repositories/scouting_repository.dart';
+import 'data/repositories/firestore_repository.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'data/local/preferences.dart';
 import 'presentation/screens/dashboard.dart';
+import 'presentation/theme/app_theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
-  final db = AppDatabase();
+  // Offline persistence is enabled by default in recent SDKs, but ensuring settings:
+  FirebaseFirestore.instance.settings = const Settings(
+    persistenceEnabled: true,
+    cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
+  );
+
   final prefs = await SharedPreferences.getInstance();
+  final repository = FirestoreRepository(FirebaseFirestore.instance);
 
   runApp(
     ProviderScope(
       overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
-      child: SushiScoutApp(db: db),
+      child: SushiScoutApp(repository: repository),
     ),
   );
 }
 
 class SushiScoutApp extends ConsumerWidget {
-  final AppDatabase db;
-  const SushiScoutApp({super.key, required this.db});
+  final ScoutingRepository repository;
+  const SushiScoutApp({super.key, required this.repository});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -38,35 +47,15 @@ class SushiScoutApp extends ConsumerWidget {
       _ => ThemeMode.system,
     };
 
-    final Color seedColor = switch (colorSeedStr) {
-      'blue' => Colors.blue,
-      'green' => Colors.green,
-      'purple' => Colors.purple,
-      'orange' => Colors.orange,
-      _ => const Color(0xFFFA8072), // Salmon
-    };
+    final Color seedColor = AppTheme.getSeedColor(colorSeedStr);
 
     return MaterialApp(
       title: 'SushiScout 26',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: seedColor,
-          brightness: Brightness.light,
-        ),
-        textTheme: GoogleFonts.interTextTheme(),
-      ),
-      darkTheme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: seedColor,
-          brightness: Brightness.dark,
-        ),
-        textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme),
-      ),
+      theme: AppTheme.lightTheme(seedColor),
+      darkTheme: AppTheme.darkTheme(seedColor),
       themeMode: mode,
-      home: DashboardScreen(db: db),
+      home: DashboardScreen(repository: repository),
     );
   }
 }

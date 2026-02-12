@@ -34,8 +34,6 @@ dependencies:
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
-  drift: ^2.30.1
-  drift_flutter: ^0.2.8
   flutter_riverpod: ^3.1.0
   riverpod_annotation: ^4.0.0
   dio: ^5.9.0
@@ -44,6 +42,8 @@ dependencies:
   shared_preferences: ^2.5.4
   share_plus: ^12.0.1
   path_provider: ^2.1.5
+  firebase_core: ^4.3.0
+  cloud_firestore: ^6.1.1
 
 dev_dependencies:
   flutter_test:
@@ -55,7 +55,6 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
-  drift_dev: ^2.30.1
   build_runner: ^2.10.4
   riverpod_generator: ^4.0.0+1
 

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "80003441956",
+    "project_id": "sushiscout26-a8f5d",
+    "storage_bucket": "sushiscout26-a8f5d.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:80003441956:android:bfe1e1f14b06a1ab603fb1",
+        "android_client_info": {
+          "package_name": "com.sushiscout.frontend"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAttKTvyC0zREXX5wlHngi5w-Q5Ed02m2c"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
