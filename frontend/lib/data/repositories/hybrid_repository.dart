@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:drift/drift.dart'; // Needed for Value
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/errors/app_error.dart';
@@ -153,7 +154,7 @@ class HybridRepository implements ScoutingRepository {
       
       // Update local DB with firestore data
       for (final match in firestoreMatches) {
-        await _db.upsertMatch(_toLocalMatchReport(match));
+        await _db.upsertMatch(_toLocalMatchReport(match, eventId));
       }
       
       _logger.d('Refreshed ${firestoreMatches.length} matches from Firestore');
@@ -172,7 +173,7 @@ class HybridRepository implements ScoutingRepository {
     
     try {
       // 1. Save to local DB immediately
-      await _db.upsertMatch(_toLocalMatchReport(match));
+      await _db.upsertMatch(_toLocalMatchReport(match, eventId));
       
       // 2. Queue for sync to Firestore
       await _syncManager.queueCreate(eventId, match);
@@ -196,7 +197,7 @@ class HybridRepository implements ScoutingRepository {
     
     try {
       // 1. Save to local DB immediately
-      await _db.upsertMatch(_toLocalMatchReport(match));
+      await _db.upsertMatch(_toLocalMatchReport(match, eventId));
       
       // 2. Queue for sync to Firestore
       await _syncManager.queueUpdate(eventId, match);
@@ -363,25 +364,26 @@ class HybridRepository implements ScoutingRepository {
       teamNumber: local.teamNumber,
       alliance: local.alliance,
       scouterName: local.scouterName,
-      gameData: {}, // Parse from JSON
+      gameData: jsonDecode(local.gameDataJson),
       robotDied: local.robotDied,
       comments: local.comments,
+      images: [], // Local table might not have images column yet?
       createdAt: local.createdAt,
       isSynced: local.isSynced,
       isDeleted: local.isDeleted,
     );
   }
 
-  LocalMatchReportsCompanion _toLocalMatchReport(MatchReport match) {
+  LocalMatchReportsCompanion _toLocalMatchReport(MatchReport match, String eventId) {
     return LocalMatchReportsCompanion(
       id: Value(match.id),
-      eventId: Value(''), // Should be passed in
+      eventId: Value(eventId),
       matchId: Value(match.matchId),
       matchNumber: Value(match.matchNumber),
       teamNumber: Value(match.teamNumber),
       alliance: Value(match.alliance),
       scouterName: Value(match.scouterName),
-      gameDataJson: Value('{}'), // Serialize to JSON
+      gameDataJson: Value(jsonEncode(match.gameData)),
       robotDied: Value(match.robotDied),
       comments: Value(match.comments),
       isSynced: Value(match.isSynced),

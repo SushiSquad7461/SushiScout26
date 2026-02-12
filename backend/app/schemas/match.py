@@ -1,24 +1,31 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from datetime import datetime
 from typing import Optional
 
 class MatchBase(BaseModel):
-    event_code: str
-    match_number: int
-    team_number: int
+    event_code: str = Field(..., min_length=1)
+    match_number: int = Field(..., gt=0)
+    team_number: int = Field(..., gt=0)
     alliance: str
-    scouter_name: str
+    scouter_name: str = Field(..., min_length=1)
     
-    auto_fuel: int = 0
+    auto_fuel: int = Field(0, ge=0)
     auto_tower_l1: bool = False
     
-    teleop_fuel: int = 0
-    teleop_tower_level: int = 0
+    teleop_fuel: int = Field(0, ge=0)
+    teleop_tower_level: int = Field(0, ge=0, le=3)
     
-    defense_rating: int = 0
-    driver_skill: int = 0
+    defense_rating: int = Field(0, ge=0, le=5)
+    driver_skill: int = Field(0, ge=0, le=5)
     robot_died: bool = False
     comments: str = ""
+
+    @field_validator('alliance')
+    @classmethod
+    def validate_alliance(cls, v: str) -> str:
+        if v not in ('Red', 'Blue'):
+            raise ValueError("Alliance must be 'Red' or 'Blue'")
+        return v
 
 class MatchCreate(MatchBase):
     pass

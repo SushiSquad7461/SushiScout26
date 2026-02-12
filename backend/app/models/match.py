@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional
-from sqlalchemy import String, Integer, Boolean, DateTime, CheckConstraint
+from sqlalchemy import String, Integer, Boolean, DateTime, CheckConstraint, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
 import uuid
@@ -8,9 +8,13 @@ from ..database import Base
 
 class Match(Base):
     __tablename__ = "matches"
+    __table_args__ = (
+        UniqueConstraint('event_code', 'match_number', 'team_number', name='uq_match_team_event'),
+    )
 
     # Primary Key
     id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+
 
     # Event Context
     event_code: Mapped[str] = mapped_column(String, index=True)
