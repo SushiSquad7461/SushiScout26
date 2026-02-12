@@ -9,6 +9,7 @@ import '../../data/repositories/scouting_repository.dart';
 import '../../data/models/match_report.dart';
 import '../../data/models/event.dart';
 import 'match_details.dart';
+import 'statistics_screen.dart';
 import 'trash_screen.dart';
 import '../factories/scouting_form_factory.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -141,6 +142,18 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               const Padding(
                 padding: EdgeInsets.only(right: 8),
                 child: Center(child: SyncStatusIndicator(compact: true)),
+              ),
+              // Statistics button
+              IconButton(
+                icon: const Icon(Icons.bar_chart_rounded),
+                tooltip: "Statistics",
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => const StatisticsScreen(),
+                    ),
+                  );
+                },
               ),
               // Export button
               IconButton(

@@ -47,6 +47,7 @@ dependencies:
   drift: ^2.21.0
   sqlite3_flutter_libs: ^0.5.24
   connectivity_plus: ^6.0.3
+  fl_chart: ^0.66.0
 
 dev_dependencies:
   flutter_test:
