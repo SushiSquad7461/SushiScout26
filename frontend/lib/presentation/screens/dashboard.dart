@@ -20,6 +20,8 @@ import '../widgets/sync_status_indicator.dart';
 
 import '../widgets/match_search_delegate.dart';
 
+import '../../data/services/export_service.dart';
+
 class DashboardScreen extends ConsumerStatefulWidget {
   final ScoutingRepository repository;
   const DashboardScreen({super.key, required this.repository});
@@ -52,6 +54,56 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         _matchesStream = widget.repository.watchMatches(eventCode);
       });
     });
+  }
+
+  Future<void> _showExportOptions(BuildContext context, WidgetRef ref) async {
+    final eventCode =
+        ref.read(settingsProvider)[PrefKeys.eventCode] ?? "Unknown";
+    final matches = await widget.repository.getMatches(eventCode);
+
+    if (!mounted) return;
+
+    if (matches.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("No matches to export.")),
+      );
+      return;
+    }
+
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.table_chart),
+              title: const Text("Export as CSV"),
+              onTap: () {
+                Navigator.pop(context);
+                _exportCsv(context, ref);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.grid_on),
+              title: const Text("Export as Excel"),
+              onTap: () {
+                Navigator.pop(context);
+                ExportService.exportToExcel(matches);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.picture_as_pdf),
+              title: const Text("Export as PDF"),
+              onTap: () {
+                Navigator.pop(context);
+                ExportService.exportToPdf(matches);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _exportCsv(BuildContext context, WidgetRef ref) async {
@@ -176,8 +228,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               // Export button
               IconButton(
                 icon: const Icon(Icons.download_rounded),
-                tooltip: "Export CSV",
-                onPressed: () => _exportCsv(context, ref),
+                tooltip: "Export",
+                onPressed: () => _showExportOptions(context, ref),
               ),
               // More options menu
               PopupMenuButton<String>(
