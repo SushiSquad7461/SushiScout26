@@ -63,6 +63,16 @@ class FirestoreRepository implements ScoutingRepository {
   }
 
   @override
+  Future<void> updateMatch(String eventId, MatchReport match) async {
+    await _firestore
+        .collection('events')
+        .doc(eventId)
+        .collection('matches')
+        .doc(match.id)
+        .update(match.toFirestore());
+  }
+
+  @override
   Future<void> trashMatch(String eventId, String matchId) async {
     await _firestore
         .collection('events')

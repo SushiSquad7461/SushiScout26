@@ -131,7 +131,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   /// Get all pending sync operations
-  Future<List<SyncQueueEntry>> getPendingSyncOperations() {
+  Future<List<SyncQueueData>> getPendingSyncOperations() {
     return (select(syncQueue)
       ..where((s) => s.retryCount.isSmallerThanValue(10))
       ..orderBy([
@@ -142,7 +142,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   /// Get operations for a specific entity
-  Future<List<SyncQueueEntry>> getSyncOperationsForEntity(
+  Future<List<SyncQueueData>> getSyncOperationsForEntity(
     String entityType,
     String entityId,
   ) {

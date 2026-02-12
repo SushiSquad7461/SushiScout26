@@ -1,14 +1,15 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:drift/drift.dart'; // Needed for Value
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../core/errors/app_error.dart';
-import '../../core/logger.dart';
-import '../../core/network/retry.dart';
-import '../../core/result/result.dart';
-import '../../data/models/match_report.dart';
+import '../../../core/errors/app_error.dart';
+import '../../../core/logger.dart';
+import '../../../core/network/retry.dart';
+import '../../../core/result/result.dart';
+import '../../models/match_report.dart';
 import '../database/app_database.dart';
-import '../repositories/firestore_repository.dart';
+import '../../repositories/firestore_repository.dart';
 
 /// Provider for sync manager
 final syncManagerProvider = Provider<SyncManager>((ref) {
@@ -245,7 +246,7 @@ class SyncManager {
   }
 
   /// Process a single sync operation with retry logic
-  Future<void> _processSyncOperation(SyncQueueEntry op) async {
+  Future<void> _processSyncOperation(SyncQueueData op) async {
     await _retryConfig.execute(() async {
       switch (op.operation) {
         case 'create':
@@ -373,22 +374,4 @@ class SyncStats {
   bool get hasConflicts => unresolvedConflicts > 0;
 }
 
-/// Extension to add fromJson to MatchReport
-extension MatchReportJson on MatchReport {
-  static MatchReport fromJson(Map<String, dynamic> json) {
-    return MatchReport(
-      id: json['id'] ?? '',
-      matchId: json['matchId'] ?? '',
-      matchNumber: json['matchNumber'] ?? 0,
-      teamNumber: json['teamNumber'] ?? 0,
-      alliance: json['alliance'] ?? 'Red',
-      scouterName: json['scouterName'] ?? '',
-      gameData: json['gameData'] ?? {},
-      robotDied: json['robotDied'] ?? false,
-      comments: json['comments'] ?? '',
-      createdAt: DateTime.parse(json['createdAt'] ?? DateTime.now().toIso8601String()),
-      isSynced: json['isSynced'] ?? false,
-      isDeleted: json['isDeleted'] ?? false,
-    );
-  }
-}
+

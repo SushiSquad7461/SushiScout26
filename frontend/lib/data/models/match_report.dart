@@ -47,6 +47,23 @@ class MatchReport {
     );
   }
 
+  factory MatchReport.fromJson(Map<String, dynamic> json) {
+    return MatchReport(
+      id: json['id'] ?? '',
+      matchId: json['matchId'] ?? '',
+      matchNumber: json['matchNumber'] ?? 0,
+      teamNumber: json['teamNumber'] ?? 0,
+      alliance: json['alliance'] ?? 'Red',
+      scouterName: json['scouterName'] ?? '',
+      gameData: json['gameData'] as Map<String, dynamic>? ?? {},
+      robotDied: json['robotDied'] ?? false,
+      comments: json['comments'] ?? '',
+      createdAt: DateTime.parse(json['createdAt'] ?? DateTime.now().toIso8601String()),
+      isSynced: json['isSynced'] ?? false,
+      isDeleted: json['isDeleted'] ?? false,
+    );
+  }
+
   Map<String, dynamic> toFirestore() {
     return {
       'matchId': matchId,

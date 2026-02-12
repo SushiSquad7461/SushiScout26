@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:drift/drift.dart'; // Needed for Value
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/errors/app_error.dart';
 import '../../core/logger.dart';
@@ -7,8 +8,8 @@ import '../models/event.dart';
 import '../models/match_report.dart';
 import '../repositories/scouting_repository.dart';
 import '../repositories/firestore_repository.dart';
-import 'database/app_database.dart';
-import 'sync/sync_manager.dart';
+import '../local/database/app_database.dart';
+import '../local/sync/sync_manager.dart';
 
 /// Provider for the hybrid repository
 final hybridRepositoryProvider = Provider<HybridRepository>((ref) {
@@ -183,6 +184,30 @@ class HybridRepository implements ScoutingRepository {
     } catch (e, stackTrace) {
       _logger.e('Failed to create match', error: e, stackTrace: stackTrace);
       throw StorageError('Failed to save match locally');
+    }
+  }
+
+  @override
+  Future<void> updateMatch(String eventId, MatchReport match) async {
+    _logger.i('Updating match', data: {
+      'eventId': eventId,
+      'matchId': match.id,
+    });
+    
+    try {
+      // 1. Save to local DB immediately
+      await _db.upsertMatch(_toLocalMatchReport(match));
+      
+      // 2. Queue for sync to Firestore
+      await _syncManager.queueUpdate(eventId, match);
+      
+      // 3. Refresh stream
+      await _refreshMatchStream(eventId);
+      
+      _logger.i('Match updated locally and queued for sync');
+    } catch (e, stackTrace) {
+      _logger.e('Failed to update match', error: e, stackTrace: stackTrace);
+      throw StorageError('Failed to update match locally');
     }
   }
 
