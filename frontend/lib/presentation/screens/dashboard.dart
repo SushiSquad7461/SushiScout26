@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'dart:io';
+import '../../core/animations.dart';
 import '../../data/local/preferences.dart';
 import '../../data/repositories/scouting_repository.dart';
 import '../../data/models/match_report.dart';
@@ -274,11 +275,25 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 padding: const EdgeInsets.all(AppTheme.spacingMd),
                 sliver: SliverList(
                   delegate: SliverChildBuilderDelegate(
-                    (context, index) => Padding(
-                      padding: const EdgeInsets.only(
-                        bottom: AppTheme.spacingSm,
+                    (context, index) => TweenAnimationBuilder<double>(
+                      tween: Tween(begin: 0.0, end: 1.0),
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeOut,
+                      child: Padding(
+                        padding: const EdgeInsets.only(
+                          bottom: AppTheme.spacingSm,
+                        ),
+                        child: _MatchCard(match: matches[index]),
                       ),
-                      child: _MatchCard(match: matches[index]),
+                      builder: (context, value, child) {
+                        return Opacity(
+                          opacity: value,
+                          child: Transform.translate(
+                            offset: Offset(0, (1 - value) * 20),
+                            child: child,
+                          ),
+                        );
+                      },
                     ),
                     childCount: matches.length,
                   ),
@@ -291,46 +306,49 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           const SliverPadding(padding: EdgeInsets.only(bottom: 88)),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () async {
-          final eventCode =
-              ref.read(settingsProvider)[PrefKeys.eventCode] ?? "Unknown";
-          final event = await widget.repository.getEvent(eventCode);
+      floatingActionButton: ScaleAnimation(
+        child: FloatingActionButton.extended(
+          onPressed: () async {
+            AppHaptics.medium();
+            final eventCode =
+                ref.read(settingsProvider)[PrefKeys.eventCode] ?? "Unknown";
+            final event = await widget.repository.getEvent(eventCode);
 
-          if (!mounted) return;
+            if (!mounted) return;
 
-          if (event == null) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  "Event '$eventCode' not found. Defaulting to FRC.",
+            if (event == null) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    "Event '$eventCode' not found. Defaulting to FRC.",
+                  ),
                 ),
-              ),
-            );
-            final dummyEvent = Event(
-              id: eventCode,
-              name: "Dummy/Offline Event",
-              programType: "FRC",
-              tbaKey: eventCode,
-              startDate: DateTime.now(),
-            );
+              );
+              final dummyEvent = Event(
+                id: eventCode,
+                name: "Dummy/Offline Event",
+                programType: "FRC",
+                tbaKey: eventCode,
+                startDate: DateTime.now(),
+              );
+
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => ScoutingFormFactory.create(dummyEvent),
+                ),
+              );
+              return;
+            }
 
             Navigator.of(context).push(
               MaterialPageRoute(
-                builder: (context) => ScoutingFormFactory.create(dummyEvent),
+                builder: (context) => ScoutingFormFactory.create(event),
               ),
             );
-            return;
-          }
-
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (context) => ScoutingFormFactory.create(event),
-            ),
-          );
-        },
-        icon: const Icon(Icons.add_rounded),
-        label: const Text("Scout Match"),
+          },
+          icon: const Icon(Icons.add_rounded),
+          label: const Text("Scout Match"),
+        ),
       ),
     );
   }
@@ -365,13 +383,17 @@ class _MatchCard extends ConsumerWidget {
       color: colorScheme.surfaceContainerLow,
       child: InkWell(
         onTap: () {
+          AppHaptics.selection();
           Navigator.of(context).push(
             MaterialPageRoute(
               builder: (context) => MatchDetailsScreen(match: match),
             ),
           );
         },
-        onLongPress: () => _showContextMenu(context, ref),
+        onLongPress: () {
+          AppHaptics.medium();
+          _showContextMenu(context, ref);
+        },
         borderRadius: BorderRadius.circular(AppTheme.cardRadius),
         child: Padding(
           padding: const EdgeInsets.all(AppTheme.spacingMd),
