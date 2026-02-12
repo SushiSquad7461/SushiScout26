@@ -78,15 +78,6 @@ class SyncQueue extends Table {
   
   // Priority (lower = higher priority)
   IntColumn get priority => integer().withDefault(const Constant(0))();
-  
-  // Index for efficient querying
-  @override
-  List<Index> get indexes => [
-    Index(
-      name: 'idx_sync_queue_status',
-      columns: {retryCount, lastAttempt},
-    ),
-  ];
 }
 
 /// Table for tracking sync conflicts
