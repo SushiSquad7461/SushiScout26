@@ -369,7 +369,7 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         DropdownButtonFormField<String>(
-          value: _baseExpansion,
+          initialValue: _baseExpansion,
           decoration: const InputDecoration(
             labelText: "Base Expansion",
             prefixIcon: Icon(Icons.open_in_full),
@@ -483,7 +483,7 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm> {
                   ),
                 ),
                 Text(
-                  "Match ${_matchNumberCtrl.text} • ${_alliance} Alliance",
+                  "Match ${_matchNumberCtrl.text} • $_alliance Alliance",
                   style: theme.textTheme.bodyLarge?.copyWith(
                     color: colorScheme.onSurfaceVariant,
                   ),
