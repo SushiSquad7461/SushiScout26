@@ -10,6 +10,7 @@ class MatchReport {
   final Map<String, dynamic> gameData; // Polymorphic data
   final bool robotDied;
   final String comments;
+  final List<String> images;
   final DateTime createdAt;
   final bool isSynced;
   final bool isDeleted;
@@ -24,6 +25,7 @@ class MatchReport {
     required this.gameData,
     this.robotDied = false,
     this.comments = '',
+    this.images = const [],
     required this.createdAt,
     this.isSynced = false,
     this.isDeleted = false,
@@ -41,6 +43,7 @@ class MatchReport {
       gameData: data['gameData'] as Map<String, dynamic>? ?? {},
       robotDied: data['robotDied'] ?? false,
       comments: data['comments'] ?? '',
+      images: List<String>.from(data['images'] ?? []),
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       isSynced: !doc.metadata.hasPendingWrites,
       isDeleted: data['isDeleted'] ?? false,
@@ -58,6 +61,7 @@ class MatchReport {
       gameData: json['gameData'] as Map<String, dynamic>? ?? {},
       robotDied: json['robotDied'] ?? false,
       comments: json['comments'] ?? '',
+      images: List<String>.from(json['images'] ?? []),
       createdAt: DateTime.parse(json['createdAt'] ?? DateTime.now().toIso8601String()),
       isSynced: json['isSynced'] ?? false,
       isDeleted: json['isDeleted'] ?? false,
@@ -74,6 +78,7 @@ class MatchReport {
       'gameData': gameData,
       'robotDied': robotDied,
       'comments': comments,
+      'images': images,
       'createdAt': Timestamp.fromDate(createdAt),
       'isDeleted': isDeleted,
     };

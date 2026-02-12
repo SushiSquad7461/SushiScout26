@@ -8,6 +8,7 @@ import '../../data/repositories/hybrid_repository.dart';
 import '../widgets/scouting_form_widget.dart';
 import '../widgets/match_timer.dart';
 import '../widgets/counter_card.dart';
+import '../widgets/image_picker_widget.dart';
 import '../../data/local/preferences.dart';
 import '../theme/app_theme.dart';
 
@@ -52,6 +53,7 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm> {
   int _skill = 0;
   bool _died = false;
   final _commentsCtrl = TextEditingController();
+  List<String> _images = [];
 
   @override
   void initState() {
@@ -418,6 +420,13 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm> {
           ),
           maxLines: 3,
         ),
+        
+        const SizedBox(height: AppTheme.spacingMd),
+        
+        ImagePickerWidget(
+          initialImages: _images,
+          onImagesChanged: (images) => _images = images,
+        ),
       ],
     );
   }
@@ -577,6 +586,7 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm> {
       gameData: gameData,
       robotDied: _died,
       comments: _commentsCtrl.text,
+      images: _images,
       createdAt: DateTime.now(),
       isSynced: false,
     );

@@ -8,6 +8,7 @@ import '../../data/repositories/hybrid_repository.dart';
 import '../widgets/scouting_form_widget.dart';
 import '../widgets/match_timer.dart';
 import '../widgets/counter_card.dart';
+import '../widgets/image_picker_widget.dart';
 import '../../data/local/preferences.dart';
 import '../theme/app_theme.dart';
 
@@ -54,6 +55,7 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm> {
   String _baseExpansion = 'None';
   double _driverQuality = 0;
   final _commentsCtrl = TextEditingController();
+  List<String> _images = [];
 
   @override
   void initState() {
@@ -428,6 +430,13 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm> {
           ),
           maxLines: 3,
         ),
+        
+        const SizedBox(height: AppTheme.spacingMd),
+        
+        ImagePickerWidget(
+          initialImages: _images,
+          onImagesChanged: (images) => _images = images,
+        ),
       ],
     );
   }
@@ -595,6 +604,7 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm> {
       gameData: gameData,
       robotDied: _robotDied,
       comments: _commentsCtrl.text,
+      images: _images,
       createdAt: DateTime.now(),
       isSynced: false,
     );
