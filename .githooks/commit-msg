@@ -1,0 +1,46 @@
+#!/bin/sh
+#
+# Git commit-msg hook to validate conventional commit messages
+#
+
+COMMIT_MSG_FILE="$1"
+COMMIT_MSG=$(head -n1 "$COMMIT_MSG_FILE")
+
+# Pattern for conventional commits
+# Format: type(scope): subject
+# Types: feat, fix, docs, style, refactor, perf, test, chore, ci, revert
+PATTERN="^(feat|fix|docs|style|refactor|perf|test|chore|ci|revert)(\([a-z-]+\))?: .+"
+
+if ! echo "$COMMIT_MSG" | grep -qE "$PATTERN"; then
+    echo ""
+    echo "ERROR: Commit message does not follow conventional commit format!"
+    echo ""
+    echo "Expected format: <type>(<scope>): <subject>"
+    echo ""
+    echo "Valid types: feat, fix, docs, style, refactor, perf, test, chore, ci, revert"
+    echo "Valid scopes: frontend, backend, db, api, ui, theme, sync, test, config, deps"
+    echo ""
+    echo "Examples:"
+    echo "  feat(frontend): add offline sync queue"
+    echo "  fix(backend): resolve race condition in sheets sync"
+    echo "  test(ui): add widget tests for counter card"
+    echo "  docs: update README with setup instructions"
+    echo ""
+    echo "Your commit message was:"
+    echo "  $COMMIT_MSG"
+    echo ""
+    exit 1
+fi
+
+# Check subject length (max 50 chars)
+SUBJECT=$(echo "$COMMIT_MSG" | sed 's/^[^:]*: //')
+if [ ${#SUBJECT} -gt 50 ]; then
+    echo ""
+    echo "WARNING: Commit subject is ${#SUBJECT} characters (max 50 recommended)"
+    echo "Subject: $SUBJECT"
+    echo ""
+    # Don't fail, just warn
+fi
+
+echo "✓ Commit message follows conventional commit format"
+exit 0

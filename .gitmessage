@@ -1,0 +1,47 @@
+# COMMIT CONVENTION
+#
+# Format: <type>(<scope>): <subject>
+#
+# <body>
+#
+# <footer>
+#
+# Types:
+#   feat     - New feature
+#   fix      - Bug fix
+#   docs     - Documentation changes
+#   style    - Code style (formatting, missing semi-colons, etc)
+#   refactor - Code refactoring
+#   perf     - Performance improvements
+#   test     - Adding or updating tests
+#   chore    - Build process or auxiliary tool changes
+#   ci       - CI/CD changes
+#   revert   - Revert previous commit
+#
+# Scopes:
+#   frontend - Flutter application changes
+#   backend  - FastAPI/Python changes
+#   db       - Database changes
+#   api      - API endpoints
+#   ui       - UI components and screens
+#   theme    - Theme and styling
+#   sync     - Data synchronization
+#   test     - Test-related changes
+#   config   - Configuration changes
+#   deps     - Dependency updates
+#
+# Subject:
+#   - Use imperative mood ("add" not "added" or "adds")
+#   - Don't capitalize first letter
+#   - No period at the end
+#   - Max 50 characters
+#
+# Body:
+#   - Use imperative mood
+#   - Wrap at 72 characters
+#   - Explain WHAT and WHY, not HOW
+#
+# Footer:
+#   - Reference issues: "Closes #123"
+#   - Breaking changes: "BREAKING CHANGE: description"
+
