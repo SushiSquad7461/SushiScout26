@@ -3,13 +3,36 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/animations.dart';
 
 /// Provider for sync status
-final syncStatusProvider = StateProvider<SyncStatus>((ref) => const SyncStatus.idle());
+final syncStatusProvider = NotifierProvider<SyncStatusNotifier, SyncStatus>(SyncStatusNotifier.new);
+
+class SyncStatusNotifier extends Notifier<SyncStatus> {
+  @override
+  SyncStatus build() => const SyncStatus.idle();
+  
+  void setStatus(SyncStatus status) => state = status;
+}
 
 /// Provider for online status
-final isOnlineProvider = StateProvider<bool>((ref) => true);
+final isOnlineProvider = NotifierProvider<IsOnlineNotifier, bool>(IsOnlineNotifier.new);
+
+class IsOnlineNotifier extends Notifier<bool> {
+  @override
+  bool build() => true;
+  
+  void setOnline(bool online) => state = online;
+}
 
 /// Provider for pending sync count
-final pendingSyncCountProvider = StateProvider<int>((ref) => 0);
+final pendingSyncCountProvider = NotifierProvider<PendingSyncCountNotifier, int>(PendingSyncCountNotifier.new);
+
+class PendingSyncCountNotifier extends Notifier<int> {
+  @override
+  int build() => 0;
+  
+  void setCount(int count) => state = count;
+  void increment() => state++;
+  void decrement() => state--;
+}
 
 /// Sync status indicator widget showing online/offline state and pending changes
 class SyncStatusIndicator extends ConsumerWidget {

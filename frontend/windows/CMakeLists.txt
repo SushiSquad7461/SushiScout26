@@ -1,4 +1,6 @@
 # Project-level configuration.
+set(CMAKE_POLICY_DEFAULT_CMP0000 NEW)
+set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
 cmake_minimum_required(VERSION 3.14)
 project(frontend LANGUAGES CXX)
 
