@@ -3,10 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'firebase_options.dart';
-import 'data/repositories/scouting_repository.dart';
 import 'data/repositories/firestore_repository.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'data/local/preferences.dart';
+import 'data/local/sync/sync_manager.dart';
 import 'presentation/screens/dashboard.dart';
 import 'presentation/theme/app_theme.dart';
 
@@ -21,19 +21,30 @@ void main() async {
   );
 
   final prefs = await SharedPreferences.getInstance();
-  final repository = FirestoreRepository(FirebaseFirestore.instance);
+  
+  // Create container to initialize services
+  final container = ProviderContainer(
+    overrides: [
+      sharedPreferencesProvider.overrideWithValue(prefs),
+      firestoreRepositoryProvider.overrideWithValue(
+        FirestoreRepository(FirebaseFirestore.instance),
+      ),
+    ],
+  );
+
+  // Initialize SyncManager
+  container.read(syncManagerProvider).initialize();
 
   runApp(
-    ProviderScope(
-      overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
-      child: SushiScoutApp(repository: repository),
+    UncontrolledProviderScope(
+      container: container,
+      child: const SushiScoutApp(),
     ),
   );
 }
 
 class SushiScoutApp extends ConsumerWidget {
-  final ScoutingRepository repository;
-  const SushiScoutApp({super.key, required this.repository});
+  const SushiScoutApp({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -55,7 +66,7 @@ class SushiScoutApp extends ConsumerWidget {
       theme: AppTheme.lightTheme(seedColor),
       darkTheme: AppTheme.darkTheme(seedColor),
       themeMode: mode,
-      home: DashboardScreen(repository: repository),
+      home: const DashboardScreen(),
     );
   }
 }

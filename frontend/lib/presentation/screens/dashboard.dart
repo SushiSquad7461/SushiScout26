@@ -5,7 +5,7 @@ import 'package:share_plus/share_plus.dart';
 import 'dart:io';
 import '../../core/animations.dart';
 import '../../data/local/preferences.dart';
-import '../../data/repositories/scouting_repository.dart';
+import '../../data/repositories/hybrid_repository.dart';
 import '../../data/models/match_report.dart';
 import '../../data/models/event.dart';
 import 'match_details.dart';
@@ -23,8 +23,7 @@ import '../widgets/match_search_delegate.dart';
 import '../../data/services/export_service.dart';
 
 class DashboardScreen extends ConsumerStatefulWidget {
-  final ScoutingRepository repository;
-  const DashboardScreen({super.key, required this.repository});
+  const DashboardScreen({super.key});
 
   @override
   ConsumerState<DashboardScreen> createState() => _DashboardScreenState();
@@ -38,7 +37,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     super.initState();
     final eventCode =
         ref.read(settingsProvider)[PrefKeys.eventCode] ?? "Unknown";
-    _matchesStream = widget.repository.watchMatches(eventCode);
+    _matchesStream = ref.read(hybridRepositoryProvider).watchMatches(eventCode);
   }
 
   void _openSettings(BuildContext context) {
@@ -51,7 +50,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       final eventCode =
           ref.read(settingsProvider)[PrefKeys.eventCode] ?? "Unknown";
       setState(() {
-        _matchesStream = widget.repository.watchMatches(eventCode);
+        _matchesStream = ref.read(hybridRepositoryProvider).watchMatches(eventCode);
       });
     });
   }
@@ -59,7 +58,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   Future<void> _showExportOptions(BuildContext context, WidgetRef ref) async {
     final eventCode =
         ref.read(settingsProvider)[PrefKeys.eventCode] ?? "Unknown";
-    final matches = await widget.repository.getMatches(eventCode);
+    final matches = await ref.read(hybridRepositoryProvider).getMatches(eventCode);
 
     if (!mounted) return;
 
@@ -109,7 +108,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   Future<void> _exportCsv(BuildContext context, WidgetRef ref) async {
     final eventCode =
         ref.read(settingsProvider)[PrefKeys.eventCode] ?? "Unknown";
-    final matches = await widget.repository.getMatches(eventCode);
+    final matches = await ref.read(hybridRepositoryProvider).getMatches(eventCode);
 
     if (!mounted) return;
 
@@ -167,7 +166,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         ref.read(settingsProvider)[PrefKeys.eventCode] ?? "Unknown";
     // Force refresh by re-creating the stream
     setState(() {
-      _matchesStream = widget.repository.watchMatches(eventCode);
+      _matchesStream = ref.read(hybridRepositoryProvider).watchMatches(eventCode);
     });
     // Wait a moment for the stream to update
     await Future.delayed(const Duration(milliseconds: 500));
@@ -204,7 +203,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 tooltip: "Search Matches",
                 onPressed: () async {
                   final eventCode = ref.read(settingsProvider)[PrefKeys.eventCode] ?? "Unknown";
-                  final matches = await widget.repository.getMatches(eventCode);
+                  final matches = await ref.read(hybridRepositoryProvider).getMatches(eventCode);
                   if (context.mounted) {
                     showSearch(
                       context: context,
@@ -239,8 +238,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     case 'trash':
                       Navigator.of(context).push(
                         MaterialPageRoute(
-                          builder: (_) =>
-                              TrashScreen(repository: widget.repository),
+                          builder: (_) => const TrashScreen(),
                         ),
                       );
                       break;
@@ -436,7 +434,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             AppHaptics.medium();
             final eventCode =
                 ref.read(settingsProvider)[PrefKeys.eventCode] ?? "Unknown";
-            final event = await widget.repository.getEvent(eventCode);
+            final event = await ref.read(hybridRepositoryProvider).getEvent(eventCode);
 
             if (!mounted) return;
 

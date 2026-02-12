@@ -5,10 +5,11 @@ import '../../data/models/match_report.dart';
 import '../../data/repositories/scouting_repository.dart';
 import '../theme/app_theme.dart';
 
+import '../../data/repositories/hybrid_repository.dart';
+
 /// Material 3 styled trash/recovery screen.
 class TrashScreen extends ConsumerStatefulWidget {
-  final ScoutingRepository repository;
-  const TrashScreen({super.key, required this.repository});
+  const TrashScreen({super.key});
 
   @override
   ConsumerState<TrashScreen> createState() => _TrashScreenState();
@@ -21,12 +22,13 @@ class _TrashScreenState extends ConsumerState<TrashScreen> {
   void initState() {
     super.initState();
     final eventCode = ref.read(settingsProvider)[PrefKeys.eventCode] ?? "";
-    _trashStream = widget.repository.watchTrash(eventCode);
+    _trashStream = ref.read(hybridRepositoryProvider).watchTrash(eventCode);
   }
 
   Future<void> _restore(MatchReport match) async {
     final eventCode = ref.read(settingsProvider)[PrefKeys.eventCode] ?? "";
-    await widget.repository.restoreMatch(eventCode, match.id);
+    final repo = ref.read(hybridRepositoryProvider);
+    await repo.restoreMatch(eventCode, match.id);
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -34,7 +36,7 @@ class _TrashScreenState extends ConsumerState<TrashScreen> {
           action: SnackBarAction(
             label: "Undo",
             onPressed: () async {
-              await widget.repository.trashMatch(eventCode, match.id);
+              await repo.trashMatch(eventCode, match.id);
             },
           ),
         ),
@@ -69,7 +71,7 @@ class _TrashScreenState extends ConsumerState<TrashScreen> {
     );
 
     if (confirm == true) {
-      await widget.repository.deleteMatch(eventCode, match.id);
+      await ref.read(hybridRepositoryProvider).deleteMatch(eventCode, match.id);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("Permanently deleted match.")),
