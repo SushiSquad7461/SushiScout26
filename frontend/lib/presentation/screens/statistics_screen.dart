@@ -27,8 +27,8 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
       appBar: AppBar(
         title: const Text("Statistics"),
       ),
-      body: FutureBuilder<List<MatchReport>>(
-        future: repo.getMatches(eventCode),
+      body: StreamBuilder<List<MatchReport>>(
+        stream: repo.watchMatches(eventCode),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: ShimmerLoading(isLoading: true, child: SizedBox(width: double.infinity, height: 300)));
