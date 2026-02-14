@@ -120,7 +120,7 @@ class SyncManager {
       entityId: match.id,
       eventId: Value(eventId),
       operation: 'create',
-      dataJson: jsonEncode(match.toFirestore()),
+      dataJson: jsonEncode(match.toJson()),
       priority: const Value(0), // High priority for creates
     ));
     
@@ -142,7 +142,7 @@ class SyncManager {
       entityId: match.id,
       eventId: Value(eventId),
       operation: 'update',
-      dataJson: jsonEncode(match.toFirestore()),
+      dataJson: jsonEncode(match.toJson()),
       priority: const Value(1),
     ));
     

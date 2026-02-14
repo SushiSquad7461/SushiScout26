@@ -83,4 +83,22 @@ class MatchReport {
       'isDeleted': isDeleted,
     };
   }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'matchId': matchId,
+      'matchNumber': matchNumber,
+      'teamNumber': teamNumber,
+      'alliance': alliance,
+      'scouterName': scouterName,
+      'gameData': gameData,
+      'robotDied': robotDied,
+      'comments': comments,
+      'images': images,
+      'createdAt': createdAt.toIso8601String(),
+      'isSynced': isSynced,
+      'isDeleted': isDeleted,
+    };
+  }
 }

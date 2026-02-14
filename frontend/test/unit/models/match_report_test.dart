@@ -234,5 +234,55 @@ void main() {
         expect(deletedReport.isDeleted, true);
       });
     });
+    group('JSON serialization', () {
+      test('should serialize to JSON correctly', () {
+        final report = MatchReport(
+          id: 'json123',
+          matchId: 'qm12',
+          matchNumber: 12,
+          teamNumber: 12,
+          alliance: 'Red',
+          scouterName: 'Scouter',
+          gameData: {'fuel': 10},
+          createdAt: DateTime(2026, 3, 15, 16, 0),
+          isSynced: true,
+          isDeleted: false,
+        );
+
+        final json = report.toJson();
+
+        expect(json['id'], 'json123');
+        expect(json['matchId'], 'qm12');
+        expect(json['matchNumber'], 12);
+        expect(json['gameData'], {'fuel': 10});
+        expect(json['createdAt'], report.createdAt.toIso8601String());
+        expect(json['isSynced'], true);
+      });
+
+      test('should deserialize from JSON correctly', () {
+        final json = {
+          'id': 'json456',
+          'matchId': 'qm13',
+          'matchNumber': 13,
+          'teamNumber': 13,
+          'alliance': 'Blue',
+          'scouterName': 'Scouter',
+          'gameData': {'fuel': 20},
+          'createdAt': DateTime(2026, 3, 15, 17, 0).toIso8601String(),
+          'isSynced': false,
+          'isDeleted': true,
+        };
+
+        final report = MatchReport.fromJson(json);
+
+        expect(report.id, 'json456');
+        expect(report.matchId, 'qm13');
+        expect(report.matchNumber, 13);
+        expect(report.gameData, {'fuel': 20});
+        expect(report.createdAt, DateTime(2026, 3, 15, 17, 0));
+        expect(report.isSynced, false);
+        expect(report.isDeleted, true);
+      });
+    });
   });
 }

@@ -59,7 +59,8 @@ class FirestoreRepository implements ScoutingRepository {
         .collection('events')
         .doc(eventId)
         .collection('matches')
-        .add(match.toFirestore());
+        .doc(match.id)
+        .set(match.toFirestore());
   }
 
   @override
