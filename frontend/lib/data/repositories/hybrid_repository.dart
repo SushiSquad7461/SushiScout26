@@ -4,7 +4,6 @@ import 'package:drift/drift.dart'; // Needed for Value
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/errors/app_error.dart';
 import '../../core/logger.dart';
-import '../../core/result/result.dart';
 import '../models/event.dart';
 import '../models/match_report.dart';
 import '../repositories/scouting_repository.dart';
@@ -184,7 +183,11 @@ class HybridRepository implements ScoutingRepository {
       _logger.i('Match created locally and queued for sync');
     } catch (e, stackTrace) {
       _logger.e('Failed to create match', error: e, stackTrace: stackTrace);
-      throw StorageError('Failed to save match locally');
+      final errorMsg = e.toString();
+      if (errorMsg.contains('UNIQUE constraint failed')) {
+        throw StorageError('A match for this team and match number already exists. Please update the existing match instead.');
+      }
+      throw StorageError('Failed to save match locally: $errorMsg');
     }
   }
 
@@ -208,7 +211,11 @@ class HybridRepository implements ScoutingRepository {
       _logger.i('Match updated locally and queued for sync');
     } catch (e, stackTrace) {
       _logger.e('Failed to update match', error: e, stackTrace: stackTrace);
-      throw StorageError('Failed to update match locally');
+      final errorMsg = e.toString();
+      if (errorMsg.contains('UNIQUE constraint failed')) {
+        throw StorageError('A match for this team and match number already exists.');
+      }
+      throw StorageError('Failed to update match locally: $errorMsg');
     }
   }
 
@@ -233,7 +240,7 @@ class HybridRepository implements ScoutingRepository {
       _logger.i('Match trashed locally and queued for sync');
     } catch (e, stackTrace) {
       _logger.e('Failed to trash match', error: e, stackTrace: stackTrace);
-      throw StorageError('Failed to trash match');
+      throw StorageError('Failed to trash match: $e');
     }
   }
 
@@ -263,7 +270,7 @@ class HybridRepository implements ScoutingRepository {
       _logger.i('Match restored locally and queued for sync');
     } catch (e, stackTrace) {
       _logger.e('Failed to restore match', error: e, stackTrace: stackTrace);
-      throw StorageError('Failed to restore match');
+      throw StorageError('Failed to restore match: $e');
     }
   }
 
@@ -287,7 +294,7 @@ class HybridRepository implements ScoutingRepository {
       _logger.i('Match permanently deleted');
     } catch (e, stackTrace) {
       _logger.e('Failed to delete match', error: e, stackTrace: stackTrace);
-      throw StorageError('Failed to delete match');
+      throw StorageError('Failed to delete match: $e');
     }
   }
 

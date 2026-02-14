@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/errors/app_error.dart';
 import '../../core/validation/form_validators.dart';
 import '../../data/models/match_report.dart';
 import '../../data/repositories/hybrid_repository.dart';
@@ -617,11 +618,17 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm> {
         ).showSnackBar(const SnackBar(content: Text("FTC Match Saved!")));
         Navigator.pop(context);
       }
+    } on AppError catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.message), backgroundColor: Theme.of(context).colorScheme.error));
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text("Error saving: $e")));
+        ).showSnackBar(SnackBar(content: Text("Error saving: $e"), backgroundColor: Theme.of(context).colorScheme.error));
       }
     }
   }

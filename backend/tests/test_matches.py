@@ -38,3 +38,17 @@ async def test_get_matches(client: AsyncClient):
     assert isinstance(data, list)
     assert len(data) >= 1
     assert data[0]["event_code"] == "2026TEST"
+
+@pytest.mark.asyncio
+async def test_duplicate_match_conflict(client: AsyncClient):
+    # 1. Create a match
+    res1 = await client.post("/api/v1/matches/", json=MATCH_DATA)
+    assert res1.status_code == 201
+
+    # 2. Try to create the exact same match again
+    res2 = await client.post("/api/v1/matches/", json=MATCH_DATA)
+    
+    # 3. Should fail with 409 Conflict
+    assert res2.status_code == 409
+    assert "already exists" in res2.json()["detail"]
+
