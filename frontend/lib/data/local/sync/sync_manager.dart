@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:drift/drift.dart'; // Needed for Value
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -75,6 +76,15 @@ class SyncManager {
   /// Initialize sync manager
   void initialize() {
     _logger.i('Initializing sync manager');
+    
+    // Reset retry counts for stuck operations on startup
+    _db.getPendingSyncOperations().then((ops) {
+      for (final op in ops) {
+        if (op.retryCount >= 5) {
+          _db.updateSyncOperationRetry(op.id, retryCount: 0, errorMessage: 'Resetting stuck operation');
+        }
+      }
+    });
     
     // Initial pending count update
     _updatePendingCount();
@@ -206,6 +216,7 @@ class SyncManager {
     final errors = <AppError>[];
 
     for (final op in pendingOps) {
+      debugPrint('Processing sync op: ${op.operation} for ${op.entityId} (Event: ${op.eventId})');
       try {
         await _processSyncOperation(op);
         successCount++;

@@ -86,13 +86,26 @@ class SyncStatusIndicator extends ConsumerWidget {
       label = 'Synced';
     }
 
-    return Tooltip(
-      message: isOnline 
-        ? (pendingCount > 0 ? '$pendingCount changes pending sync' : 'All changes synced')
-        : 'Working offline - changes will sync when connection is restored',
-      child: compact
-        ? _buildCompactIndicator(context, icon, color, showBadge, pendingCount)
-        : _buildFullIndicator(context, icon, color, label, showBadge, pendingCount),
+    return GestureDetector(
+      onTap: isOnline ? () {
+        ref.read(manager.syncManagerProvider).forceSync();
+        AppHaptics.medium();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Syncing...'),
+            duration: Duration(seconds: 1),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      } : null,
+      child: Tooltip(
+        message: isOnline 
+          ? (pendingCount > 0 ? '$pendingCount changes pending sync. Tap to sync now.' : 'All changes synced. Tap to force sync.')
+          : 'Working offline - changes will sync when connection is restored',
+        child: compact
+          ? _buildCompactIndicator(context, icon, color, showBadge, pendingCount)
+          : _buildFullIndicator(context, icon, color, label, showBadge, pendingCount),
+      ),
     );
   }
 

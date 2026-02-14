@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/event.dart';
 import '../models/match_report.dart';
@@ -8,7 +9,6 @@ class FirestoreRepository implements ScoutingRepository {
 
   FirestoreRepository(this._firestore);
 
-  @override
   @override
   Stream<List<MatchReport>> watchMatches(String eventId) {
     return _firestore
@@ -55,26 +55,29 @@ class FirestoreRepository implements ScoutingRepository {
 
   @override
   Future<void> createMatch(String eventId, MatchReport match) async {
+    debugPrint('Writing match to: events/$eventId/matches/${match.id}');
     await _firestore
         .collection('events')
         .doc(eventId)
         .collection('matches')
         .doc(match.id)
-        .set(match.toFirestore());
+        .set(match.toFirestore(), SetOptions(merge: true));
   }
 
   @override
   Future<void> updateMatch(String eventId, MatchReport match) async {
+    debugPrint('Updating match at: events/$eventId/matches/${match.id}');
     await _firestore
         .collection('events')
         .doc(eventId)
         .collection('matches')
         .doc(match.id)
-        .update(match.toFirestore());
+        .set(match.toFirestore(), SetOptions(merge: true));
   }
 
   @override
   Future<void> trashMatch(String eventId, String matchId) async {
+    debugPrint('Trashing match at: events/$eventId/matches/$matchId');
     await _firestore
         .collection('events')
         .doc(eventId)
