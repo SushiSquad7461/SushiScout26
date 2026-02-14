@@ -54,8 +54,8 @@ void main() {
       createdAt: DateTime.now(),
     );
 
-    when(mockRepo.getMatches('2026test'))
-        .thenAnswer((_) async => [match1, match2]);
+    when(mockRepo.watchMatches('2026test'))
+        .thenAnswer((_) => Stream.value([match1, match2]));
 
     // Act
     await tester.pumpWidget(
@@ -80,8 +80,8 @@ void main() {
 
   testWidgets('StatisticsScreen shows empty state when no matches', (tester) async {
     // Arrange
-    when(mockRepo.getMatches('2026test'))
-        .thenAnswer((_) async => []);
+    when(mockRepo.watchMatches('2026test'))
+        .thenAnswer((_) => Stream.value([]));
 
     // Act
     await tester.pumpWidget(
