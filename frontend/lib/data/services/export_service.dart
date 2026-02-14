@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:excel/excel.dart';
+import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -48,7 +49,13 @@ class ExportService {
   }
 
   static Future<void> exportToPdf(List<MatchReport> matches) async {
-    final pdf = pw.Document();
+    final fontData = await rootBundle.load('assets/fonts/Roboto-Regular.ttf');
+    final ttf = pw.Font.ttf(fontData);
+    final pdf = pw.Document(
+      theme: pw.ThemeData.withFont(
+        base: ttf,
+      ),
+    );
 
     pdf.addPage(
       pw.MultiPage(
