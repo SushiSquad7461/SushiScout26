@@ -157,6 +157,9 @@ class HybridRepository implements ScoutingRepository {
       }
       
       _logger.d('Refreshed ${firestoreMatches.length} matches from Firestore');
+      
+      // Refresh the stream to update UI
+      await _refreshMatchStream(eventId);
     } catch (e) {
       // Firestore failures shouldn't block local reads
       _logger.w('Firestore refresh failed', error: e);

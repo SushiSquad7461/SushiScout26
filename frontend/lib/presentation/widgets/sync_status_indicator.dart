@@ -1,13 +1,27 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/animations.dart';
+import '../../data/local/sync/sync_manager.dart' as manager;
 
 /// Provider for sync status
 final syncStatusProvider = NotifierProvider<SyncStatusNotifier, SyncStatus>(SyncStatusNotifier.new);
 
 class SyncStatusNotifier extends Notifier<SyncStatus> {
   @override
-  SyncStatus build() => const SyncStatus.idle();
+  SyncStatus build() {
+    // Listen to SyncManager stream and update state
+    final syncManager = ref.watch(manager.syncManagerProvider);
+    syncManager.syncStream.listen((status) {
+      if (status is manager.SyncInProgress) {
+        state = const SyncStatus.syncing();
+      } else if (status is manager.SyncCompleted) {
+        state = const SyncStatus.success();
+      } else if (status is manager.SyncErrorStatus) {
+        state = SyncStatus.error(status.error.message);
+      }
+    });
+    return const SyncStatus.idle();
+  }
   
   void setStatus(SyncStatus status) => state = status;
 }
@@ -23,16 +37,10 @@ class IsOnlineNotifier extends Notifier<bool> {
 }
 
 /// Provider for pending sync count
-final pendingSyncCountProvider = NotifierProvider<PendingSyncCountNotifier, int>(PendingSyncCountNotifier.new);
-
-class PendingSyncCountNotifier extends Notifier<int> {
-  @override
-  int build() => 0;
-  
-  void setCount(int count) => state = count;
-  void increment() => state++;
-  void decrement() => state--;
-}
+final pendingSyncCountProvider = StreamProvider<int>((ref) {
+  final syncManager = ref.watch(manager.syncManagerProvider);
+  return syncManager.pendingCountStream;
+});
 
 /// Sync status indicator widget showing online/offline state and pending changes
 class SyncStatusIndicator extends ConsumerWidget {
@@ -47,7 +55,8 @@ class SyncStatusIndicator extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final isOnline = ref.watch(isOnlineProvider);
     final syncStatus = ref.watch(syncStatusProvider);
-    final pendingCount = ref.watch(pendingSyncCountProvider);
+    final pendingCountAsync = ref.watch(pendingSyncCountProvider);
+    final pendingCount = pendingCountAsync.asData?.value ?? 0;
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
@@ -188,7 +197,8 @@ class SyncStatusBar extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isOnline = ref.watch(isOnlineProvider);
-    final pendingCount = ref.watch(pendingSyncCountProvider);
+    final pendingCountAsync = ref.watch(pendingSyncCountProvider);
+    final pendingCount = pendingCountAsync.asData?.value ?? 0;
     
     if (isOnline && pendingCount == 0) {
       return const SizedBox.shrink();
@@ -249,7 +259,7 @@ class SyncStatusBar extends ConsumerWidget {
   }
 
   void _triggerSync(WidgetRef ref) {
-    // TODO: Trigger actual sync
+    ref.read(manager.syncManagerProvider).forceSync();
     AppHaptics.medium();
   }
 }

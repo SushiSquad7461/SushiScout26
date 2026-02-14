@@ -65,8 +65,10 @@ class SyncManager {
   Timer? _syncTimer;
   bool _isSyncing = false;
   final _syncController = StreamController<SyncStatus>.broadcast();
+  final _pendingCountController = StreamController<int>.broadcast();
   
   Stream<SyncStatus> get syncStream => _syncController.stream;
+  Stream<int> get pendingCountStream => _pendingCountController.stream;
   
   SyncManager(this._db, this._firestore);
 
@@ -74,6 +76,9 @@ class SyncManager {
   void initialize() {
     _logger.i('Initializing sync manager');
     
+    // Initial pending count update
+    _updatePendingCount();
+
     // Start periodic sync
     _syncTimer = Timer.periodic(
       const Duration(minutes: 5),
@@ -94,6 +99,13 @@ class SyncManager {
   void dispose() {
     _syncTimer?.cancel();
     _syncController.close();
+    _pendingCountController.close();
+  }
+
+  /// Update the pending count stream
+  Future<void> _updatePendingCount() async {
+    final pendingOps = await _db.getPendingSyncOperations();
+    _pendingCountController.add(pendingOps.length);
   }
 
   /// Queue a create operation
@@ -111,6 +123,8 @@ class SyncManager {
       dataJson: jsonEncode(match.toFirestore()),
       priority: const Value(0), // High priority for creates
     ));
+    
+    await _updatePendingCount();
     
     // Try to sync immediately if online
     await _attemptImmediateSync();
@@ -132,6 +146,8 @@ class SyncManager {
       priority: const Value(1),
     ));
     
+    await _updatePendingCount();
+
     await _attemptImmediateSync();
   }
 
@@ -151,6 +167,8 @@ class SyncManager {
       priority: const Value(2),
     ));
     
+    await _updatePendingCount();
+
     await _attemptImmediateSync();
   }
 
@@ -229,6 +247,8 @@ class SyncManager {
       success: successCount,
       failed: failCount,
     ));
+    
+    await _updatePendingCount();
 
     if (failCount == 0) {
       _logger.i('Sync completed successfully', data: {'synced': successCount});
