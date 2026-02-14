@@ -240,7 +240,7 @@ class SyncStatusBar extends ConsumerWidget {
                 ),
               ),
             ),
-            if (isOnline && pendingCount > 0)
+            if (isOnline)
               TextButton.icon(
                 onPressed: () => _triggerSync(ref),
                 icon: const Icon(Icons.sync, size: 16),

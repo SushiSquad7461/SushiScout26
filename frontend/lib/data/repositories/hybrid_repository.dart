@@ -36,6 +36,7 @@ class HybridRepository implements ScoutingRepository {
   
   final _matchStreamControllers = <String, StreamController<List<MatchReport>>>{};
   final _trashStreamControllers = <String, StreamController<List<MatchReport>>>{};
+  final _firestoreSubscriptions = <String, StreamSubscription<List<MatchReport>>>{};
 
   HybridRepository(this._db, this._firestore, this._syncManager) {
     _initializeStreams();
@@ -66,7 +67,12 @@ class HybridRepository implements ScoutingRepository {
     // Create or get existing stream controller
     var controller = _matchStreamControllers[eventId];
     if (controller == null || controller.isClosed) {
-      controller = StreamController<List<MatchReport>>.broadcast();
+      controller = StreamController<List<MatchReport>>.broadcast(
+        onCancel: () {
+          // Optional: Cancel firestore subscription when no listeners?
+          // For now, we keep it alive to ensure background updates continue
+        },
+      );
       _matchStreamControllers[eventId] = controller;
       
       // Initial load from local DB
@@ -78,9 +84,39 @@ class HybridRepository implements ScoutingRepository {
           controller.add(localMatches.map(_toMatchReport).toList());
         }
       });
+
+      // Setup real-time Firestore listener for this event
+      _setupFirestoreSubscription(eventId);
     }
     
     return controller.stream;
+  }
+
+  void _setupFirestoreSubscription(String eventId) {
+    if (_firestoreSubscriptions.containsKey(eventId)) return;
+
+    _logger.d('Setting up Firestore subscription for event: $eventId');
+    final subscription = _firestore.watchMatches(eventId).listen(
+      (remoteMatches) async {
+        _logger.d('Received ${remoteMatches.length} matches from Firestore stream');
+        try {
+          for (final match in remoteMatches) {
+            // Upsert remote match to local DB
+            // This will trigger local DB listeners (if any)
+            await _db.upsertMatch(_toLocalMatchReport(match, eventId));
+          }
+          // Refresh the stream to show new data
+          _refreshMatchStream(eventId);
+        } catch (e) {
+          _logger.e('Error syncing remote matches to local DB', error: e);
+        }
+      },
+      onError: (e) {
+        _logger.w('Firestore stream error', error: e);
+      },
+    );
+
+    _firestoreSubscriptions[eventId] = subscription;
   }
 
   Future<void> _refreshMatchStream(String eventId) async {
@@ -360,8 +396,10 @@ class HybridRepository implements ScoutingRepository {
   void dispose() {
     _matchStreamControllers.forEach((_, controller) => controller.close());
     _trashStreamControllers.forEach((_, controller) => controller.close());
+    _firestoreSubscriptions.forEach((_, subscription) => subscription.cancel());
     _matchStreamControllers.clear();
     _trashStreamControllers.clear();
+    _firestoreSubscriptions.clear();
   }
 
   // Conversion helpers
