@@ -223,7 +223,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               // More options menu
               PopupMenuButton<String>(
                 icon: const Icon(Icons.more_vert),
-                onSelected: (value) {
+                onSelected: (value) async {
                   switch (value) {
                     case 'trash':
                       Navigator.of(context).push(
@@ -234,6 +234,54 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       break;
                     case 'settings':
                       _openSettings(context);
+                      break;
+                    case 'clear_local':
+                      final confirmed = await showDialog<bool>(
+                        context: context,
+                        builder: (context) => AlertDialog(
+                          title: const Text('Clear Local Data?'),
+                          content: const Text(
+                            'This will delete all locally stored matches, events, and sync queue. '
+                            'This action cannot be undone. Firebase data will not be affected.',
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.of(context).pop(false),
+                              child: const Text('Cancel'),
+                            ),
+                            FilledButton(
+                              onPressed: () => Navigator.of(context).pop(true),
+                              style: FilledButton.styleFrom(
+                                backgroundColor: Theme.of(context).colorScheme.error,
+                              ),
+                              child: const Text('Clear'),
+                            ),
+                          ],
+                        ),
+                      );
+
+                      if (confirmed == true && context.mounted) {
+                        try {
+                          await ref.read(hybridRepositoryProvider).clearAllLocalData();
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Local data cleared successfully'),
+                                backgroundColor: Colors.green,
+                              ),
+                            );
+                          }
+                        } catch (e) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Error clearing data: $e'),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                          }
+                        }
+                      }
                       break;
                   }
                 },
@@ -252,6 +300,15 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     child: ListTile(
                       leading: Icon(Icons.settings_outlined),
                       title: Text("Settings"),
+                      contentPadding: EdgeInsets.zero,
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: 'clear_local',
+                    child: ListTile(
+                      leading: Icon(Icons.delete_forever_outlined, color: Theme.of(context).colorScheme.error),
+                      title: Text("Clear Local Data", style: TextStyle(color: Theme.of(context).colorScheme.error)),
                       contentPadding: EdgeInsets.zero,
                       visualDensity: VisualDensity.compact,
                     ),

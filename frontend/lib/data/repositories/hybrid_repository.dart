@@ -404,6 +404,13 @@ class HybridRepository implements ScoutingRepository {
     return _syncManager.getSyncStats();
   }
 
+  /// Clear all local data including matches, events, and sync queue
+  Future<void> clearAllLocalData() async {
+    _logger.i('Clearing all local data');
+    await _db.clearAllData();
+    _logger.i('All local data cleared');
+  }
+
   /// Dispose repository resources
   void dispose() {
     _matchStreamControllers.forEach((_, controller) => controller.close());
