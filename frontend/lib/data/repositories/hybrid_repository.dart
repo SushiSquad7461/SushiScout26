@@ -348,8 +348,8 @@ class HybridRepository implements ScoutingRepository {
       // 1. Permanently delete from local DB
       await _db.permanentlyDeleteMatch(matchId);
       
-      // 2. Queue delete for Firestore (if it exists there)
-      await _syncManager.queueDelete(eventId, matchId);
+      // 2. Queue hard delete for Firestore
+      await _syncManager.queueHardDelete(eventId, matchId);
       
       // 3. Refresh trash stream
       await _refreshTrashStream(eventId);

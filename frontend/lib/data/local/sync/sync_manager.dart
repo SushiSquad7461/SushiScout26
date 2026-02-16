@@ -245,22 +245,43 @@ class SyncManager {
     await _attemptImmediateSync();
   }
 
-  /// Queue a delete operation
+  /// Queue a soft delete operation (move to trash)
   Future<void> queueDelete(String eventId, String matchId) async {
-    _logger.d('Queueing delete operation', data: {
+    _logger.d('Queueing soft delete operation', data: {
       'eventId': eventId,
       'matchId': matchId,
     });
-    
+
+    await _db.addToSyncQueue(SyncQueueCompanion.insert(
+      entityType: 'match',
+      entityId: matchId,
+      eventId: Value(eventId),
+      operation: 'soft_delete',
+      dataJson: jsonEncode({'isDeleted': true}),
+      priority: const Value(2),
+    ));
+
+    await _updatePendingCount();
+
+    await _attemptImmediateSync();
+  }
+
+  /// Queue a hard delete operation (permanent deletion)
+  Future<void> queueHardDelete(String eventId, String matchId) async {
+    _logger.d('Queueing hard delete operation', data: {
+      'eventId': eventId,
+      'matchId': matchId,
+    });
+
     await _db.addToSyncQueue(SyncQueueCompanion.insert(
       entityType: 'match',
       entityId: matchId,
       eventId: Value(eventId),
       operation: 'delete',
-      dataJson: jsonEncode({'isDeleted': true}),
+      dataJson: jsonEncode({'permanentlyDeleted': true}),
       priority: const Value(2),
     ));
-    
+
     await _updatePendingCount();
 
     await _attemptImmediateSync();
@@ -393,6 +414,14 @@ class SyncManager {
               MatchReport.fromJson(jsonDecode(op.dataJson)),
             );
             _logger.d('Match updated successfully in Firestore');
+            break;
+          case 'soft_delete':
+            _logger.d('Soft deleting match in Firestore', data: {
+              'eventId': op.eventId,
+              'matchId': op.entityId,
+            });
+            await _firestore.trashMatch(op.eventId!, op.entityId);
+            _logger.d('Match soft deleted in Firestore');
             break;
           case 'delete':
             _logger.d('Permanently deleting match from Firestore', data: {
