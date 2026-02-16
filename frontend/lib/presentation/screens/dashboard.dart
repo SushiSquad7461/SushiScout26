@@ -180,16 +180,20 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final colorScheme = theme.colorScheme;
 
     return Scaffold(
-      body: RefreshIndicator(
-        onRefresh: _onRefresh,
-        color: colorScheme.primary,
-        backgroundColor: colorScheme.surface,
-        displacement: 80,
-        child: CustomScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          slivers: [
-          // M3 Large App Bar with collapsing behavior
-          SliverAppBar.medium(
+      body: Column(
+        children: [
+          const SyncStatusBar(),
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: _onRefresh,
+              color: colorScheme.primary,
+              backgroundColor: colorScheme.surface,
+              displacement: 80,
+              child: CustomScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                slivers: [
+                  // M3 Large App Bar with collapsing behavior
+                  SliverAppBar.medium(
             title: const Text("SushiScout 26"),
             actions: [
               // Sync status indicator
@@ -427,6 +431,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           const SliverPadding(padding: EdgeInsets.only(bottom: 88)),
         ],
       ),
+            ),
+          ),
+        ],
       ),
       floatingActionButton: ScaleAnimation(
         child: FloatingActionButton.extended(

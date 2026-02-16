@@ -26,16 +26,6 @@ class SyncStatusNotifier extends Notifier<SyncStatus> {
   void setStatus(SyncStatus status) => state = status;
 }
 
-/// Provider for online status
-final isOnlineProvider = NotifierProvider<IsOnlineNotifier, bool>(IsOnlineNotifier.new);
-
-class IsOnlineNotifier extends Notifier<bool> {
-  @override
-  bool build() => true;
-  
-  void setOnline(bool online) => state = online;
-}
-
 /// Provider for pending sync count
 final pendingSyncCountProvider = StreamProvider<int>((ref) {
   final syncManager = ref.watch(manager.syncManagerProvider);
@@ -53,7 +43,7 @@ class SyncStatusIndicator extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final isOnline = ref.watch(isOnlineProvider);
+    final isOnline = ref.watch(manager.isOnlineProvider);
     final syncStatus = ref.watch(syncStatusProvider);
     final pendingCountAsync = ref.watch(pendingSyncCountProvider);
     final pendingCount = pendingCountAsync.asData?.value ?? 0;
@@ -209,7 +199,7 @@ class SyncStatusBar extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final isOnline = ref.watch(isOnlineProvider);
+    final isOnline = ref.watch(manager.isOnlineProvider);
     final pendingCountAsync = ref.watch(pendingSyncCountProvider);
     final pendingCount = pendingCountAsync.asData?.value ?? 0;
     

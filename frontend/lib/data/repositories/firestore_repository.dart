@@ -56,12 +56,47 @@ class FirestoreRepository implements ScoutingRepository {
   @override
   Future<void> createMatch(String eventId, MatchReport match) async {
     debugPrint('Writing match to: events/$eventId/matches/${match.id}');
+
+    // Ensure the event document exists before creating the match
+    await _ensureEventExists(eventId);
+
     await _firestore
         .collection('events')
         .doc(eventId)
         .collection('matches')
         .doc(match.id)
         .set(match.toFirestore(), SetOptions(merge: true));
+  }
+
+  /// Ensures the event document exists in Firestore.
+  /// If it doesn't exist, creates it with default data from local or basic info.
+  Future<void> _ensureEventExists(String eventId) async {
+    try {
+      final eventDoc = _firestore.collection('events').doc(eventId);
+      debugPrint('Checking if event $eventId exists in Firestore...');
+      final docSnapshot = await eventDoc.get();
+
+      if (!docSnapshot.exists) {
+        debugPrint('Event $eventId does not exist in Firestore, creating it...');
+        // Create a basic event document - the actual event data
+        // should be synced separately or created via an event management UI
+        await eventDoc.set({
+          'name': eventId,
+          'programType': 'FRC',
+          'tbaKey': eventId,
+          'startDate': Timestamp.fromDate(DateTime.now()),
+          'createdAt': Timestamp.fromDate(DateTime.now()),
+          'autoCreated': true,
+        }, SetOptions(merge: true));
+        debugPrint('Event $eventId created successfully in Firestore');
+      } else {
+        debugPrint('Event $eventId already exists in Firestore');
+      }
+    } catch (e, stackTrace) {
+      debugPrint('ERROR: Failed to ensure event exists: $e');
+      debugPrint('Stack trace: $stackTrace');
+      rethrow;
+    }
   }
 
   @override

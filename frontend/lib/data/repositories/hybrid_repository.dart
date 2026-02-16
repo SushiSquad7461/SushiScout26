@@ -100,11 +100,17 @@ class HybridRepository implements ScoutingRepository {
       (remoteMatches) async {
         _logger.d('Received ${remoteMatches.length} matches from Firestore stream');
         try {
-          for (final match in remoteMatches) {
-            // Upsert remote match to local DB
-            // This will trigger local DB listeners (if any)
-            await _db.upsertMatch(_toLocalMatchReport(match, eventId));
-          }
+          // Use batch transaction for better performance and to reduce UI jitter
+          await _db.batch((batch) {
+            for (final match in remoteMatches) {
+              batch.insert(
+                _db.localMatchReports,
+                _toLocalMatchReport(match, eventId),
+                mode: InsertMode.insertOrReplace,
+              );
+            }
+          });
+          
           // Refresh the stream to show new data
           _refreshMatchStream(eventId);
         } catch (e) {

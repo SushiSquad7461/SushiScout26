@@ -278,34 +278,81 @@ class SyncManager {
 
   /// Process a single sync operation with retry logic
   Future<void> _processSyncOperation(SyncQueueData op) async {
-    await _retryConfig.execute(() async {
-      switch (op.operation) {
-        case 'create':
-          await _firestore.createMatch(
-            op.eventId!,
-            MatchReport.fromJson(jsonDecode(op.dataJson)),
-          );
-          break;
-        case 'update':
-          await _firestore.updateMatch(
-            op.eventId!,
-            MatchReport.fromJson(jsonDecode(op.dataJson)),
-          );
-          break;
-        case 'delete':
-          await _firestore.trashMatch(op.eventId!, op.entityId);
-          break;
-        default:
-          throw UnknownError('Unknown operation: ${op.operation}');
-      }
+    _logger.d('Processing sync operation', data: {
+      'operation': op.operation,
+      'entityType': op.entityType,
+      'entityId': op.entityId,
+      'eventId': op.eventId,
     });
 
-    // Mark operation as complete
-    await _db.completeSyncOperation(op.id);
-    
-    // Mark local entity as synced
-    if (op.entityType == 'match') {
-      await _db.markMatchSynced(op.entityId);
+    try {
+      await _retryConfig.execute(() async {
+        switch (op.operation) {
+          case 'create':
+            _logger.d('Creating match in Firestore', data: {
+              'eventId': op.eventId,
+              'matchId': op.entityId,
+            });
+            await _firestore.createMatch(
+              op.eventId!,
+              MatchReport.fromJson(jsonDecode(op.dataJson)),
+            );
+            _logger.d('Match created successfully in Firestore');
+            break;
+          case 'update':
+            _logger.d('Updating match in Firestore', data: {
+              'eventId': op.eventId,
+              'matchId': op.entityId,
+            });
+            await _firestore.updateMatch(
+              op.eventId!,
+              MatchReport.fromJson(jsonDecode(op.dataJson)),
+            );
+            _logger.d('Match updated successfully in Firestore');
+            break;
+          case 'delete':
+            _logger.d('Deleting match from Firestore', data: {
+              'eventId': op.eventId,
+              'matchId': op.entityId,
+            });
+            await _firestore.trashMatch(op.eventId!, op.entityId);
+            _logger.d('Match deleted successfully from Firestore');
+            break;
+          default:
+            throw UnknownError('Unknown operation: ${op.operation}');
+        }
+      }, onRetry: (attempt, error, stackTrace) {
+        _logger.w('Retrying sync operation', data: {
+          'attempt': attempt,
+          'operation': op.operation,
+          'error': error.toString(),
+        });
+      });
+
+      // Mark operation as complete
+      await _db.completeSyncOperation(op.id);
+      _logger.d('Sync operation marked as complete', data: {
+        'operationId': op.id,
+      });
+      
+      // Mark local entity as synced
+      if (op.entityType == 'match') {
+        await _db.markMatchSynced(op.entityId);
+        _logger.d('Local match marked as synced', data: {
+          'matchId': op.entityId,
+        });
+      }
+    } catch (e, stackTrace) {
+      _logger.e('Sync operation failed after all retries', 
+        error: e, 
+        stackTrace: stackTrace,
+        data: {
+          'operation': op.operation,
+          'entityId': op.entityId,
+          'eventId': op.eventId,
+        }
+      );
+      rethrow;
     }
   }
 
