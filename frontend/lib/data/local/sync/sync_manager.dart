@@ -121,9 +121,20 @@ class SyncManager {
           .toSet();
 
       int queuedCount = 0;
+      int skippedCount = 0;
       for (final match in unsyncedMatches) {
         // Skip if already in sync queue
         if (queuedMatchIds.contains(match.id)) {
+          continue;
+        }
+
+        // Skip if eventId is empty (old matches may not have eventId stored)
+        if (match.eventId.isEmpty) {
+          _logger.w('Skipping unsynced match with empty eventId', data: {
+            'matchId': match.id,
+            'reason': 'EventId is required for sync',
+          });
+          skippedCount++;
           continue;
         }
 
@@ -151,6 +162,10 @@ class SyncManager {
 
         await queueCreate(match.eventId, matchReport);
         queuedCount++;
+      }
+
+      if (skippedCount > 0) {
+        _logger.w('Skipped $skippedCount matches with empty eventId - these cannot be synced');
       }
 
       if (queuedCount > 0) {
@@ -181,6 +196,10 @@ class SyncManager {
 
   /// Queue a create operation
   Future<void> queueCreate(String eventId, MatchReport match) async {
+    if (eventId.isEmpty) {
+      throw ValidationError('EventId cannot be empty when queuing match for sync');
+    }
+
     _logger.d('Queueing create operation', data: {
       'eventId': eventId,
       'matchId': match.id,
@@ -203,6 +222,10 @@ class SyncManager {
 
   /// Queue an update operation
   Future<void> queueUpdate(String eventId, MatchReport match) async {
+    if (eventId.isEmpty) {
+      throw ValidationError('EventId cannot be empty when queuing match for sync');
+    }
+
     _logger.d('Queueing update operation', data: {
       'eventId': eventId,
       'matchId': match.id,

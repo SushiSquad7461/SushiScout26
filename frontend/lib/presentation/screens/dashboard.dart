@@ -9,8 +9,6 @@ import '../../data/repositories/hybrid_repository.dart';
 import '../../data/models/match_report.dart';
 import '../../data/models/event.dart';
 import 'match_details.dart';
-import 'statistics_screen.dart';
-import 'team_comparison_screen.dart';
 import 'trash_screen.dart';
 import '../factories/scouting_form_factory.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -216,18 +214,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   }
                 },
               ),
-              // Statistics button
-              IconButton(
-                icon: const Icon(Icons.bar_chart_rounded),
-                tooltip: "Statistics",
-                onPressed: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) => const StatisticsScreen(),
-                    ),
-                  );
-                },
-              ),
               // Export button
               IconButton(
                 icon: const Icon(Icons.download_rounded),
@@ -249,25 +235,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     case 'settings':
                       _openSettings(context);
                       break;
-                    case 'compare':
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const TeamComparisonScreen(),
-                        ),
-                      );
-                      break;
                   }
                 },
                 itemBuilder: (context) => [
-                  const PopupMenuItem(
-                    value: 'compare',
-                    child: ListTile(
-                      leading: Icon(Icons.compare_arrows),
-                      title: Text("Compare Teams"),
-                      contentPadding: EdgeInsets.zero,
-                      visualDensity: VisualDensity.compact,
-                    ),
-                  ),
                   const PopupMenuItem(
                     value: 'trash',
                     child: ListTile(
