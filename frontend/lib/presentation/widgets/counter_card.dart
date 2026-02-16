@@ -17,6 +17,9 @@ class CounterCard extends StatelessWidget {
   final String? helperText;
   final int minValue;
   final int maxValue;
+  final bool showStepControl;
+  final int stepSize;
+  final Function(int)? onStepChanged;
 
   const CounterCard({
     super.key,
@@ -27,6 +30,9 @@ class CounterCard extends StatelessWidget {
     this.helperText,
     this.minValue = 0,
     this.maxValue = 999,
+    this.showStepControl = false,
+    this.stepSize = 1,
+    this.onStepChanged,
   });
 
   @override
@@ -78,7 +84,7 @@ class CounterCard extends StatelessWidget {
                   onPressed: value > minValue
                       ? () {
                           HapticFeedback.lightImpact();
-                          onChanged(value - 1);
+                          onChanged(value - stepSize);
                         }
                       : null,
                   colorScheme: colorScheme,
@@ -110,7 +116,7 @@ class CounterCard extends StatelessWidget {
                   onPressed: value < maxValue
                       ? () {
                           HapticFeedback.lightImpact();
-                          onChanged(value + 1);
+                          onChanged(value + stepSize);
                         }
                       : null,
                   colorScheme: colorScheme,
@@ -118,6 +124,56 @@ class CounterCard extends StatelessWidget {
                 ),
               ],
             ),
+
+            if (showStepControl && onStepChanged != null) ...[
+              const SizedBox(height: AppTheme.spacingSm),
+              const Divider(height: 1),
+              const SizedBox(height: AppTheme.spacingSm),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    'Step:',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(width: AppTheme.spacingSm),
+                  _StepControlButton(
+                    icon: Icons.remove,
+                    onPressed: stepSize > 1
+                        ? () {
+                            HapticFeedback.lightImpact();
+                            onStepChanged!(stepSize - 1);
+                          }
+                        : null,
+                    colorScheme: colorScheme,
+                    accentColor: accentColor,
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: AppTheme.spacingMd),
+                    child: Text(
+                      stepSize.toString(),
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: accentColor ?? colorScheme.onSurface,
+                      ),
+                    ),
+                  ),
+                  _StepControlButton(
+                    icon: Icons.add,
+                    onPressed: stepSize < 10
+                        ? () {
+                            HapticFeedback.lightImpact();
+                            onStepChanged!(stepSize + 1);
+                          }
+                        : null,
+                    colorScheme: colorScheme,
+                    accentColor: accentColor,
+                  ),
+                ],
+              ),
+            ],
           ],
         ),
       ),
@@ -158,6 +214,49 @@ class _CounterButton extends StatelessWidget {
           child: Icon(
             icon,
             size: 28,
+            color: isEnabled
+                ? buttonColor
+                : colorScheme.onSurface.withValues(alpha: 0.38),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Step control button for meta-counter
+class _StepControlButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback? onPressed;
+  final ColorScheme colorScheme;
+  final Color? accentColor;
+
+  const _StepControlButton({
+    required this.icon,
+    required this.onPressed,
+    required this.colorScheme,
+    this.accentColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isEnabled = onPressed != null;
+    final buttonColor = accentColor ?? colorScheme.primary;
+
+    return Material(
+      color: isEnabled
+          ? buttonColor.withValues(alpha: 0.08)
+          : colorScheme.surfaceContainerHighest,
+      borderRadius: BorderRadius.circular(AppTheme.buttonRadius - 2),
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(AppTheme.buttonRadius - 2),
+        child: SizedBox(
+          width: 40,
+          height: 40,
+          child: Icon(
+            icon,
+            size: 22,
             color: isEnabled
                 ? buttonColor
                 : colorScheme.onSurface.withValues(alpha: 0.38),

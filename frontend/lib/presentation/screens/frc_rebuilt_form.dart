@@ -311,6 +311,9 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm> {
   // Actually, I can replace the rest as well to update _submit.
   
   Widget _buildAuto(BuildContext context) {
+    final settings = ref.watch(settingsProvider);
+    final fuelIncrement = int.tryParse(settings[PrefKeys.fuelIncrement] ?? '1') ?? 1;
+
     return Column(
       children: [
         CounterCard(
@@ -318,14 +321,17 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm> {
           helperText: "Pieces scored during autonomous",
           value: _autoFuel,
           onChanged: (v) => setState(() => _autoFuel = v),
+          stepSize: fuelIncrement,
+          showStepControl: true,
+          onStepChanged: (step) => ref.read(settingsProvider.notifier).setFuelIncrement(step.toString()),
           accentColor: Theme.of(context).colorScheme.tertiary,
         ),
         const SizedBox(height: AppTheme.spacingMd),
 
         Card(
           child: SwitchListTile(
-            title: const Text("Left Start Line (L1)"),
-            subtitle: const Text("Robot crossed the starting line"),
+            title: const Text("L1 Hang"),
+            subtitle: const Text("Robot achieved L1 hang"),
             value: _autoTowerL1,
             onChanged: (v) => setState(() => _autoTowerL1 = v),
           ),
@@ -336,6 +342,8 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm> {
 
   Widget _buildTeleop(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final settings = ref.watch(settingsProvider);
+    final fuelIncrement = int.tryParse(settings[PrefKeys.fuelIncrement] ?? '1') ?? 1;
 
     return Column(
       children: [
@@ -344,6 +352,9 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm> {
           helperText: "Pieces scored during teleop",
           value: _teleopFuel,
           onChanged: (v) => setState(() => _teleopFuel = v),
+          stepSize: fuelIncrement,
+          showStepControl: true,
+          onStepChanged: (step) => ref.read(settingsProvider.notifier).setFuelIncrement(step.toString()),
         ),
 
         const SizedBox(height: AppTheme.spacingMd),
