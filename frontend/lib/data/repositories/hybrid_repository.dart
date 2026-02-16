@@ -98,24 +98,27 @@ class HybridRepository implements ScoutingRepository {
     _logger.d('Setting up Firestore subscription for event: $eventId');
     final subscription = _firestore.watchMatches(eventId).listen(
       (remoteMatches) async {
-        _logger.d('Received ${remoteMatches.length} matches from Firestore stream');
-        try {
-          // Use batch transaction for better performance and to reduce UI jitter
-          await _db.batch((batch) {
-            for (final match in remoteMatches) {
-              batch.insert(
-                _db.localMatchReports,
-                _toLocalMatchReport(match, eventId),
-                mode: InsertMode.insertOrReplace,
-              );
-            }
-          });
-          
-          // Refresh the stream to show new data
-          _refreshMatchStream(eventId);
-        } catch (e) {
-          _logger.e('Error syncing remote matches to local DB', error: e);
-        }
+        // Workaround for Windows: Ensure Firestore callbacks run on main thread
+        await Future.microtask(() async {
+          _logger.d('Received ${remoteMatches.length} matches from Firestore stream');
+          try {
+            // Use batch transaction for better performance and to reduce UI jitter
+            await _db.batch((batch) {
+              for (final match in remoteMatches) {
+                batch.insert(
+                  _db.localMatchReports,
+                  _toLocalMatchReport(match, eventId),
+                  mode: InsertMode.insertOrReplace,
+                );
+              }
+            });
+            
+            // Refresh the stream to show new data
+            _refreshMatchStream(eventId);
+          } catch (e) {
+            _logger.e('Error syncing remote matches to local DB', error: e);
+          }
+        });
       },
       onError: (e) {
         _logger.w('Firestore stream error', error: e);
@@ -145,14 +148,23 @@ class HybridRepository implements ScoutingRepository {
   @override
   Stream<List<MatchReport>> watchTrash(String eventId) {
     _logger.d('Watching trash for event: $eventId');
-    
+
     var controller = _trashStreamControllers[eventId];
     if (controller == null || controller.isClosed) {
       controller = StreamController<List<MatchReport>>.broadcast();
       _trashStreamControllers[eventId] = controller;
+
+      // Initial load from local DB
       _refreshTrashStream(eventId);
+
+      // Listen to local DB changes for immediate emission
+      _db.getDeletedMatchesForEvent(eventId).then((deletedMatches) {
+        if (!controller!.isClosed) {
+          controller.add(deletedMatches.map(_toMatchReport).toList());
+        }
+      });
     }
-    
+
     return controller.stream;
   }
 

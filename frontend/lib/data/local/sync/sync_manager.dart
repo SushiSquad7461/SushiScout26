@@ -395,12 +395,12 @@ class SyncManager {
             _logger.d('Match updated successfully in Firestore');
             break;
           case 'delete':
-            _logger.d('Deleting match from Firestore', data: {
+            _logger.d('Permanently deleting match from Firestore', data: {
               'eventId': op.eventId,
               'matchId': op.entityId,
             });
-            await _firestore.trashMatch(op.eventId!, op.entityId);
-            _logger.d('Match deleted successfully from Firestore');
+            await _firestore.deleteMatch(op.eventId!, op.entityId);
+            _logger.d('Match permanently deleted from Firestore');
             break;
           default:
             throw UnknownError('Unknown operation: ${op.operation}');

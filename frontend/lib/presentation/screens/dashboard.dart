@@ -11,14 +11,13 @@ import '../../data/models/event.dart';
 import 'match_details.dart';
 import 'trash_screen.dart';
 import '../factories/scouting_form_factory.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import '../../data/repositories/firestore_repository.dart';
 import '../theme/app_theme.dart';
 import '../widgets/sync_status_indicator.dart';
 
 import '../widgets/match_search_delegate.dart';
 
 import '../../data/services/export_service.dart';
+import '../../data/repositories/hybrid_repository.dart';
 
 class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
@@ -679,7 +678,7 @@ class _MatchCard extends ConsumerWidget {
     final eventCode = ref.read(settingsProvider)[PrefKeys.eventCode];
     if (eventCode == null || eventCode.isEmpty) return;
 
-    final repo = FirestoreRepository(FirebaseFirestore.instance);
+    final repo = ref.read(hybridRepositoryProvider);
     await repo.trashMatch(eventCode, match.id);
 
     if (context.mounted) {
