@@ -192,16 +192,22 @@ class HybridRepository implements ScoutingRepository {
   Future<void> _refreshFromFirestore(String eventId) async {
     try {
       final firestoreMatches = await _firestore.getMatches(eventId);
-      
+
+      if (firestoreMatches.isEmpty) {
+        _logger.d('No matches found in Firestore for event: $eventId');
+        return;
+      }
+
+      _logger.d('Found ${firestoreMatches.length} matches in Firestore, updating local DB');
+
       // Update local DB with firestore data
+      // Note: We don't call _refreshMatchStream here to avoid infinite loops.
+      // The stream will be updated through the Firestore subscription or next getMatches call.
       for (final match in firestoreMatches) {
         await _db.upsertMatch(_toLocalMatchReport(match, eventId));
       }
-      
+
       _logger.d('Refreshed ${firestoreMatches.length} matches from Firestore');
-      
-      // Refresh the stream to update UI
-      await _refreshMatchStream(eventId);
     } catch (e) {
       // Firestore failures shouldn't block local reads
       _logger.w('Firestore refresh failed', error: e);

@@ -43,22 +43,14 @@ class FirestoreRepository implements ScoutingRepository {
 
   @override
   Future<List<MatchReport>> getMatches(String eventId) async {
-    debugPrint('Fetching matches from Firestore for event: $eventId');
-    try {
-      final snapshot = await _firestore
-          .collection('events')
-          .doc(eventId)
-          .collection('matches')
-          .where('isDeleted', isEqualTo: false)
-          .orderBy('createdAt', descending: true)
-          .get();
-      debugPrint('Fetched ${snapshot.docs.length} matches from Firestore for event: $eventId');
-      return snapshot.docs.map((doc) => MatchReport.fromFirestore(doc)).toList();
-    } catch (e, stackTrace) {
-      debugPrint('ERROR fetching matches from Firestore: $e');
-      debugPrint('Stack trace: $stackTrace');
-      rethrow;
-    }
+    final snapshot = await _firestore
+        .collection('events')
+        .doc(eventId)
+        .collection('matches')
+        .where('isDeleted', isEqualTo: false)
+        .orderBy('createdAt', descending: true)
+        .get();
+    return snapshot.docs.map((doc) => MatchReport.fromFirestore(doc)).toList();
   }
 
   @override
