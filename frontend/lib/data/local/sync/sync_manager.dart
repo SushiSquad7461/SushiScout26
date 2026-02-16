@@ -76,7 +76,7 @@ class SyncManager {
   /// Initialize sync manager
   void initialize() {
     _logger.i('Initializing sync manager');
-    
+
     // Reset retry counts for stuck operations on startup
     _db.getPendingSyncOperations().then((ops) {
       for (final op in ops) {
@@ -85,7 +85,10 @@ class SyncManager {
         }
       }
     });
-    
+
+    // Queue any unsynced matches from local DB that aren't in sync queue
+    _queueExistingUnsyncedMatches();
+
     // Initial pending count update
     _updatePendingCount();
 
@@ -94,7 +97,7 @@ class SyncManager {
       const Duration(minutes: 5),
       (_) => syncPendingChanges(),
     );
-    
+
     // Listen to connectivity changes
     Connectivity().onConnectivityChanged.listen((results) {
       final result = results.first;
@@ -103,6 +106,64 @@ class SyncManager {
         syncPendingChanges();
       }
     });
+  }
+
+  /// Queue existing unsynced matches from local DB that aren't in sync queue
+  Future<void> _queueExistingUnsyncedMatches() async {
+    try {
+      final unsyncedMatches = await _db.getUnsyncedMatches();
+      final pendingOps = await _db.getPendingSyncOperations();
+
+      // Get set of match IDs already in sync queue
+      final queuedMatchIds = pendingOps
+          .where((op) => op.entityType == 'match')
+          .map((op) => op.entityId)
+          .toSet();
+
+      int queuedCount = 0;
+      for (final match in unsyncedMatches) {
+        // Skip if already in sync queue
+        if (queuedMatchIds.contains(match.id)) {
+          continue;
+        }
+
+        _logger.d('Queueing existing unsynced match', data: {
+          'matchId': match.id,
+          'eventId': match.eventId,
+        });
+
+        // Convert LocalMatchReport to MatchReport and queue it
+        final matchReport = MatchReport(
+          id: match.id,
+          matchId: match.matchId,
+          matchNumber: match.matchNumber,
+          teamNumber: match.teamNumber,
+          alliance: match.alliance,
+          scouterName: match.scouterName,
+          gameData: jsonDecode(match.gameDataJson),
+          robotDied: match.robotDied,
+          comments: match.comments,
+          images: [], // Images aren't stored in local DB yet
+          createdAt: match.createdAt,
+          isSynced: false,
+          isDeleted: match.isDeleted,
+        );
+
+        await queueCreate(match.eventId, matchReport);
+        queuedCount++;
+      }
+
+      if (queuedCount > 0) {
+        _logger.i('Queued existing unsynced matches for sync', data: {
+          'count': queuedCount,
+        });
+      }
+    } catch (e, stackTrace) {
+      _logger.e('Error queueing existing unsynced matches', 
+        error: e, 
+        stackTrace: stackTrace
+      );
+    }
   }
 
   /// Dispose sync manager
