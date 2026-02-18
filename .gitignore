@@ -5,6 +5,23 @@ __pycache__/
 venv/
 .env
 
+# Firebase
+.firebase/
+firebase-debug.log
+ui-debug.log
+
+# Secrets and sensitive files
+*.json.key
+service-account*.json
+*-service-account.json
+credentials*.json
+.secrets
+.env.local
+.env.*.local
+
+# Downloads (where service account keys often end up)
+Downloads/
+
 # Flutter
 frontend/build/
 frontend/.dart_tool/
