@@ -63,19 +63,4 @@ def fetch_event_schedule(req: https_fn.CallableRequest) -> any:
     return {"success": True, "count": len(matches)}
 
 
-@https_fn.on_call(secrets=["FTC_API_KEY"])
-def fetch_ftc_schedule(req: https_fn.CallableRequest) -> any:
-    """
-    Syncs FTC event data.
-    Input: { "eventKey": "2026-US-WA-CMP" }
-    """
-    event_key = req.data.get("eventKey")
-    if not event_key:
-        raise https_fn.HttpsError(code=https_fn.FunctionsErrorCode.INVALID_ARGUMENT, message="Missing eventKey")
 
-    ftc_api_key = os.environ.get("FTC_API_KEY")
-    if not ftc_api_key:
-         raise https_fn.HttpsError(code=https_fn.FunctionsErrorCode.FAILED_PRECONDITION, message="FTC_API_KEY secret not set")
-    
-    # Placeholder Logic for FTC API
-    return {"success": True, "message": "FTC Sync Implemented (Stub)"}
