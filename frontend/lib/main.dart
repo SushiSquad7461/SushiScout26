@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -15,10 +14,10 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
-  // Configure Firestore settings
-  // Disable persistence on Windows to avoid threading issues
-  FirebaseFirestore.instance.settings = Settings(
-    persistenceEnabled: Platform.isWindows ? false : true,
+  // Enable Firestore offline persistence for 100% offline-first reliability
+  // Critical for poor connections or Firebase outages
+  FirebaseFirestore.instance.settings = const Settings(
+    persistenceEnabled: true,
     cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
   );
 
