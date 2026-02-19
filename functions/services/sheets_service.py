@@ -154,10 +154,54 @@ class SheetsService:
             body=body
         ).execute()
         
-        # Extract row number from updated range
         updated_range = result['updates']['updatedRange']
         row_number = int(updated_range.split('!')[1].split(':')[0][1:])
         return row_number
+    
+    def append_rows(self, spreadsheet_id: str, sheet_name: str, rows: List[List[Any]]) -> int:
+        """Append multiple rows at once. Returns starting row number (1-indexed)."""
+        if not rows:
+            return 0
+        
+        range_name = f"{sheet_name}!A:K"
+        body = {'values': rows}
+        
+        result = self.service.spreadsheets().values().append(
+            spreadsheetId=spreadsheet_id,
+            range=range_name,
+            valueInputOption='RAW',
+            insertDataOption='INSERT_ROWS',
+            body=body
+        ).execute()
+        
+        updated_range = result['updates']['updatedRange']
+        row_number = int(updated_range.split('!')[1].split(':')[0][1:])
+        return row_number
+    
+    def update_rows(self, spreadsheet_id: str, sheet_name: str, 
+                    updates: List[tuple]) -> None:
+        """Update multiple rows at specific row numbers in a single batch.
+        
+        Args:
+            spreadsheet_id: The spreadsheet ID
+            sheet_name: The sheet name
+            updates: List of (row_number, row_data) tuples
+        """
+        if not updates:
+            return
+        
+        data = []
+        for row_number, row_data in updates:
+            data.append({
+                'range': f"{sheet_name}!A{row_number}:K{row_number}",
+                'values': [row_data]
+            })
+        
+        body = {'valueInputOption': 'RAW', 'data': data}
+        self.service.spreadsheets().values().batchUpdate(
+            spreadsheetId=spreadsheet_id,
+            body=body
+        ).execute()
     
     def update_row(self, spreadsheet_id: str, sheet_name: str, row_number: int, row_data: List[Any]):
         """Update an existing row."""

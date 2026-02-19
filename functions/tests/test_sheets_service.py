@@ -118,6 +118,73 @@ class TestSheetsService(unittest.TestCase):
         ]
         
         self.assertEqual(FRC_HEADERS, expected_headers)
+    
+    def test_append_rows(self):
+        """Test appending multiple rows at once."""
+        with patch('services.sheets_service.build') as mock_build, \
+             patch('services.sheets_service.service_account.Credentials'):
+            mock_service = Mock()
+            mock_build.return_value = mock_service
+            
+            mock_append_result = Mock()
+            mock_append_result.execute.return_value = {
+                'updates': {'updatedRange': '2026test!A5:K7'}
+            }
+            mock_service.spreadsheets().values().append.return_value = mock_append_result
+            
+            service = SheetsService(self.mock_credentials)
+            rows = [
+                ['2026-02-17T10:00:00', 'qm1_254', 1, 254, 'Red', 'Scouter', 5, 10, 3, 'No', ''],
+                ['2026-02-17T10:15:00', 'qm2_118', 2, 118, 'Blue', 'Scouter', 3, 8, 2, 'No', ''],
+            ]
+            
+            result = service.append_rows('spreadsheet_id', '2026test', rows)
+            
+            self.assertEqual(result, 5)
+            mock_service.spreadsheets().values().append.assert_called_once()
+    
+    def test_append_rows_empty(self):
+        """Test appending empty list returns 0."""
+        with patch('services.sheets_service.build'), \
+             patch('services.sheets_service.service_account.Credentials'):
+            service = SheetsService(self.mock_credentials)
+            result = service.append_rows('spreadsheet_id', '2026test', [])
+            self.assertEqual(result, 0)
+    
+    def test_update_rows(self):
+        """Test updating multiple rows in a single batch."""
+        with patch('services.sheets_service.build') as mock_build, \
+             patch('services.sheets_service.service_account.Credentials'):
+            mock_service = Mock()
+            mock_build.return_value = mock_service
+            
+            mock_batch_update = Mock()
+            mock_batch_update.execute.return_value = {}
+            mock_service.spreadsheets().values().batchUpdate.return_value = mock_batch_update
+            
+            service = SheetsService(self.mock_credentials)
+            updates = [
+                (5, ['2026-02-17T10:00:00', 'qm1_254', 1, 254, 'Red', 'Scouter', 5, 10, 3, 'No', 'updated']),
+                (10, ['2026-02-17T10:15:00', 'qm2_118', 2, 118, 'Blue', 'Scouter', 3, 8, 2, 'No', 'updated']),
+            ]
+            
+            service.update_rows('spreadsheet_id', '2026test', updates)
+            
+            mock_service.spreadsheets().values().batchUpdate.assert_called_once()
+            call_args = mock_service.spreadsheets().values().batchUpdate.call_args
+            self.assertEqual(len(call_args[1]['body']['data']), 2)
+    
+    def test_update_rows_empty(self):
+        """Test updating with empty list does nothing."""
+        with patch('services.sheets_service.build'), \
+             patch('services.sheets_service.service_account.Credentials'):
+            mock_service = Mock()
+            service = SheetsService(self.mock_credentials)
+            service.service = mock_service
+            
+            service.update_rows('spreadsheet_id', '2026test', [])
+            
+            mock_service.spreadsheets().values().batchUpdate.assert_not_called()
 
 
 class TestGetSheetsService(unittest.TestCase):
