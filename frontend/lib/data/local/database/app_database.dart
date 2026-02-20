@@ -2,8 +2,7 @@ import 'package:drift/drift.dart';
 
 import 'tables.dart';
 import 'connection/unsupported.dart'
-    if (dart.library.io) 'connection/native.dart'
-    if (dart.library.html) 'connection/web.dart';
+    if (dart.library.io) 'connection/native.dart';
 
 export 'tables.dart';
 

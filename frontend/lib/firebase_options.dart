@@ -2,7 +2,7 @@
 // ignore_for_file: type=lint
 import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
 import 'package:flutter/foundation.dart'
-    show defaultTargetPlatform, kIsWeb, TargetPlatform;
+    show defaultTargetPlatform, TargetPlatform;
 
 /// Default [FirebaseOptions] for use with your Firebase apps.
 ///
@@ -16,9 +16,6 @@ import 'package:flutter/foundation.dart'
 /// ```
 class DefaultFirebaseOptions {
   static FirebaseOptions get currentPlatform {
-    if (kIsWeb) {
-      return web;
-    }
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
         return android;
@@ -39,16 +36,6 @@ class DefaultFirebaseOptions {
         );
     }
   }
-
-  static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyAr4V3jaguRFJNwDhYnq7iAsYtjcyXULgg',
-    appId: '1:80003441956:web:a2005435748d12a3603fb1',
-    messagingSenderId: '80003441956',
-    projectId: 'sushiscout26-a8f5d',
-    authDomain: 'sushiscout26-a8f5d.firebaseapp.com',
-    storageBucket: 'sushiscout26-a8f5d.firebasestorage.app',
-    measurementId: 'G-4YGTRRJJWC',
-  );
 
   static const FirebaseOptions android = FirebaseOptions(
     apiKey: 'AIzaSyAttKTvyC0zREXX5wlHngi5w-Q5Ed02m2c',
