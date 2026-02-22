@@ -1,8 +1,8 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'auth_exceptions.dart';
+import '../auth/auth_exceptions.dart';
 import '../../data/models/user_profile.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class AuthService {
   final FirebaseAuth _auth;
@@ -14,9 +14,7 @@ class AuthService {
     GoogleSignIn? googleSignIn,
     FirebaseFirestore? firestore,
   })  : _auth = auth ?? FirebaseAuth.instance,
-        _googleSignIn = googleSignIn ?? GoogleSignIn(
-          serverClientId: '80003441956-omm6u1f2krdqrds38an85dor4q0p4sal.apps.googleusercontent.com',
-        ),
+        _googleSignIn = googleSignIn ?? GoogleSignIn(),
         _firestore = firestore ?? FirebaseFirestore.instance;
 
   Stream<User?> get authStateChanges => _auth.authStateChanges();
