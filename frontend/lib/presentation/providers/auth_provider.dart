@@ -1,0 +1,256 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/auth/auth_service.dart';
+import '../../core/auth/auth_state.dart';
+import '../../core/auth/auth_exceptions.dart';
+import '../../data/repositories/auth_repository.dart';
+import '../../data/repositories/team_repository.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+
+final authServiceProvider = Provider<AuthService>((ref) {
+  return AuthService();
+});
+
+final authRepositoryProvider = Provider<AuthRepository>((ref) {
+  return AuthRepository(authService: ref.read(authServiceProvider));
+});
+
+final teamRepositoryProvider = Provider<TeamRepository>((ref) {
+  return TeamRepository();
+});
+
+class AuthNotifier extends Notifier<AuthState> {
+  @override
+  AuthState build() {
+    _initAuthListener();
+    return const AuthState(status: AuthStatus.loading);
+  }
+
+  void _initAuthListener() {
+    final authRepo = ref.read(authRepositoryProvider);
+    authRepo.authStateChanges.listen((User? user) async {
+      if (user == null) {
+        state = const AuthState(status: AuthStatus.unauthenticated);
+      } else {
+        await _loadUserProfile(user.uid);
+      }
+    });
+  }
+
+  Future<void> _loadUserProfile(String userId) async {
+    try {
+      final authRepo = ref.read(authRepositoryProvider);
+      final profile = await authRepo.getCurrentUserProfile();
+      
+      if (profile == null) {
+        state = const AuthState(status: AuthStatus.needsTeamSelection);
+        return;
+      }
+      
+      if (profile.currentTeamId == null) {
+        state = AuthState(
+          status: AuthStatus.needsTeamSelection,
+          userId: profile.id,
+          userEmail: profile.email,
+          displayName: profile.displayName,
+          photoUrl: profile.photoUrl,
+          teamMemberships: profile.teamMemberships,
+        );
+        return;
+      }
+      
+      final teamRepo = ref.read(teamRepositoryProvider);
+      final team = await teamRepo.getTeam(profile.currentTeamId!);
+      
+      state = AuthState(
+        status: AuthStatus.authenticated,
+        userId: profile.id,
+        userEmail: profile.email,
+        displayName: profile.displayName,
+        photoUrl: profile.photoUrl,
+        currentTeamId: profile.currentTeamId,
+        teamMemberships: profile.teamMemberships,
+        isMasterTeamMember: team?.isMasterTeam ?? false,
+      );
+    } catch (e) {
+      state = AuthState(
+        status: AuthStatus.error,
+        errorMessage: e.toString(),
+      );
+    }
+  }
+
+  Future<void> signInWithGoogle() async {
+    state = state.copyWith(status: AuthStatus.loading);
+    
+    try {
+      final authRepo = ref.read(authRepositoryProvider);
+      await authRepo.signInWithGoogle();
+      
+    } on AuthException catch (e) {
+      state = AuthState(
+        status: AuthStatus.error,
+        errorMessage: e.message,
+      );
+    } catch (e) {
+      state = AuthState(
+        status: AuthStatus.error,
+        errorMessage: 'Sign in failed: ${e.toString()}',
+      );
+    }
+  }
+
+  Future<void> signOut() async {
+    try {
+      final authRepo = ref.read(authRepositoryProvider);
+      await authRepo.signOut();
+      state = const AuthState(status: AuthStatus.unauthenticated);
+    } catch (e) {
+      state = AuthState(
+        status: AuthStatus.error,
+        errorMessage: 'Sign out failed: ${e.toString()}',
+      );
+    }
+  }
+
+  Future<void> createTeam(String name, {bool isMasterTeam = false}) async {
+    state = state.copyWith(status: AuthStatus.loading);
+    
+    try {
+      final userId = state.userId;
+      if (userId == null) {
+        throw const AuthException('Not signed in');
+      }
+      
+      final teamRepo = ref.read(teamRepositoryProvider);
+      await teamRepo.createTeam(
+        name: name,
+        createdBy: userId,
+        isMasterTeam: isMasterTeam,
+      );
+      
+      await _loadUserProfile(userId);
+    } on AuthException catch (e) {
+      state = AuthState(
+        status: AuthStatus.error,
+        errorMessage: e.message,
+        userId: state.userId,
+        userEmail: state.userEmail,
+        displayName: state.displayName,
+        photoUrl: state.photoUrl,
+        teamMemberships: state.teamMemberships,
+      );
+    } catch (e) {
+      state = AuthState(
+        status: AuthStatus.error,
+        errorMessage: 'Failed to create team: ${e.toString()}',
+        userId: state.userId,
+        userEmail: state.userEmail,
+        displayName: state.displayName,
+        photoUrl: state.photoUrl,
+        teamMemberships: state.teamMemberships,
+      );
+    }
+  }
+
+  Future<void> joinTeam(String inviteCode) async {
+    state = state.copyWith(status: AuthStatus.loading);
+    
+    try {
+      final userId = state.userId;
+      if (userId == null) {
+        throw const AuthException('Not signed in');
+      }
+      
+      final teamRepo = ref.read(teamRepositoryProvider);
+      await teamRepo.joinTeamByCode(
+        inviteCode: inviteCode,
+        userId: userId,
+      );
+      
+      await _loadUserProfile(userId);
+    } on AuthException catch (e) {
+      state = AuthState(
+        status: AuthStatus.error,
+        errorMessage: e.message,
+        userId: state.userId,
+        userEmail: state.userEmail,
+        displayName: state.displayName,
+        photoUrl: state.photoUrl,
+        teamMemberships: state.teamMemberships,
+      );
+    } catch (e) {
+      state = AuthState(
+        status: AuthStatus.error,
+        errorMessage: 'Failed to join team: ${e.toString()}',
+        userId: state.userId,
+        userEmail: state.userEmail,
+        displayName: state.displayName,
+        photoUrl: state.photoUrl,
+        teamMemberships: state.teamMemberships,
+      );
+    }
+  }
+
+  Future<void> leaveTeam(String teamId) async {
+    try {
+      final userId = state.userId;
+      if (userId == null) return;
+      
+      final teamRepo = ref.read(teamRepositoryProvider);
+      await teamRepo.leaveTeam(teamId: teamId, userId: userId);
+      
+      await _loadUserProfile(userId);
+    } catch (e) {
+      state = AuthState(
+        status: AuthStatus.error,
+        errorMessage: e.toString(),
+      );
+    }
+  }
+
+  Future<void> switchTeam(String teamId) async {
+    try {
+      final userId = state.userId;
+      if (userId == null) return;
+      
+      final teamRepo = ref.read(teamRepositoryProvider);
+      final team = await teamRepo.getTeam(teamId);
+      
+      state = state.copyWith(
+        currentTeamId: teamId,
+        isMasterTeamMember: team?.isMasterTeam ?? false,
+      );
+    } catch (e) {
+      state = AuthState(
+        status: AuthStatus.error,
+        errorMessage: e.toString(),
+      );
+    }
+  }
+
+  void clearError() {
+    if (state.userId != null) {
+      if (state.currentTeamId != null) {
+        state = state.copyWith(status: AuthStatus.authenticated, errorMessage: null);
+      } else {
+        state = state.copyWith(status: AuthStatus.needsTeamSelection, errorMessage: null);
+      }
+    } else {
+      state = const AuthState(status: AuthStatus.unauthenticated);
+    }
+  }
+}
+
+final authProvider = NotifierProvider<AuthNotifier, AuthState>(AuthNotifier.new);
+
+final isAuthenticatedProvider = Provider<bool>((ref) {
+  return ref.watch(authProvider).isAuthenticated;
+});
+
+final currentTeamIdProvider = Provider<String?>((ref) {
+  return ref.watch(authProvider).currentTeamId;
+});
+
+final isMasterTeamProvider = Provider<bool>((ref) {
+  return ref.watch(authProvider).isMasterTeamMember;
+});

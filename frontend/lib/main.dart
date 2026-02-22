@@ -7,7 +7,7 @@ import 'data/repositories/firestore_repository.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'data/local/preferences.dart';
 import 'data/local/sync/sync_manager.dart';
-import 'presentation/screens/dashboard.dart';
+import 'presentation/widgets/auth_wrapper.dart';
 import 'presentation/theme/app_theme.dart';
 
 void main() async {
@@ -67,7 +67,7 @@ class SushiScoutApp extends ConsumerWidget {
       theme: AppTheme.lightTheme(seedColor),
       darkTheme: AppTheme.darkTheme(seedColor),
       themeMode: mode,
-      home: const DashboardScreen(),
+      home: const AuthWrapper(),
     );
   }
 }

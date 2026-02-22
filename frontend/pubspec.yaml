@@ -44,6 +44,8 @@ dependencies:
   path_provider: ^2.1.5
   firebase_core: ^4.4.0
   cloud_firestore: ^6.1.1
+  firebase_auth: ^6.1.3
+  google_sign_in: ^6.2.2
   drift: ^2.21.0
   sqlite3_flutter_libs: ^0.5.24
   connectivity_plus: ^6.0.3
