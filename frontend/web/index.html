@@ -13,31 +13,8 @@
   
   <title>SushiScout 26</title>
   <link rel="manifest" href="manifest.json">
-  
-  <script>
-    var serviceWorkerVersion = null;
-    var scriptLoaded = false;
-    function loadMainDartJs() {
-      if (scriptLoaded) {
-        return;
-      }
-      scriptLoaded = true;
-      var scriptTag = document.createElement('script');
-      scriptTag.src = 'main.dart.js';
-      scriptTag.type = 'application/javascript';
-      document.body.append(scriptTag);
-    }
-    
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', function () {
-        navigator.serviceWorker.register('flutter_service_worker.js');
-      });
-    } else {
-      loadMainDartJs();
-    }
-  </script>
 </head>
 <body>
-  <script src="flutter.js" defer></script>
+  <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>
