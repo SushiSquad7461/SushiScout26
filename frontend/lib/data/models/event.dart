@@ -14,7 +14,7 @@ class Event {
     required this.programType,
     required this.tbaKey,
     required this.startDate,
-    required this.teamId,
+    this.teamId = '',
   });
 
   factory Event.fromFirestore(DocumentSnapshot doc) {

@@ -54,23 +54,39 @@ class FirestoreRepository implements ScoutingRepository {
   }
 
   @override
-  Future<void> createMatch(String eventId, MatchReport match) async {
+  Future<void> createMatch(String eventId, MatchReport match, {String? teamId}) async {
     debugPrint('Writing match to: events/$eventId/matches/${match.id}');
 
-    // Ensure the event document exists before creating the match
-    await _ensureEventExists(eventId);
+    await _ensureEventExists(eventId, teamId: teamId);
+
+    final matchWithTeam = teamId != null && teamId.isNotEmpty
+        ? MatchReport(
+            id: match.id,
+            matchId: match.matchId,
+            matchNumber: match.matchNumber,
+            teamNumber: match.teamNumber,
+            alliance: match.alliance,
+            scouterName: match.scouterName,
+            gameData: match.gameData,
+            robotDied: match.robotDied,
+            comments: match.comments,
+            images: match.images,
+            createdAt: match.createdAt,
+            isSynced: match.isSynced,
+            isDeleted: match.isDeleted,
+            teamId: teamId,
+          )
+        : match;
 
     await _firestore
         .collection('events')
         .doc(eventId)
         .collection('matches')
         .doc(match.id)
-        .set(match.toFirestore(), SetOptions(merge: true));
+        .set(matchWithTeam.toFirestore(), SetOptions(merge: true));
   }
 
-  /// Ensures the event document exists in Firestore.
-  /// If it doesn't exist, creates it with default data from local or basic info.
-  Future<void> _ensureEventExists(String eventId) async {
+  Future<void> _ensureEventExists(String eventId, {String? teamId}) async {
     try {
       final eventDoc = _firestore.collection('events').doc(eventId);
       debugPrint('Checking if event $eventId exists in Firestore...');
@@ -78,14 +94,13 @@ class FirestoreRepository implements ScoutingRepository {
 
       if (!docSnapshot.exists) {
         debugPrint('Event $eventId does not exist in Firestore, creating it...');
-        // Create a basic event document - the actual event data
-        // should be synced separately or created via an event management UI
         await eventDoc.set({
           'name': eventId,
           'programType': 'FRC',
           'tbaKey': eventId,
           'startDate': Timestamp.fromDate(DateTime.now()),
           'createdAt': Timestamp.fromDate(DateTime.now()),
+          'teamId': teamId ?? '',
           'autoCreated': true,
         }, SetOptions(merge: true));
         debugPrint('Event $eventId created successfully in Firestore');
@@ -100,14 +115,34 @@ class FirestoreRepository implements ScoutingRepository {
   }
 
   @override
-  Future<void> updateMatch(String eventId, MatchReport match) async {
+  Future<void> updateMatch(String eventId, MatchReport match, {String? teamId}) async {
     debugPrint('Updating match at: events/$eventId/matches/${match.id}');
+    
+    final matchWithTeam = teamId != null && teamId.isNotEmpty
+        ? MatchReport(
+            id: match.id,
+            matchId: match.matchId,
+            matchNumber: match.matchNumber,
+            teamNumber: match.teamNumber,
+            alliance: match.alliance,
+            scouterName: match.scouterName,
+            gameData: match.gameData,
+            robotDied: match.robotDied,
+            comments: match.comments,
+            images: match.images,
+            createdAt: match.createdAt,
+            isSynced: match.isSynced,
+            isDeleted: match.isDeleted,
+            teamId: teamId,
+          )
+        : match;
+
     await _firestore
         .collection('events')
         .doc(eventId)
         .collection('matches')
         .doc(match.id)
-        .set(match.toFirestore(), SetOptions(merge: true));
+        .set(matchWithTeam.toFirestore(), SetOptions(merge: true));
   }
 
   @override

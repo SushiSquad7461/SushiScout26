@@ -1,0 +1,96 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function currentUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+    
+    function currentTeamId() {
+      return currentUserData().currentTeamId;
+    }
+    
+    function isMasterTeamMember() {
+      let teamId = currentTeamId();
+      if (teamId == null) return false;
+      let teamData = get(/databases/$(database)/documents/teams/$(teamId)).data;
+      return teamData != null && teamData.isMasterTeam == true;
+    }
+    
+    function isTeamMember(teamId) {
+      let userTeamId = currentTeamId();
+      return userTeamId == teamId || isMasterTeamMember();
+    }
+    
+    function isTeamAdmin(teamId) {
+      let memberships = currentUserData().teamMemberships;
+      return memberships != null && (memberships[teamId] == 'admin' || isMasterTeamMember());
+    }
+    
+    function isValidInviteCode(code) {
+      return code is string && code.size() >= 6 && code.size() <= 8;
+    }
+    
+    // Users collection
+    match /users/{uid} {
+      allow read: if isAuthenticated() && (
+        request.auth.uid == uid || 
+        isMasterTeamMember()
+      );
+      allow create: if isAuthenticated() && request.auth.uid == uid;
+      allow update: if isAuthenticated() && request.auth.uid == uid;
+      allow delete: if false;
+    }
+    
+    // Teams collection
+    match /teams/{teamId} {
+      allow read: if isAuthenticated() && isTeamMember(teamId);
+      allow create: if isAuthenticated() && 
+        isValidInviteCode(resource.data.inviteCode) &&
+        request.resource.data.createdBy == request.auth.uid;
+      allow update: if isAuthenticated() && isTeamAdmin(teamId);
+      allow delete: if false;
+    }
+    
+    // Team settings collection
+    match /teamSettings/{teamId} {
+      allow read: if isAuthenticated() && isTeamMember(teamId);
+      allow create: if isAuthenticated() && isTeamAdmin(teamId);
+      allow update: if isAuthenticated() && isTeamAdmin(teamId);
+      allow delete: if false;
+    }
+    
+    // Events collection
+    match /events/{eventId} {
+      allow read: if isAuthenticated() && (
+        isTeamMember(resource.data.teamId) ||
+        isMasterTeamMember()
+      );
+      allow create: if isAuthenticated() && 
+        isTeamMember(request.resource.data.teamId) &&
+        request.resource.data.createdBy == request.auth.uid;
+      allow update: if isAuthenticated() && 
+        isTeamMember(resource.data.teamId);
+      allow delete: if false;
+    }
+    
+    // Matches collection
+    match /matches/{matchId} {
+      allow read: if isAuthenticated() && (
+        isTeamMember(resource.data.teamId) ||
+        isMasterTeamMember()
+      );
+      allow create: if isAuthenticated() && 
+        isTeamMember(request.resource.data.teamId) &&
+        request.resource.data.createdBy == request.auth.uid;
+      allow update: if isAuthenticated() && 
+        isTeamMember(resource.data.teamId);
+      allow delete: if false;
+    }
+  }
+}
