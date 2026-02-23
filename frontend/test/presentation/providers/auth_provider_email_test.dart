@@ -3,10 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:frontend/core/auth/auth_state.dart';
 import 'package:frontend/presentation/providers/auth_provider.dart';
 import 'package:frontend/core/auth/auth_service.dart';
-import 'package:frontend/core/auth/auth_exceptions.dart';
 import 'package:frontend/data/repositories/auth_repository.dart';
 
 import 'auth_provider_email_test.mocks.dart';
