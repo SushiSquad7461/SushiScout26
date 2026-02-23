@@ -12,18 +12,12 @@ import 'package:firebase_auth/firebase_auth.dart';
 final authServiceProvider = Provider<AuthService>((ref) {
   GoogleSignIn? googleSignIn;
   
-  if (kIsWeb) {
+  if (defaultTargetPlatform == TargetPlatform.windows ||
+      defaultTargetPlatform == TargetPlatform.linux) {
+    googleSignIn = null;
+  } else if (kIsWeb) {
     googleSignIn = GoogleSignIn(
       clientId: '80003441956-f6ses5oufoeiatcvvrmrn3malkmts4be.apps.googleusercontent.com',
-      scopes: [
-        'https://www.googleapis.com/auth/userinfo.email',
-        'https://www.googleapis.com/auth/userinfo.profile',
-      ],
-    );
-  } else if (defaultTargetPlatform == TargetPlatform.windows ||
-             defaultTargetPlatform == TargetPlatform.linux) {
-    googleSignIn = GoogleSignIn(
-      clientId: '80003441956-omm6u1f2krdqrds38an85dor4q0p4sal.apps.googleusercontent.com',
       scopes: [
         'https://www.googleapis.com/auth/userinfo.email',
         'https://www.googleapis.com/auth/userinfo.profile',
