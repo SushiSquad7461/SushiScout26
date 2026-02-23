@@ -1,8 +1,10 @@
 import 'package:drift/drift.dart';
+import 'package:flutter/foundation.dart';
 
 import 'tables.dart';
 import 'connection/unsupported.dart'
-    if (dart.library.io) 'connection/native.dart';
+    if (dart.library.io) 'connection/native.dart'
+    if (dart.library.js) 'connection/web.dart';
 
 export 'tables.dart';
 

@@ -12,6 +12,8 @@ import '../../models/match_report.dart';
 import '../database/app_database.dart';
 import '../../repositories/firestore_repository.dart';
 
+final _logger = Logger('SyncManager');
+
 /// Provider for sync manager
 final syncManagerProvider = Provider<SyncManager>((ref) {
   final db = ref.watch(appDatabaseProvider);
@@ -19,9 +21,18 @@ final syncManagerProvider = Provider<SyncManager>((ref) {
   return SyncManager(db, firestore);
 });
 
-/// Provider for app database
-final appDatabaseProvider = Provider<AppDatabase>((ref) {
+/// Provider for app database - returns null on web where local DB is not supported
+final appDatabaseProvider = Provider<AppDatabase?>((ref) {
+  if (kIsWeb) {
+    _logger.i('Local database not supported on web, using Firebase only');
+    return null;
+  }
   return AppDatabase();
+});
+
+/// Provider for whether local database is available
+final isLocalDbAvailableProvider = Provider<bool>((ref) {
+  return ref.watch(appDatabaseProvider) != null;
 });
 
 /// Provider for Firestore repository
@@ -53,7 +64,7 @@ final isOnlineProvider = Provider<bool>((ref) {
 /// - Conflict detection and resolution
 /// - Sync queue management
 class SyncManager {
-  final AppDatabase _db;
+  AppDatabase? _db;
   final FirestoreRepository _firestore;
   final Logger _logger = const Logger('SYNC');
   
@@ -71,17 +82,31 @@ class SyncManager {
   Stream<SyncStatus> get syncStream => _syncController.stream;
   Stream<int> get pendingCountStream => _pendingCountController.stream;
   
+  bool get isLocalDbAvailable => _db != null;
+  
+  AppDatabase get db {
+    if (_db == null) {
+      throw StateError('Local database not available on this platform');
+    }
+    return _db!;
+  }
+  
   SyncManager(this._db, this._firestore);
 
   /// Initialize sync manager
   void initialize() {
     _logger.i('Initializing sync manager');
+    
+    if (_db == null) {
+      _logger.i('Local DB not available, sync manager will use Firebase only');
+      return;
+    }
 
     // Reset retry counts for stuck operations on startup
-    _db.getPendingSyncOperations().then((ops) {
+    db.getPendingSyncOperations().then((ops) {
       for (final op in ops) {
         if (op.retryCount >= 5) {
-          _db.updateSyncOperationRetry(op.id, retryCount: 0, errorMessage: 'Resetting stuck operation');
+          db.updateSyncOperationRetry(op.id, retryCount: 0, errorMessage: 'Resetting stuck operation');
         }
       }
     });
@@ -111,8 +136,8 @@ class SyncManager {
   /// Queue existing unsynced matches from local DB that aren't in sync queue
   Future<void> _queueExistingUnsyncedMatches() async {
     try {
-      final unsyncedMatches = await _db.getUnsyncedMatches();
-      final pendingOps = await _db.getPendingSyncOperations();
+      final unsyncedMatches = await db.getUnsyncedMatches();
+      final pendingOps = await db.getPendingSyncOperations();
 
       // Get set of match IDs already in sync queue
       final queuedMatchIds = pendingOps
@@ -190,7 +215,7 @@ class SyncManager {
 
   /// Update the pending count stream
   Future<void> _updatePendingCount() async {
-    final pendingOps = await _db.getPendingSyncOperations();
+    final pendingOps = await db.getPendingSyncOperations();
     _pendingCountController.add(pendingOps.length);
   }
 
@@ -205,7 +230,7 @@ class SyncManager {
       'matchId': match.id,
     });
     
-    await _db.addToSyncQueue(SyncQueueCompanion.insert(
+    await db.addToSyncQueue(SyncQueueCompanion.insert(
       entityType: 'match',
       entityId: match.id,
       eventId: Value(eventId),
@@ -231,7 +256,7 @@ class SyncManager {
       'matchId': match.id,
     });
     
-    await _db.addToSyncQueue(SyncQueueCompanion.insert(
+    await db.addToSyncQueue(SyncQueueCompanion.insert(
       entityType: 'match',
       entityId: match.id,
       eventId: Value(eventId),
@@ -252,7 +277,7 @@ class SyncManager {
       'matchId': matchId,
     });
 
-    await _db.addToSyncQueue(SyncQueueCompanion.insert(
+    await db.addToSyncQueue(SyncQueueCompanion.insert(
       entityType: 'match',
       entityId: matchId,
       eventId: Value(eventId),
@@ -273,7 +298,7 @@ class SyncManager {
       'matchId': matchId,
     });
 
-    await _db.addToSyncQueue(SyncQueueCompanion.insert(
+    await db.addToSyncQueue(SyncQueueCompanion.insert(
       entityType: 'match',
       entityId: matchId,
       eventId: Value(eventId),
@@ -305,7 +330,7 @@ class SyncManager {
     _isSyncing = true;
     _syncController.add(const SyncStatus.inProgress());
     
-    final pendingOps = await _db.getPendingSyncOperations();
+    final pendingOps = await db.getPendingSyncOperations();
     
     if (pendingOps.isEmpty) {
       _logger.i('No pending sync operations');
@@ -335,7 +360,7 @@ class SyncManager {
         errors.add(e);
         
         // Update retry count
-        await _db.updateSyncOperationRetry(
+        await db.updateSyncOperationRetry(
           op.id,
           retryCount: op.retryCount + 1,
           errorMessage: e.message,
@@ -350,7 +375,7 @@ class SyncManager {
         _logger.e('Unexpected sync error', error: e, stackTrace: stackTrace);
         failCount++;
         
-        await _db.updateSyncOperationRetry(
+        await db.updateSyncOperationRetry(
           op.id,
           retryCount: op.retryCount + 1,
           errorMessage: e.toString(),
@@ -443,14 +468,14 @@ class SyncManager {
       });
 
       // Mark operation as complete
-      await _db.completeSyncOperation(op.id);
+      await db.completeSyncOperation(op.id);
       _logger.d('Sync operation marked as complete', data: {
         'operationId': op.id,
       });
       
       // Mark local entity as synced
       if (op.entityType == 'match') {
-        await _db.markMatchSynced(op.entityId);
+        await db.markMatchSynced(op.entityId);
         _logger.d('Local match marked as synced', data: {
           'matchId': op.entityId,
         });
@@ -477,9 +502,9 @@ class SyncManager {
 
   /// Get sync statistics
   Future<SyncStats> getSyncStats() async {
-    final pendingCount = (await _db.getPendingSyncOperations()).length;
-    final unsyncedCount = await _db.getUnsyncedCount();
-    final unresolvedConflicts = (await _db.getUnresolvedConflicts()).length;
+    final pendingCount = (await db.getPendingSyncOperations()).length;
+    final unsyncedCount = await db.getUnsyncedCount();
+    final unresolvedConflicts = (await db.getUnresolvedConflicts()).length;
     
     return SyncStats(
       pendingOperations: pendingCount,

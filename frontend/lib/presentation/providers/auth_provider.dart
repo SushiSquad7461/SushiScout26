@@ -1,4 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/foundation.dart'
+    show defaultTargetPlatform, kIsWeb, TargetPlatform;
+import 'package:google_sign_in/google_sign_in.dart';
 import '../../core/auth/auth_service.dart';
 import '../../core/auth/auth_state.dart';
 import '../../core/auth/auth_exceptions.dart';
@@ -7,7 +10,34 @@ import '../../data/repositories/team_repository.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 final authServiceProvider = Provider<AuthService>((ref) {
-  return AuthService();
+  GoogleSignIn? googleSignIn;
+  
+  if (kIsWeb) {
+    googleSignIn = GoogleSignIn(
+      clientId: '80003441956-f6ses5oufoeiatcvvrmrn3malkmts4be.apps.googleusercontent.com',
+      scopes: [
+        'https://www.googleapis.com/auth/userinfo.email',
+        'https://www.googleapis.com/auth/userinfo.profile',
+      ],
+    );
+  } else if (defaultTargetPlatform == TargetPlatform.windows) {
+    googleSignIn = GoogleSignIn(
+      clientId: '80003441956-omm6u1f2krdqrds38an85dor4q0p4sal.apps.googleusercontent.com',
+      scopes: [
+        'https://www.googleapis.com/auth/userinfo.email',
+        'https://www.googleapis.com/auth/userinfo.profile',
+      ],
+    );
+  } else {
+    googleSignIn = GoogleSignIn(
+      scopes: [
+        'https://www.googleapis.com/auth/userinfo.email',
+        'https://www.googleapis.com/auth/userinfo.profile',
+      ],
+    );
+  }
+  
+  return AuthService(googleSignIn: googleSignIn);
 });
 
 final authRepositoryProvider = Provider<AuthRepository>((ref) {
@@ -31,18 +61,25 @@ class AuthNotifier extends Notifier<AuthState> {
       if (user == null) {
         state = const AuthState(status: AuthStatus.unauthenticated);
       } else {
-        await _loadUserProfile(user.uid);
+        await _loadUserProfile();
       }
     });
   }
 
-  Future<void> _loadUserProfile(String userId) async {
+  Future<void> _loadUserProfile() async {
     try {
       final authRepo = ref.read(authRepositoryProvider);
+      final firebaseUser = authRepo.currentUser;
       final profile = await authRepo.getCurrentUserProfile();
       
       if (profile == null) {
-        state = const AuthState(status: AuthStatus.needsTeamSelection);
+        state = AuthState(
+          status: AuthStatus.needsTeamSelection,
+          userId: firebaseUser?.uid,
+          userEmail: firebaseUser?.email,
+          displayName: firebaseUser?.displayName,
+          photoUrl: firebaseUser?.photoURL,
+        );
         return;
       }
       
@@ -128,7 +165,7 @@ class AuthNotifier extends Notifier<AuthState> {
         isMasterTeam: isMasterTeam,
       );
       
-      await _loadUserProfile(userId);
+      await _loadUserProfile();
     } on AuthException catch (e) {
       state = AuthState(
         status: AuthStatus.error,
@@ -167,7 +204,7 @@ class AuthNotifier extends Notifier<AuthState> {
         userId: userId,
       );
       
-      await _loadUserProfile(userId);
+      await _loadUserProfile();
     } on AuthException catch (e) {
       state = AuthState(
         status: AuthStatus.error,
@@ -199,7 +236,7 @@ class AuthNotifier extends Notifier<AuthState> {
       final teamRepo = ref.read(teamRepositoryProvider);
       await teamRepo.leaveTeam(teamId: teamId, userId: userId);
       
-      await _loadUserProfile(userId);
+      await _loadUserProfile();
     } catch (e) {
       state = AuthState(
         status: AuthStatus.error,
