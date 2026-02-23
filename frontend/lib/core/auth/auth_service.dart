@@ -104,6 +104,54 @@ class AuthService {
     }
   }
 
+  Future<UserCredential> signInWithEmailAndPassword({
+    required String email,
+    required String password,
+  }) async {
+    if (!_isValidEmail(email)) {
+      throw const AuthExceptionInvalidEmail();
+    }
+
+    if (!isValidPassword(password)) {
+      throw const AuthExceptionWeakPassword();
+    }
+
+    try {
+      final credential = await _auth.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+
+      await _ensureUserDocument(credential.user!);
+
+      return credential;
+    } on FirebaseAuthException catch (e) {
+      throw _mapFirebaseAuthException(e);
+    } catch (e) {
+      if (e is AuthException) rethrow;
+      throw AuthExceptionNetworkError(e.toString());
+    }
+  }
+
+  static bool _isValidEmail(String email) {
+    return RegExp(r'^[\w\.-]+@[\w\.-]+\.\w+$').hasMatch(email);
+  }
+
+  AuthException _mapFirebaseAuthException(FirebaseAuthException e) {
+    switch (e.code) {
+      case 'user-not-found':
+        return const AuthExceptionUserNotFound();
+      case 'wrong-password':
+        return const AuthExceptionWrongPassword();
+      case 'too-many-requests':
+        return const AuthExceptionTooManyAttempts();
+      case 'invalid-email':
+        return const AuthExceptionInvalidEmail();
+      default:
+        return AuthException(_getAuthErrorMessage(e.code), code: e.code);
+    }
+  }
+
   static bool isValidPassword(String password) {
     if (password.length < 8) return false;
     if (!password.contains(RegExp(r'[A-Z]'))) return false;
