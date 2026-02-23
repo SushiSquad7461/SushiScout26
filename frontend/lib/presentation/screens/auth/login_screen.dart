@@ -131,9 +131,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             _obscurePassword = !_obscurePassword;
                           });
                         },
+                        tooltip: _obscurePassword ? 'Show password' : 'Hide password',
                       ),
                     ),
                     obscureText: _obscurePassword,
+                    onFieldSubmitted: (_) => _signIn(),
                     validator: (value) {
                       if (value == null || value.isEmpty) {
                         return 'Please enter your password';
@@ -239,12 +241,25 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       return;
     }
 
-    await ref.read(authProvider.notifier).sendPasswordResetEmail(email);
+    setState(() => _isLoading = true);
 
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Password reset email sent')),
-      );
+    try {
+      await ref.read(authProvider.notifier).sendPasswordResetEmail(email);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Password reset email sent')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to send reset email: ${e.toString()}')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 }

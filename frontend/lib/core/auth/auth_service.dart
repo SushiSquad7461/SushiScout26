@@ -161,10 +161,16 @@ class AuthService {
   }
 
   Future<void> sendPasswordResetEmail(String email) async {
+    if (!_isValidEmail(email)) {
+      throw const AuthExceptionInvalidEmail();
+    }
+
     try {
       await _auth.sendPasswordResetEmail(email: email);
     } on FirebaseAuthException catch (e) {
       throw AuthException(_getAuthErrorMessage(e.code), code: e.code);
+    } catch (e) {
+      throw AuthExceptionNetworkError(e.toString());
     }
   }
 }

@@ -18,12 +18,12 @@ void main() {
 
     test('AuthExceptionWrongPassword has correct message', () {
       const exception = AuthExceptionWrongPassword();
-      expect(exception.message, contains('incorrect'));
+      expect(exception.message, contains('Incorrect'));
     });
 
     test('AuthExceptionTooManyAttempts has correct message', () {
       const exception = AuthExceptionTooManyAttempts();
-      expect(exception.message, contains('too many'));
+      expect(exception.message, contains('Too many'));
     });
 
     test('AuthExceptionUserNotFound has correct message', () {
