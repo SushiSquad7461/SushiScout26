@@ -159,4 +159,12 @@ class AuthService {
     if (!password.contains(RegExp(r'[0-9]'))) return false;
     return true;
   }
+
+  Future<void> sendPasswordResetEmail(String email) async {
+    try {
+      await _auth.sendPasswordResetEmail(email: email);
+    } on FirebaseAuthException catch (e) {
+      throw AuthException(_getAuthErrorMessage(e.code), code: e.code);
+    }
+  }
 }
