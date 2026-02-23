@@ -20,7 +20,8 @@ final authServiceProvider = Provider<AuthService>((ref) {
         'https://www.googleapis.com/auth/userinfo.profile',
       ],
     );
-  } else if (defaultTargetPlatform == TargetPlatform.windows) {
+  } else if (defaultTargetPlatform == TargetPlatform.windows ||
+             defaultTargetPlatform == TargetPlatform.linux) {
     googleSignIn = GoogleSignIn(
       clientId: '80003441956-omm6u1f2krdqrds38an85dor4q0p4sal.apps.googleusercontent.com',
       scopes: [
