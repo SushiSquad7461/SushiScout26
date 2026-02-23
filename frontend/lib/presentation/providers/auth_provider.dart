@@ -131,6 +131,40 @@ class AuthNotifier extends Notifier<AuthState> {
     }
   }
 
+  Future<void> signInWithEmailAndPassword(String email, String password) async {
+    state = state.copyWith(status: AuthStatus.loading);
+
+    try {
+      final authService = ref.read(authServiceProvider);
+      await authService.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+    } on AuthException catch (e) {
+      state = AuthState(
+        status: AuthStatus.error,
+        errorMessage: e.message,
+      );
+    } catch (e) {
+      state = AuthState(
+        status: AuthStatus.error,
+        errorMessage: 'Sign in failed: ${e.toString()}',
+      );
+    }
+  }
+
+  Future<void> sendPasswordResetEmail(String email) async {
+    try {
+      final authService = ref.read(authServiceProvider);
+      await authService.sendPasswordResetEmail(email);
+    } catch (e) {
+      state = AuthState(
+        status: AuthStatus.error,
+        errorMessage: 'Failed to send reset email: ${e.toString()}',
+      );
+    }
+  }
+
   Future<void> signOut() async {
     try {
       final authRepo = ref.read(authRepositoryProvider);
