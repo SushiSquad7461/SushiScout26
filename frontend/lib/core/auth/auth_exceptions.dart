@@ -35,3 +35,21 @@ class AuthExceptionCannotLeaveTeam extends AuthException {
 class AuthExceptionNetworkError extends AuthException {
   const AuthExceptionNetworkError([String message = 'Network error']) : super(message);
 }
+
+class AuthExceptionWeakPassword extends AuthException {
+  const AuthExceptionWeakPassword()
+      : super('Password must be at least 8 characters with uppercase, lowercase, and number');
+}
+
+class AuthExceptionInvalidEmail extends AuthException {
+  const AuthExceptionInvalidEmail() : super('Please enter a valid email address');
+}
+
+class AuthExceptionWrongPassword extends AuthException {
+  const AuthExceptionWrongPassword() : super('incorrect password');
+}
+
+class AuthExceptionTooManyAttempts extends AuthException {
+  const AuthExceptionTooManyAttempts()
+      : super('too many failed attempts. Please try again later');
+}
