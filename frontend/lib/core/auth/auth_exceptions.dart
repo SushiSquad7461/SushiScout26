@@ -46,10 +46,10 @@ class AuthExceptionInvalidEmail extends AuthException {
 }
 
 class AuthExceptionWrongPassword extends AuthException {
-  const AuthExceptionWrongPassword() : super('incorrect password');
+  const AuthExceptionWrongPassword() : super('Incorrect password');
 }
 
 class AuthExceptionTooManyAttempts extends AuthException {
   const AuthExceptionTooManyAttempts()
-      : super('too many failed attempts. Please try again later');
+      : super('Too many failed attempts. Please try again later');
 }
