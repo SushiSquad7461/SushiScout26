@@ -2,7 +2,10 @@
 
 import os
 from firebase_functions import https_fn, firestore_fn, logger
-from firebase_admin import firestore
+from firebase_admin import initialize_app, firestore
+
+# Initialize Firebase Admin
+initialize_app()
 
 # Lazy initialization
 _db = None
@@ -80,47 +83,68 @@ def sync_report_to_sheets(event_id: str, report_id: str, report_data: dict, is_u
         raise
 
 
-@firestore_fn.on_document_created(document="events/{eventId}/matches/{reportId}")
-def on_match_created(event: firestore_fn.Event):
-    """Trigger when a new match report is created."""
+@firestore_fn.on_document_written(document="events/{eventId}/matches/{reportId}", secrets=["GOOGLE_SHEETS_CREDENTIALS", "MASTER_SPREADSHEET_ID"])
+def on_match_written(event: firestore_fn.Event):
+    """Trigger when a match report is created, updated, or deleted in Firestore."""
     event_id = event.params['eventId']
     report_id = event.params['reportId']
     
-    report_data = event.data.to_dict() if event.data else None
+    data_before = event.data.before.to_dict() if event.data and event.data.before else None
+    data_after = event.data.after.to_dict() if event.data and event.data.after else None
     
-    if not report_data:
-        logger.warning(f"No data found for report {report_id}")
-        return
-    
-    logger.info(f"Processing new match report: {report_id} for event {event_id}")
-    
-    from services.sync_tracker import SyncTracker
-    existing = SyncTracker.get_sync_record(event_id, report_id)
-    if existing and existing.get('status') == 'success':
-        logger.info(f"Report {report_id} already synced, skipping")
-        return
-    
-    sync_report_to_sheets(event_id, report_id, report_data, is_update=False)
+    if data_before and not data_after:
+        logger.info(f"Processing deleted match report: {report_id} for event {event_id}")
+        
+        from services.sheets_service import get_sheets_service
+        from services.sync_tracker import SyncTracker
+        
+        try:
+            sheets_service = get_sheets_service()
+            spreadsheet_id = get_master_spreadsheet_id()
+            
+            if not spreadsheet_id:
+                logger.error("MASTER_SPREADSHEET_ID not configured")
+                return
+            
+            sync_record = SyncTracker.get_sync_record(event_id, report_id)
+            
+            if sync_record and sync_record.get('rowNumber') and sync_record.get('sheetName'):
+                row_number = sync_record['rowNumber']
+                sheet_name = sync_record['sheetName']
+                
+                success = sheets_service.delete_row(spreadsheet_id, sheet_name, row_number)
+                
+                if success:
+                    logger.info(f"Deleted row {row_number} for report {report_id}")
+                else:
+                    logger.warning(f"Failed to delete row for report {report_id}, trying to find and delete")
+                    
+                    found_row = sheets_service.find_row_by_report_id(spreadsheet_id, sheet_name, report_id)
+                    if found_row:
+                        sheets_service.delete_row(spreadsheet_id, sheet_name, found_row)
+                        logger.info(f"Found and deleted row {found_row} for report {report_id}")
+            
+            SyncTracker.delete_sync_record(event_id, report_id)
+            logger.info(f"Deleted sync record for report {report_id}")
+            
+        except Exception as e:
+            logger.error(f"Failed to sync delete for report {report_id}: {str(e)}")
+    elif not data_before and data_after:
+        logger.info(f"Processing new match report: {report_id} for event {event_id}")
+        
+        from services.sync_tracker import SyncTracker
+        existing = SyncTracker.get_sync_record(event_id, report_id)
+        if existing and existing.get('status') == 'success':
+            logger.info(f"Report {report_id} already synced, skipping")
+            return
+        
+        sync_report_to_sheets(event_id, report_id, data_after, is_update=False)
+    elif data_before and data_after:
+        logger.info(f"Processing updated match report: {report_id} for event {event_id}")
+        sync_report_to_sheets(event_id, report_id, data_after, is_update=True)
 
 
-@firestore_fn.on_document_updated(document="events/{eventId}/matches/{reportId}")
-def on_match_updated(event: firestore_fn.Event):
-    """Trigger when a match report is updated."""
-    event_id = event.params['eventId']
-    report_id = event.params['reportId']
-    
-    report_data = event.data.after.to_dict() if event.data.after else None
-    
-    if not report_data:
-        logger.warning(f"No data found for updated report {report_id}")
-        return
-    
-    logger.info(f"Processing updated match report: {report_id} for event {event_id}")
-    
-    sync_report_to_sheets(event_id, report_id, report_data, is_update=True)
-
-
-@https_fn.on_call()
+@https_fn.on_call(secrets=["GOOGLE_SHEETS_CREDENTIALS", "MASTER_SPREADSHEET_ID"])
 def backfill_event_to_sheets(req: https_fn.CallableRequest) -> dict:
     """Backfill all match reports for an event to Google Sheets."""
     try:

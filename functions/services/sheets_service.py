@@ -10,7 +10,7 @@ from googleapiclient.errors import HttpError
 
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
 
-# Column headers for FRC match reports
+# Column headers for FRC match reports - matches scouting wizard schema
 FRC_HEADERS = [
     "Timestamp",
     "Match ID",
@@ -19,10 +19,14 @@ FRC_HEADERS = [
     "Alliance",
     "Scouter",
     "Auto Fuel",
+    "Auto L1 Hang",
     "Teleop Fuel",
     "Climb Level",
+    "Defense Rating",
+    "Driver Skill",
     "Robot Died",
-    "Comments"
+    "Comments",
+    "Images"
 ]
 
 
@@ -47,6 +51,8 @@ class SheetsService:
             # Check if sheet exists
             for sheet in spreadsheet.get('sheets', []):
                 if sheet['properties']['title'] == sheet_name:
+                    # Sheet exists, ensure it has enough columns
+                    self._ensure_column_count(spreadsheet_id, sheet['properties']['sheetId'], len(FRC_HEADERS))
                     return sheet['properties']['sheetId']
             
             # Create new sheet
@@ -79,9 +85,39 @@ class SheetsService:
         except HttpError as e:
             raise Exception(f"Failed to get or create sheet: {e}")
     
+    def _ensure_column_count(self, spreadsheet_id: str, sheet_id: int, required_columns: int):
+        """Ensure sheet has enough columns."""
+        spreadsheet = self.service.spreadsheets().get(
+            spreadsheetId=spreadsheet_id
+        ).execute()
+        
+        for sheet in spreadsheet.get('sheets', []):
+            if sheet['properties']['sheetId'] == sheet_id:
+                current_cols = sheet['properties'].get('gridProperties', {}).get('columnCount', 0)
+                if current_cols < required_columns:
+                    # Need to add columns
+                    body = {
+                        'requests': [{
+                            'updateSheetProperties': {
+                                'properties': {
+                                    'sheetId': sheet_id,
+                                    'gridProperties': {
+                                        'columnCount': required_columns
+                                    }
+                                },
+                                'fields': 'gridProperties.columnCount'
+                            }
+                        }]
+                    }
+                    self.service.spreadsheets().batchUpdate(
+                        spreadsheetId=spreadsheet_id,
+                        body=body
+                    ).execute()
+                break
+    
     def _write_headers(self, spreadsheet_id: str, sheet_name: str):
         """Write header row to sheet."""
-        range_name = f"{sheet_name}!A1:K1"
+        range_name = f"{sheet_name}!1:1"
         body = {
             'values': [FRC_HEADERS]
         }
@@ -93,38 +129,95 @@ class SheetsService:
             body=body
         ).execute()
         
-        # Format headers as bold
+        # Format headers as bold with color
         self._format_headers(spreadsheet_id, sheet_name)
+        
+        # Set column widths
+        self._set_column_widths(spreadsheet_id, sheet_name)
     
     def _format_headers(self, spreadsheet_id: str, sheet_name: str):
-        """Apply bold formatting to header row."""
-        requests = [{
-            'repeatCell': {
-                'range': {
-                    'sheetId': self._get_sheet_id(spreadsheet_id, sheet_name),
-                    'startRowIndex': 0,
-                    'endRowIndex': 1,
-                    'startColumnIndex': 0,
-                    'endColumnIndex': len(FRC_HEADERS)
-                },
-                'cell': {
-                    'userEnteredFormat': {
-                        'textFormat': {'bold': True},
-                        'backgroundColor': {
-                            'red': 0.9,
-                            'green': 0.9,
-                            'blue': 0.9
+        """Apply bold formatting and background color to header row."""
+        sheet_id = self._get_sheet_id(spreadsheet_id, sheet_name)
+        
+        requests = [
+            # Bold and background
+            {
+                'repeatCell': {
+                    'range': {
+                        'sheetId': sheet_id,
+                        'startRowIndex': 0,
+                        'endRowIndex': 1,
+                        'startColumnIndex': 0,
+                        'endColumnIndex': len(FRC_HEADERS)
+                    },
+                    'cell': {
+                        'userEnteredFormat': {
+                            'textFormat': {'bold': True},
+                            'backgroundColor': {
+                                'red': 0.2,
+                                'green': 0.4,
+                                'blue': 0.6
+                            },
+                            'horizontalAlignment': 'CENTER'
                         }
-                    }
-                },
-                'fields': 'userEnteredFormat(textFormat,backgroundColor)'
+                    },
+                    'fields': 'userEnteredFormat(textFormat,backgroundColor,horizontalAlignment)'
+                }
+            },
+            # Wrap text for comments
+            {
+                'repeatCell': {
+                    'range': {
+                        'sheetId': sheet_id,
+                        'startRowIndex': 1,
+                        'endRowIndex': 1000,
+                        'startColumnIndex': len(FRC_HEADERS) - 2,  # Comments column
+                        'endColumnIndex': len(FRC_HEADERS) - 1
+                    },
+                    'cell': {
+                        'userEnteredFormat': {
+                            'wrapStrategy': 'WRAP'
+                        }
+                    },
+                    'fields': 'userEnteredFormat(wrapStrategy)'
+                }
             }
-        }]
+        ]
         
         self.service.spreadsheets().batchUpdate(
             spreadsheetId=spreadsheet_id,
             body={'requests': requests}
         ).execute()
+    
+    def _set_column_widths(self, spreadsheet_id: str, sheet_name: str):
+        """Set appropriate column widths."""
+        try:
+            sheet_id = self._get_sheet_id(spreadsheet_id, sheet_name)
+            
+            requests = []
+            for col_idx, width in enumerate([
+                160, 140, 60, 70, 70, 100, 80, 90, 90, 90, 100, 100, 85, 250, 80
+            ]):
+                requests.append({
+                    'updateDimensionProperties': {
+                        'range': {
+                            'sheetId': sheet_id,
+                            'dimension': 'COLUMNS',
+                            'startIndex': col_idx,
+                            'endIndex': col_idx + 1
+                        },
+                        'properties': {'pixelSize': width},
+                        'fields': 'pixelSize'
+                    }
+                })
+            
+            self.service.spreadsheets().batchUpdate(
+                spreadsheetId=spreadsheet_id,
+                body={'requests': requests}
+            ).execute()
+        except Exception as e:
+            import logging
+            logging.warning(f"Could not set column widths: {e}")
     
     def _get_sheet_id(self, spreadsheet_id: str, sheet_name: str) -> int:
         """Get numeric sheet ID from name."""
@@ -140,7 +233,7 @@ class SheetsService:
     
     def append_row(self, spreadsheet_id: str, sheet_name: str, row_data: List[Any]) -> int:
         """Append a row to the sheet. Returns the row number (1-indexed)."""
-        range_name = f"{sheet_name}!A:K"
+        range_name = f"{sheet_name}!A:O"
         
         body = {
             'values': [row_data]
@@ -163,7 +256,7 @@ class SheetsService:
         if not rows:
             return 0
         
-        range_name = f"{sheet_name}!A:K"
+        range_name = f"{sheet_name}!A:O"
         body = {'values': rows}
         
         result = self.service.spreadsheets().values().append(
@@ -177,23 +270,17 @@ class SheetsService:
         updated_range = result['updates']['updatedRange']
         row_number = int(updated_range.split('!')[1].split(':')[0][1:])
         return row_number
-    
+
     def update_rows(self, spreadsheet_id: str, sheet_name: str, 
                     updates: List[tuple]) -> None:
-        """Update multiple rows at specific row numbers in a single batch.
-        
-        Args:
-            spreadsheet_id: The spreadsheet ID
-            sheet_name: The sheet name
-            updates: List of (row_number, row_data) tuples
-        """
+        """Update multiple rows at specific row numbers."""
         if not updates:
             return
         
         data = []
         for row_number, row_data in updates:
             data.append({
-                'range': f"{sheet_name}!A{row_number}:K{row_number}",
+                'range': f"{sheet_name}!A{row_number}:O{row_number}",
                 'values': [row_data]
             })
         
@@ -205,7 +292,7 @@ class SheetsService:
     
     def update_row(self, spreadsheet_id: str, sheet_name: str, row_number: int, row_data: List[Any]):
         """Update an existing row."""
-        range_name = f"{sheet_name}!A{row_number}:K{row_number}"
+        range_name = f"{sheet_name}!A{row_number}:O{row_number}"
         
         body = {
             'values': [row_data]
@@ -219,9 +306,8 @@ class SheetsService:
         ).execute()
     
     def find_row_by_report_id(self, spreadsheet_id: str, sheet_name: str, report_id: str) -> Optional[int]:
-        """Find row number by report ID (stored in Match ID column). Returns row number or None."""
-        # Get all data from sheet
-        range_name = f"{sheet_name}!A:K"
+        """Find row number by report ID (stored in Match ID column)."""
+        range_name = f"{sheet_name}!A:O"
         
         result = self.service.spreadsheets().values().get(
             spreadsheetId=spreadsheet_id,
@@ -233,22 +319,57 @@ class SheetsService:
         # Search for report_id in Match ID column (column B, index 1)
         for i, row in enumerate(values):
             if len(row) > 1 and row[1] == report_id:
-                return i + 1  # Convert to 1-indexed row number
+                return i + 1
         
         return None
     
+    def delete_row(self, spreadsheet_id: str, sheet_name: str, row_number: int) -> bool:
+        """Delete a row from the sheet by row number. Returns True if successful."""
+        try:
+            sheet_id = self._get_sheet_id(spreadsheet_id, sheet_name)
+            
+            request = {
+                'deleteDimension': {
+                    'range': {
+                        'sheetId': sheet_id,
+                        'dimension': 'ROWS',
+                        'startIndex': row_number - 1,
+                        'endIndex': row_number
+                    }
+                }
+            }
+            
+            self.service.spreadsheets().batchUpdate(
+                spreadsheetId=spreadsheet_id,
+                body={'requests': [request]}
+            ).execute()
+            return True
+        except HttpError as e:
+            import logging
+            logging.warning(f"Could not delete row {row_number}: {e}")
+            return False
+    
     def transform_match_report(self, report_data: Dict[str, Any]) -> List[Any]:
-        """Transform Firestore match report to row format."""
+        """Transform Firestore match report to row format - matches scouting wizard schema."""
         game_data = report_data.get('gameData', {})
         
         # Handle timestamp formatting
         created_at = report_data.get('createdAt', '')
         if isinstance(created_at, datetime):
-            timestamp_str = created_at.isoformat()
+            timestamp_str = created_at.strftime('%Y-%m-%d %H:%M:%S')
         elif hasattr(created_at, 'isoformat'):
             timestamp_str = created_at.isoformat()
         else:
             timestamp_str = str(created_at)
+        
+        # Format images as comma-separated list
+        images = report_data.get('images', [])
+        images_str = ', '.join(images) if images else ''
+        
+        # Climb level mapping
+        climb_level = game_data.get('teleop_tower_level', 0)
+        climb_map = {0: 'No Climb', 1: 'Level 1', 2: 'Level 2', 3: 'Level 3'}
+        climb_str = climb_map.get(climb_level, f'Level {climb_level}')
         
         return [
             timestamp_str,
@@ -258,10 +379,14 @@ class SheetsService:
             report_data.get('alliance', ''),
             report_data.get('scouterName', ''),
             game_data.get('auto_fuel', 0),
+            'Yes' if game_data.get('auto_tower_l1', False) else 'No',
             game_data.get('teleop_fuel', 0),
-            game_data.get('teleop_tower_level', 0),
+            climb_str,
+            f"{game_data.get('defense_rating', 0)}/5",
+            f"{game_data.get('driver_skill', 0)}/5",
             'Yes' if report_data.get('robotDied') else 'No',
-            report_data.get('comments', '')
+            report_data.get('comments', ''),
+            images_str
         ]
 
 

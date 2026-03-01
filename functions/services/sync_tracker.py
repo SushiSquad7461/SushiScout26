@@ -89,3 +89,10 @@ class SyncTracker:
             'rowNumber': row_number,
             'lastUpdated': firestore.SERVER_TIMESTAMP
         })
+    
+    @staticmethod
+    def delete_sync_record(event_id: str, report_id: str):
+        """Delete a sync record when a report is deleted."""
+        db = _get_db()
+        doc_ref = db.collection('sync_tracking').document(f"{event_id}_{report_id}")
+        doc_ref.delete()
