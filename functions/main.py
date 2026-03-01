@@ -240,4 +240,47 @@ def backfill_event_to_sheets(req: https_fn.CallableRequest) -> dict:
         )
 
 
+@https_fn.on_call(secrets=["GOOGLE_SHEETS_CREDENTIALS", "MASTER_SPREADSHEET_ID"])
+def update_match_from_sheets(req: https_fn.CallableRequest) -> dict:
+    """Receive match updates from Google Sheets via Apps Script.
+    
+    Called by Apps Script when a row is edited in Sheets.
+    """
+    try:
+        event_id = req.data.get('eventId')
+        report_id = req.data.get('reportId')
+        match_data = req.data.get('data', {})
+        
+        if not event_id or not report_id:
+            raise https_fn.HttpsError(
+                code=https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+                message="Missing eventId or reportId"
+            )
+        
+        logger.info(f"Updating match from Sheets: {event_id}/{report_id}")
+        
+        db = get_db()
+        doc_ref = db.collection(f'events/{event_id}/matches').document(report_id)
+        
+        # Merge update with existing data
+        doc_ref.set(match_data, merge=True)
+        
+        logger.info(f"Successfully updated {report_id} in Firestore from Sheets")
+        
+        return {
+            'success': True,
+            'eventId': event_id,
+            'reportId': report_id
+        }
+        
+    except https_fn.HttpsError:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to update match from Sheets: {str(e)}")
+        raise https_fn.HttpsError(
+            code=https_fn.FunctionsErrorCode.INTERNAL,
+            message=f"Failed to update match: {str(e)}"
+        )
+
+
 
