@@ -21,8 +21,8 @@ const PROJECT_ID = 'sushiscout26-a8f5d';
  */
 function getCallableUrl() {
   const scriptProps = PropertiesService.getScriptProperties();
-  return scriptProps.getProperty('CALLABLE_FUNCTION_URL') || 
-         `https://us-central1-${PROJECT_ID}.cloudfunctions.net/updateMatchFromSheets`;
+  return scriptProps.getProperty('SYNC_FUNCTION_URL') || 
+         'https://us-central1-sushiscout26-a8f5d.cloudfunctions.net/sync_from_sheets_http';
 }
 
 /**

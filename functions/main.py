@@ -1,8 +1,10 @@
 """Main entry point for Firebase Cloud Functions."""
 
 import os
-from firebase_functions import https_fn, firestore_fn, logger
+from firebase_functions import https_fn, firestore_fn, logger, options
+from firebase_functions.options import CorsOptions
 from firebase_admin import initialize_app, firestore
+from flask import jsonify, Request, Response
 
 # Initialize Firebase Admin
 initialize_app()
@@ -283,4 +285,37 @@ def update_match_from_sheets(req: https_fn.CallableRequest) -> dict:
         )
 
 
-
+@https_fn.on_request(secrets=["GOOGLE_SHEETS_CREDENTIALS", "MASTER_SPREADSHEET_ID"])
+def sync_from_sheets_http(req: Request) -> Response:
+    """HTTP endpoint for Sheets to Firestore sync.
+    
+    Allows Apps Script to call without Firebase Auth.
+    Use: POST with JSON body {eventId, reportId, data}
+    """
+    try:
+        req_data = req.get_json(silent=True) or {}
+        
+        event_id = req_data.get('eventId')
+        report_id = req_data.get('reportId')
+        match_data = req_data.get('data', {})
+        
+        if not event_id or not report_id:
+            return jsonify({'error': 'Missing eventId or reportId'}), 400
+        
+        logger.info(f"HTTP: Updating match from Sheets: {event_id}/{report_id}")
+        
+        db = get_db()
+        doc_ref = db.collection(f'events/{event_id}/matches').document(report_id)
+        doc_ref.set(match_data, merge=True)
+        
+        logger.info(f"Successfully updated {report_id} in Firestore from Sheets")
+        
+        return jsonify({
+            'success': True,
+            'eventId': event_id,
+            'reportId': report_id
+        })
+        
+    except Exception as e:
+        logger.error(f"HTTP: Failed to update match from Sheets: {str(e)}")
+        return jsonify({'error': str(e)}), 500
