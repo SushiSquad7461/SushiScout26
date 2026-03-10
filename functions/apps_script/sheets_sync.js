@@ -6,24 +6,13 @@
  * 2. Extensions → Apps Script
  * 3. Paste this code
  * 4. Save and run onOpen() once to create menu
- * 5. In Project Settings → Script Properties, add:
- *    - FIREBASE_PROJECT_ID: sushiscout26-a8f5d
- *    - CALLABLE_FUNCTION_URL: https://us-central1-sushiscout26-a8f5d.cloudfunctions.net/updateMatchFromSheets
  * 
- * Note: For production, add API key protection or use Firebase Auth
+ * No configuration needed - uses default Firebase project
  */
 
-// Configuration
 const PROJECT_ID = 'sushiscout26-a8f5d';
-
-/**
- * Get the callable function URL from script properties
- */
-function getCallableUrl() {
-  const scriptProps = PropertiesService.getScriptProperties();
-  return scriptProps.getProperty('SYNC_FUNCTION_URL') || 
-         'https://us-central1-sushiscout26-a8f5d.cloudfunctions.net/sync_from_sheets_http';
-}
+const SYNC_URL = 'https://us-central1-sushiscout26-a8f5d.cloudfunctions.net/sync_from_sheets_http';
+const BACKFILL_URL = 'https://us-central1-sushiscout26-a8f5d.cloudfunctions.net/backfill_event_to_sheets';
 
 /**
  * Called when sheet is edited
@@ -32,18 +21,15 @@ function onEdit(e) {
   const sheet = e.source.getActiveSheet();
   const range = e.range;
   
-  // Skip if header row or empty
   if (range.getRow() <= 1 || range.getNumRows() === 0) {
     return;
   }
   
-  // Get event name from sheet name
   const eventName = sheet.getName();
   if (!eventName || eventName === 'Master' || eventName.includes('Template')) {
     return;
   }
   
-  // Get the match ID from column B (Match ID)
   const matchIdCell = sheet.getRange(range.getRow(), 2, 1, 1);
   const matchId = matchIdCell.getValue();
   
@@ -52,28 +38,23 @@ function onEdit(e) {
   }
   
   Logger.log(`Sheet edited: Event=${eventName}, Match=${matchId}, Row=${range.getRow()}`);
-  
-  // Trigger sync to Firestore
   syncRowToFirestore(sheet, range.getRow(), eventName, matchId);
 }
 
 /**
- * Sync a single row to Firestore via Callable Function
+ * Sync a single row to Firestore
  */
 function syncRowToFirestore(sheet, rowNum, eventName, matchId) {
   try {
-    // Get all column values
     const lastCol = sheet.getLastColumn();
     const headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
     const values = sheet.getRange(rowNum, 1, 1, lastCol).getValues()[0];
     
-    // Build match data object
     const matchData = {};
     for (let i = 0; i < headers.length; i++) {
       const header = headers[i];
       const value = values[i];
       
-      // Map sheet columns to Firestore fields
       switch (header) {
         case 'Match ID':
           matchData.matchId = String(value);
@@ -105,11 +86,7 @@ function syncRowToFirestore(sheet, rowNum, eventName, matchId) {
         case 'Climb Level':
           matchData.gameData = matchData.gameData || {};
           const climbVal = String(value);
-          if (climbVal.includes('Level')) {
-            matchData.gameData.teleop_tower_level = parseInt(climbVal.replace('Level ', '')) || 0;
-          } else {
-            matchData.gameData.teleop_tower_level = parseInt(value) || 0;
-          }
+          matchData.gameData.teleop_tower_level = parseInt(climbVal.replace('Level ', '')) || 0;
           break;
         case 'Defense Rating':
           matchData.gameData = matchData.gameData || {};
@@ -131,9 +108,6 @@ function syncRowToFirestore(sheet, rowNum, eventName, matchId) {
       }
     }
     
-    // Call Firebase Callable Function
-    const url = getCallableUrl();
-    
     const payload = {
       eventId: eventName,
       reportId: matchId,
@@ -142,14 +116,12 @@ function syncRowToFirestore(sheet, rowNum, eventName, matchId) {
     
     const options = {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
+      headers: { 'Content-Type': 'application/json' },
       payload: JSON.stringify(payload),
       muteHttpExceptions: true
     };
     
-    const response = UrlFetchApp.fetch(url, options);
+    const response = UrlFetchApp.fetch(SYNC_URL, options);
     const responseCode = response.getResponseCode();
     
     if (responseCode === 200) {
@@ -164,10 +136,9 @@ function syncRowToFirestore(sheet, rowNum, eventName, matchId) {
 }
 
 /**
- * Manual sync - trigger full sync from Sheets to Firestore
- * Available from the menu
+ * Sync all rows from Sheets to Firestore
  */
-function manualSyncAll() {
+function syncAllRows() {
   const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
   const sheets = spreadsheet.getSheets();
   
@@ -184,7 +155,6 @@ function manualSyncAll() {
     const lastRow = sheet.getLastRow();
     if (lastRow <= 1) continue;
     
-    // Get all match IDs in column B (skip header)
     for (let rowNum = 2; rowNum <= lastRow; rowNum++) {
       const matchId = sheet.getRange(rowNum, 2, 1, 1).getValue();
       if (matchId) {
@@ -194,8 +164,62 @@ function manualSyncAll() {
     }
   }
   
-  Logger.log(`Manual sync complete. Synced ${syncedCount} rows.`);
+  Logger.log(`Sync complete. Synced ${syncedCount} rows.`);
   SpreadsheetApp.getUi().alert(`Sync complete! Synced ${syncedCount} rows to Firestore.`);
+}
+
+/**
+ * Backfill: Sync from Firestore to Sheets
+ */
+function backfillFromFirestore() {
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  const sheets = spreadsheet.getSheets();
+  
+  // Let user select which event to backfill
+  const sheetNames = sheets
+    .map(s => s.getName())
+    .filter(n => n !== 'Master' && !n.includes('Template'));
+  
+  if (sheetNames.length === 0) {
+    SpreadsheetApp.getUi().alert('No event sheets found.');
+    return;
+  }
+  
+  // Simple prompt for event name
+  const eventName = SpreadsheetApp.getUi().prompt(
+    'Backfill from Firestore',
+    'Enter the event ID to backfill (e.g., 2026TEST):',
+    SpreadsheetApp.getUi().ButtonSet.OK_CANCEL
+  ).getResponseText();
+  
+  if (!eventName) return;
+  
+  SpreadsheetApp.getUi().alert(`Starting backfill for event: ${eventName}\n\nThis will take a moment...`);
+  
+  try {
+    const options = {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      payload: JSON.stringify({ eventId: eventName }),
+      muteHttpExceptions: true
+    };
+    
+    const response = UrlFetchApp.fetch(BACKFILL_URL, options);
+    const responseCode = response.getResponseCode();
+    const responseText = response.getContentText();
+    
+    if (responseCode === 200) {
+      const result = JSON.parse(responseText);
+      SpreadsheetApp.getUi().alert(
+        `Backfill complete!\n\nSynced: ${result.syncedCount}\nFailed: ${result.failedCount}`
+      );
+    } else {
+      SpreadsheetApp.getUi().alert(`Backfill failed: ${responseText}`);
+    }
+    
+  } catch (error) {
+    SpreadsheetApp.getUi().alert(`Error: ${error.message}`);
+  }
 }
 
 /**
@@ -204,34 +228,7 @@ function manualSyncAll() {
 function onOpen() {
   const ui = SpreadsheetApp.getUi();
   ui.createMenu('🔥 Firestore Sync')
-    .addItem('Sync All Rows to Firestore', 'manualSyncAll')
-    .addItem('Setup Configuration', 'setupConfig')
+    .addItem('Sync Sheets → Firestore', 'syncAllRows')
+    .addItem('Backfill Firestore → Sheets', 'backfillFromFirestore')
     .addToUi();
-}
-
-/**
- * Setup dialog for configuration
- */
-function setupConfig() {
-  const html = HtmlService.createHtmlOutput(`
-    <h2>Setup Firestore Sync</h2>
-    <p>1. Go to Project Settings → Script Properties</p>
-    <p>2. Add these properties:</p>
-    <ul>
-      <li>FIREBASE_PROJECT_ID: sushiscout26-a8f5d</li>
-      <li>CALLABLE_FUNCTION_URL: https://us-central1-sushiscout26-a8f5d.cloudfunctions.net/updateMatchFromSheets</li>
-    </ul>
-    <p>Or click below to auto-configure:</p>
-    <button onclick="autoSetup()">Auto Setup</button>
-    <script>
-      function autoSetup() {
-        const props = PropertiesService.getScriptProperties();
-        props.setProperty('FIREBASE_PROJECT_ID', 'sushiscout26-a8f5d');
-        props.setProperty('CALLABLE_FUNCTION_URL', 'https://us-central1-sushiscout26-a8f5d.cloudfunctions.net/updateMatchFromSheets');
-        alert('Configuration saved!');
-      }
-    </script>
-  `);
-  
-  SpreadsheetApp.getUi().showModalDialog(html, 'Setup Firestore Sync');
 }
