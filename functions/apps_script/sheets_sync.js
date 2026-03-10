@@ -13,6 +13,7 @@
 const PROJECT_ID = 'sushiscout26-a8f5d';
 const SYNC_URL = 'https://us-central1-sushiscout26-a8f5d.cloudfunctions.net/sync_from_sheets_http';
 const BACKFILL_URL = 'https://us-central1-sushiscout26-a8f5d.cloudfunctions.net/backfill_event_to_sheets';
+const API_KEY = 'sushiscout26-sheets-api-key-2026';
 
 /**
  * Called when sheet is edited
@@ -116,7 +117,10 @@ function syncRowToFirestore(sheet, rowNum, eventName, matchId) {
     
     const options = {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'X-API-Key': API_KEY
+      },
       payload: JSON.stringify(payload),
       muteHttpExceptions: true
     };
@@ -199,7 +203,10 @@ function backfillFromFirestore() {
   try {
     const options = {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'X-API-Key': API_KEY
+      },
       payload: JSON.stringify({ eventId: eventName }),
       muteHttpExceptions: true
     };

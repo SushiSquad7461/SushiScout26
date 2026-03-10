@@ -285,13 +285,23 @@ def update_match_from_sheets(req: https_fn.CallableRequest) -> dict:
         )
 
 
-@https_fn.on_request(secrets=["GOOGLE_SHEETS_CREDENTIALS", "MASTER_SPREADSHEET_ID"])
+@https_fn.on_request(
+    secrets=["GOOGLE_SHEETS_CREDENTIALS", "MASTER_SPREADSHEET_ID"],
+    cors=options.CorsOptions(cors_origins="*", cors_methods=["get", "post"])
+)
 def sync_from_sheets_http(req: Request) -> Response:
     """HTTP endpoint for Sheets to Firestore sync.
     
-    Allows Apps Script to call without Firebase Auth.
     Use: POST with JSON body {eventId, reportId, data}
+    Requires X-API-Key header for authentication.
     """
+    # Check API key
+    api_key = req.headers.get('X-API-Key')
+    expected_key = os.environ.get('SYNC_API_KEY', 'sushiscout26-default-key')
+    
+    if api_key != expected_key:
+        return jsonify({'error': 'Unauthorized'}), 401
+    
     try:
         req_data = req.get_json(silent=True) or {}
         
