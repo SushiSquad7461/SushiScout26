@@ -10,7 +10,7 @@ from googleapiclient.errors import HttpError
 
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
 
-# Column headers for FRC match reports - matches scouting wizard schema
+# Column headers for FRC match reports
 FRC_HEADERS = [
     "Timestamp",
     "Match ID",
@@ -25,8 +25,29 @@ FRC_HEADERS = [
     "Defense Rating",
     "Driver Skill",
     "Robot Died",
-    "Comments",
-    "Images"
+    "Trench Traverse",
+    "Bump Traverse",
+    "Shooting Close",
+    "Shooting Mid",
+    "Shooting Far",
+    "Comments"
+]
+
+# Column headers for FTC match reports
+FTC_HEADERS = [
+    "Timestamp",
+    "Match ID",
+    "Match #",
+    "Team #",
+    "Alliance",
+    "Scouter",
+    "Auto Points",
+    "Teleop Points",
+    "Endgame Points",
+    "Base Points",
+    "Driver Quality",
+    "Robot Died",
+    "Comments"
 ]
 
 
@@ -41,8 +62,14 @@ class SheetsService:
         )
         self.service = build('sheets', 'v4', credentials=credentials)
     
-    def get_or_create_sheet(self, spreadsheet_id: str, sheet_name: str) -> int:
+    def get_headers(self, program_type: str = 'FRC') -> List[str]:
+        """Get column headers based on program type."""
+        return FTC_HEADERS if program_type == 'FTC' else FRC_HEADERS
+    
+    def get_or_create_sheet(self, spreadsheet_id: str, sheet_name: str, program_type: str = 'FRC') -> int:
         """Get sheet ID by name, create if doesn't exist. Returns sheet ID."""
+        headers = self.get_headers(program_type)
+        
         try:
             spreadsheet = self.service.spreadsheets().get(
                 spreadsheetId=spreadsheet_id
@@ -52,7 +79,7 @@ class SheetsService:
             for sheet in spreadsheet.get('sheets', []):
                 if sheet['properties']['title'] == sheet_name:
                     # Sheet exists, ensure it has enough columns
-                    self._ensure_column_count(spreadsheet_id, sheet['properties']['sheetId'], len(FRC_HEADERS))
+                    self._ensure_column_count(spreadsheet_id, sheet['properties']['sheetId'], len(headers))
                     return sheet['properties']['sheetId']
             
             # Create new sheet
@@ -63,7 +90,7 @@ class SheetsService:
                             'title': sheet_name,
                             'gridProperties': {
                                 'rowCount': 1000,
-                                'columnCount': len(FRC_HEADERS)
+                                'columnCount': len(headers)
                             }
                         }
                     }
@@ -78,7 +105,7 @@ class SheetsService:
             sheet_id = result['replies'][0]['addSheet']['properties']['sheetId']
             
             # Add headers to new sheet
-            self._write_headers(spreadsheet_id, sheet_name)
+            self._write_headers(spreadsheet_id, sheet_name, program_type)
             
             return sheet_id
             
@@ -115,11 +142,12 @@ class SheetsService:
                     ).execute()
                 break
     
-    def _write_headers(self, spreadsheet_id: str, sheet_name: str):
+    def _write_headers(self, spreadsheet_id: str, sheet_name: str, program_type: str = 'FRC'):
         """Write header row to sheet."""
+        headers = self.get_headers(program_type)
         range_name = f"{sheet_name}!1:1"
         body = {
-            'values': [FRC_HEADERS]
+            'values': [headers]
         }
         
         self.service.spreadsheets().values().update(
@@ -130,12 +158,12 @@ class SheetsService:
         ).execute()
         
         # Format headers as bold with color
-        self._format_headers(spreadsheet_id, sheet_name)
+        self._format_headers(spreadsheet_id, sheet_name, len(headers))
         
         # Set column widths
-        self._set_column_widths(spreadsheet_id, sheet_name)
+        self._set_column_widths(spreadsheet_id, sheet_name, program_type)
     
-    def _format_headers(self, spreadsheet_id: str, sheet_name: str):
+    def _format_headers(self, spreadsheet_id: str, sheet_name: str, column_count: int):
         """Apply bold formatting and background color to header row."""
         sheet_id = self._get_sheet_id(spreadsheet_id, sheet_name)
         
@@ -148,7 +176,7 @@ class SheetsService:
                         'startRowIndex': 0,
                         'endRowIndex': 1,
                         'startColumnIndex': 0,
-                        'endColumnIndex': len(FRC_HEADERS)
+                        'endColumnIndex': column_count
                     },
                     'cell': {
                         'userEnteredFormat': {
@@ -171,8 +199,8 @@ class SheetsService:
                         'sheetId': sheet_id,
                         'startRowIndex': 1,
                         'endRowIndex': 1000,
-                        'startColumnIndex': len(FRC_HEADERS) - 2,  # Comments column
-                        'endColumnIndex': len(FRC_HEADERS) - 1
+                        'startColumnIndex': column_count - 2,  # Comments column
+                        'endColumnIndex': column_count - 1
                     },
                     'cell': {
                         'userEnteredFormat': {
@@ -189,15 +217,18 @@ class SheetsService:
             body={'requests': requests}
         ).execute()
     
-    def _set_column_widths(self, spreadsheet_id: str, sheet_name: str):
+    def _set_column_widths(self, spreadsheet_id: str, sheet_name: str, program_type: str = 'FRC'):
         """Set appropriate column widths."""
         try:
             sheet_id = self._get_sheet_id(spreadsheet_id, sheet_name)
             
+            # FRC has 19 columns, FTC has 13 columns
+            frc_widths = [160, 140, 60, 70, 70, 100, 80, 90, 90, 90, 100, 100, 85, 90, 90, 90, 90, 90, 250]
+            ftc_widths = [160, 140, 60, 70, 70, 100, 80, 90, 90, 90, 100, 85, 250]
+            widths = ftc_widths if program_type == 'FTC' else frc_widths
+            
             requests = []
-            for col_idx, width in enumerate([
-                160, 140, 60, 70, 70, 100, 80, 90, 90, 90, 100, 100, 85, 250, 80
-            ]):
+            for col_idx, width in enumerate(widths):
                 requests.append({
                     'updateDimensionProperties': {
                         'range': {
@@ -233,7 +264,7 @@ class SheetsService:
     
     def append_row(self, spreadsheet_id: str, sheet_name: str, row_data: List[Any]) -> int:
         """Append a row to the sheet. Returns the row number (1-indexed)."""
-        range_name = f"{sheet_name}!A:O"
+        range_name = f"{sheet_name}!A:R"
         
         body = {
             'values': [row_data]
@@ -256,7 +287,7 @@ class SheetsService:
         if not rows:
             return 0
         
-        range_name = f"{sheet_name}!A:O"
+        range_name = f"{sheet_name}!A:R"
         body = {'values': rows}
         
         result = self.service.spreadsheets().values().append(
@@ -307,7 +338,7 @@ class SheetsService:
     
     def find_row_by_report_id(self, spreadsheet_id: str, sheet_name: str, report_id: str) -> Optional[int]:
         """Find row number by report ID (stored in Match ID column)."""
-        range_name = f"{sheet_name}!A:O"
+        range_name = f"{sheet_name}!A:R"
         
         result = self.service.spreadsheets().values().get(
             spreadsheetId=spreadsheet_id,
@@ -350,8 +381,9 @@ class SheetsService:
             return False
     
     def transform_match_report(self, report_data: Dict[str, Any]) -> List[Any]:
-        """Transform Firestore match report to row format - matches scouting wizard schema."""
+        """Transform Firestore match report to row format based on program type."""
         game_data = report_data.get('gameData', {})
+        program_type = report_data.get('programType', 'FRC')
         
         # Handle timestamp formatting
         created_at = report_data.get('createdAt', '')
@@ -362,10 +394,13 @@ class SheetsService:
         else:
             timestamp_str = str(created_at)
         
-        # Format images as comma-separated list
-        images = report_data.get('images', [])
-        images_str = ', '.join(images) if images else ''
-        
+        if program_type == 'FTC':
+            return self._transform_ftc_report(report_data, game_data, timestamp_str)
+        else:
+            return self._transform_frc_report(report_data, game_data, timestamp_str)
+    
+    def _transform_frc_report(self, report_data: Dict[str, Any], game_data: Dict[str, Any], timestamp_str: str) -> List[Any]:
+        """Transform FRC match report to row format."""
         # Climb level mapping
         climb_level = game_data.get('teleop_tower_level', 0)
         climb_map = {0: 'No Climb', 1: 'Level 1', 2: 'Level 2', 3: 'Level 3'}
@@ -384,9 +419,31 @@ class SheetsService:
             climb_str,
             f"{game_data.get('defense_rating', 0)}/5",
             f"{game_data.get('driver_skill', 0)}/5",
-            'Yes' if report_data.get('robotDied') else 'No',
-            report_data.get('comments', ''),
-            images_str
+            'Yes' if game_data.get('robot_died', False) else 'No',
+            'Yes' if game_data.get('trench_traverse', False) else 'No',
+            'Yes' if game_data.get('bump_traverse', False) else 'No',
+            'Yes' if game_data.get('shooting_range_close', False) else 'No',
+            'Yes' if game_data.get('shooting_range_mid', False) else 'No',
+            'Yes' if game_data.get('shooting_range_far', False) else 'No',
+            report_data.get('comments', '')
+        ]
+    
+    def _transform_ftc_report(self, report_data: Dict[str, Any], game_data: Dict[str, Any], timestamp_str: str) -> List[Any]:
+        """Transform FTC match report to row format."""
+        return [
+            timestamp_str,
+            report_data.get('matchId', ''),
+            report_data.get('matchNumber', 0),
+            report_data.get('teamNumber', 0),
+            report_data.get('alliance', ''),
+            report_data.get('scouterName', ''),
+            game_data.get('auto_points', 0),
+            game_data.get('teleop_points', 0),
+            game_data.get('endgame_points', 0),
+            game_data.get('base_points', 0),
+            f"{game_data.get('driver_quality', 0)}/5",
+            'Yes' if game_data.get('robot_died', False) else 'No',
+            report_data.get('comments', '')
         ]
 
 

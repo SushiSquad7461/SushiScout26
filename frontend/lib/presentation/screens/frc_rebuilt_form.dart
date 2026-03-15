@@ -9,7 +9,6 @@ import '../../data/repositories/hybrid_repository.dart';
 import '../widgets/scouting_form_widget.dart';
 import '../widgets/match_timer.dart';
 import '../widgets/counter_card.dart';
-import '../widgets/image_picker_widget.dart';
 import '../../data/local/preferences.dart';
 import '../theme/app_theme.dart';
 
@@ -48,13 +47,17 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm> {
   // Teleop
   int _teleopFuel = 0;
   int _teleopTower = 0;
+  bool _trenchTraverse = false;
+  bool _bumpTraverse = false;
+  bool _shootingRangeClose = false;
+  bool _shootingRangeMid = false;
+  bool _shootingRangeFar = false;
 
   // Qualitative
   int _defense = 0;
   int _skill = 0;
   bool _died = false;
   final _commentsCtrl = TextEditingController();
-  List<String> _images = [];
 
   @override
   void initState() {
@@ -374,6 +377,65 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm> {
             controlAffinity: ListTileControlAffinity.leading,
           ),
         ),
+
+        const SizedBox(height: AppTheme.spacingMd),
+
+        Text("Mobility", style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: AppTheme.spacingSm),
+
+        Card(
+          child: Column(
+            children: [
+              CheckboxListTile(
+                title: const Text("Trench Traverse"),
+                subtitle: const Text("Robot can traverse the trench"),
+                value: _trenchTraverse,
+                onChanged: (v) => setState(() => _trenchTraverse = v!),
+                controlAffinity: ListTileControlAffinity.leading,
+              ),
+              const Divider(height: 1),
+              CheckboxListTile(
+                title: const Text("Bump Traverse"),
+                subtitle: const Text("Robot can traverse the bump"),
+                value: _bumpTraverse,
+                onChanged: (v) => setState(() => _bumpTraverse = v!),
+                controlAffinity: ListTileControlAffinity.leading,
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: AppTheme.spacingMd),
+
+        Text("Shooting Range", style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: AppTheme.spacingSm),
+
+        Card(
+          child: Column(
+            children: [
+              CheckboxListTile(
+                title: const Text("Close Range"),
+                value: _shootingRangeClose,
+                onChanged: (v) => setState(() => _shootingRangeClose = v!),
+                controlAffinity: ListTileControlAffinity.leading,
+              ),
+              const Divider(height: 1),
+              CheckboxListTile(
+                title: const Text("Mid Range"),
+                value: _shootingRangeMid,
+                onChanged: (v) => setState(() => _shootingRangeMid = v!),
+                controlAffinity: ListTileControlAffinity.leading,
+              ),
+              const Divider(height: 1),
+              CheckboxListTile(
+                title: const Text("Far Range"),
+                value: _shootingRangeFar,
+                onChanged: (v) => setState(() => _shootingRangeFar = v!),
+                controlAffinity: ListTileControlAffinity.leading,
+              ),
+            ],
+          ),
+        ),
       ],
     );
   }
@@ -431,13 +493,6 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm> {
             border: OutlineInputBorder(),
           ),
           maxLines: 3,
-        ),
-        
-        const SizedBox(height: AppTheme.spacingMd),
-        
-        ImagePickerWidget(
-          initialImages: _images,
-          onImagesChanged: (images) => _images = images,
         ),
       ],
     );
@@ -586,6 +641,12 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm> {
       'teleop_tower_level': _teleopTower,
       'defense_rating': _defense,
       'driver_skill': _skill,
+      'robot_died': _died,
+      'trench_traverse': _trenchTraverse,
+      'bump_traverse': _bumpTraverse,
+      'shooting_range_close': _shootingRangeClose,
+      'shooting_range_mid': _shootingRangeMid,
+      'shooting_range_far': _shootingRangeFar,
     };
 
     final report = MatchReport(
@@ -596,9 +657,7 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm> {
       alliance: _alliance,
       scouterName: _scouterNameCtrl.text,
       gameData: gameData,
-      robotDied: _died,
       comments: _commentsCtrl.text,
-      images: _images,
       createdAt: DateTime.now(),
       isSynced: false,
     );

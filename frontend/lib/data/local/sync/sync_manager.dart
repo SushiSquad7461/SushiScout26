@@ -151,10 +151,8 @@ class SyncManager {
           teamNumber: match.teamNumber,
           alliance: match.alliance,
           scouterName: match.scouterName,
-          gameData: jsonDecode(match.gameDataJson),
-          robotDied: match.robotDied,
+          gameData: (jsonDecode(match.gameDataJson) as Map<String, dynamic>)..['robot_died'] = match.robotDied,
           comments: match.comments,
-          images: [], // Images aren't stored in local DB yet
           createdAt: match.createdAt,
           isSynced: false,
           isDeleted: match.isDeleted,

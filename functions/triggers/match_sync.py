@@ -34,11 +34,14 @@ def sync_report_to_sheets(event_id: str, report_id: str, report_data: dict, is_u
             logger.error("MASTER_SPREADSHEET_ID not configured")
             return
         
+        # Get program type from report data, default to FRC
+        program_type = report_data.get('programType', 'FRC')
+        
         # Sheet name based on event ID
         sheet_name = event_id
         
         # Ensure sheet exists (creates if not)
-        sheets_service.get_or_create_sheet(spreadsheet_id, sheet_name)
+        sheets_service.get_or_create_sheet(spreadsheet_id, sheet_name, program_type)
         
         # Transform data
         row_data = sheets_service.transform_match_report(report_data)

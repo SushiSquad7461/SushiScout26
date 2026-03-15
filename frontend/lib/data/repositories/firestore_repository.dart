@@ -54,7 +54,15 @@ class FirestoreRepository implements ScoutingRepository {
   Future<void> createMatch(String eventId, MatchReport match) async {
     debugPrint('Writing match to: matches/${match.id}');
 
+    // Get programType from event
+    final event = await getEvent(eventId);
+    final programType = event?.programType ?? 'FRC';
+
     await _ensureEventExists(eventId);
+
+    // Merge robot_died into gameData for Firestore
+    final gameDataWithRobotDied = Map<String, dynamic>.from(match.gameData);
+    gameDataWithRobotDied['robot_died'] = match.robotDied;
 
     final matchWithEventId = MatchReport(
       id: match.id,
@@ -63,15 +71,14 @@ class FirestoreRepository implements ScoutingRepository {
       teamNumber: match.teamNumber,
       alliance: match.alliance,
       scouterName: match.scouterName,
-      gameData: match.gameData,
-      robotDied: match.robotDied,
+      gameData: gameDataWithRobotDied,
       comments: match.comments,
-      images: match.images,
       createdAt: match.createdAt,
       isSynced: match.isSynced,
       isDeleted: match.isDeleted,
       eventId: eventId,
       teamId: match.teamId,
+      programType: programType,
     );
 
     await _firestore
@@ -114,6 +121,15 @@ class FirestoreRepository implements ScoutingRepository {
   @override
   Future<void> updateMatch(String eventId, MatchReport match) async {
     debugPrint('Updating match at: matches/${match.id}');
+    
+    // Get programType from event
+    final event = await getEvent(eventId);
+    final programType = event?.programType ?? 'FRC';
+    
+    // Merge robot_died into gameData for Firestore
+    final gameDataWithRobotDied = Map<String, dynamic>.from(match.gameData);
+    gameDataWithRobotDied['robot_died'] = match.robotDied;
+    
     final matchWithEventId = MatchReport(
       id: match.id,
       matchId: match.matchId,
@@ -121,15 +137,14 @@ class FirestoreRepository implements ScoutingRepository {
       teamNumber: match.teamNumber,
       alliance: match.alliance,
       scouterName: match.scouterName,
-      gameData: match.gameData,
-      robotDied: match.robotDied,
+      gameData: gameDataWithRobotDied,
       comments: match.comments,
-      images: match.images,
       createdAt: match.createdAt,
       isSynced: match.isSynced,
       isDeleted: match.isDeleted,
       eventId: eventId,
       teamId: match.teamId,
+      programType: programType,
     );
     await _firestore
         .collection('matches')

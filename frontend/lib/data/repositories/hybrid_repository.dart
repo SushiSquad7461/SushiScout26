@@ -443,10 +443,8 @@ class HybridRepository implements ScoutingRepository {
       teamNumber: local.teamNumber,
       alliance: local.alliance,
       scouterName: local.scouterName,
-      gameData: jsonDecode(local.gameDataJson),
-      robotDied: local.robotDied,
+      gameData: (jsonDecode(local.gameDataJson) as Map<String, dynamic>)..['robot_died'] = local.robotDied,
       comments: local.comments,
-      images: [], // Local table might not have images column yet?
       createdAt: local.createdAt,
       isSynced: local.isSynced,
       isDeleted: local.isDeleted,

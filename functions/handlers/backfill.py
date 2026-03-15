@@ -53,9 +53,17 @@ def backfill_event_to_sheets(req: https_fn.CallableRequest) -> dict:
                 message="MASTER_SPREADSHEET_ID not configured"
             )
         
+        # Get program type from event
+        db = get_db()
+        event_doc = db.collection('events').document(event_id).get()
+        program_type = 'FRC'
+        if event_doc.exists:
+            event_data = event_doc.to_dict()
+            program_type = event_data.get('programType', 'FRC')
+        
         sheet_name = event_id
         
-        sheets_service.get_or_create_sheet(spreadsheet_id, sheet_name)
+        sheets_service.get_or_create_sheet(spreadsheet_id, sheet_name, program_type)
         
         db = get_db()
         reports_ref = db.collection('matches').where('eventId', '==', event_id)

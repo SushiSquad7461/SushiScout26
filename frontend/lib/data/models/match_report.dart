@@ -7,15 +7,21 @@ class MatchReport {
   final int teamNumber;
   final String alliance; // 'Red' or 'Blue'
   final String scouterName;
-  final Map<String, dynamic> gameData; // Polymorphic data
-  final bool robotDied;
+  final Map<String, dynamic> gameData; // Includes robot_died, auto_fuel, teleop_fuel, etc.
   final String comments;
-  final List<String> images;
   final DateTime createdAt;
   final bool isSynced;
   final bool isDeleted;
   final String eventId;
   final String teamId;
+  final String programType; // 'FRC' or 'FTC'
+
+  bool get robotDied => gameData['robot_died'] ?? false;
+  bool get trenchTraverse => gameData['trench_traverse'] ?? false;
+  bool get bumpTraverse => gameData['bump_traverse'] ?? false;
+  bool get shootingRangeClose => gameData['shooting_range_close'] ?? false;
+  bool get shootingRangeMid => gameData['shooting_range_mid'] ?? false;
+  bool get shootingRangeFar => gameData['shooting_range_far'] ?? false;
 
   MatchReport({
     required this.id,
@@ -25,18 +31,18 @@ class MatchReport {
     required this.alliance,
     required this.scouterName,
     required this.gameData,
-    this.robotDied = false,
     this.comments = '',
-    this.images = const [],
     required this.createdAt,
     this.isSynced = false,
     this.isDeleted = false,
     this.eventId = '',
     this.teamId = '',
+    this.programType = 'FRC',
   });
 
   factory MatchReport.fromFirestore(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
+    final gameData = data['gameData'] as Map<String, dynamic>? ?? {};
     return MatchReport(
       id: doc.id,
       matchId: data['matchId'] ?? '',
@@ -44,19 +50,19 @@ class MatchReport {
       teamNumber: data['teamNumber'] ?? 0,
       alliance: data['alliance'] ?? 'Red',
       scouterName: data['scouterName'] ?? '',
-      gameData: data['gameData'] as Map<String, dynamic>? ?? {},
-      robotDied: data['robotDied'] ?? false,
+      gameData: gameData,
       comments: data['comments'] ?? '',
-      images: List<String>.from(data['images'] ?? []),
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       isSynced: !doc.metadata.hasPendingWrites,
       isDeleted: data['isDeleted'] ?? false,
       eventId: data['eventId'] ?? '',
       teamId: data['teamId'] ?? '',
+      programType: data['programType'] ?? 'FRC',
     );
   }
 
   factory MatchReport.fromJson(Map<String, dynamic> json) {
+    final gameData = json['gameData'] as Map<String, dynamic>? ?? {};
     return MatchReport(
       id: json['id'] ?? '',
       matchId: json['matchId'] ?? '',
@@ -64,15 +70,14 @@ class MatchReport {
       teamNumber: json['teamNumber'] ?? 0,
       alliance: json['alliance'] ?? 'Red',
       scouterName: json['scouterName'] ?? '',
-      gameData: json['gameData'] as Map<String, dynamic>? ?? {},
-      robotDied: json['robotDied'] ?? false,
+      gameData: gameData,
       comments: json['comments'] ?? '',
-      images: List<String>.from(json['images'] ?? []),
       createdAt: DateTime.parse(json['createdAt'] ?? DateTime.now().toIso8601String()),
       isSynced: json['isSynced'] ?? false,
       isDeleted: json['isDeleted'] ?? false,
       eventId: json['eventId'] ?? '',
       teamId: json['teamId'] ?? '',
+      programType: json['programType'] ?? 'FRC',
     );
   }
 
@@ -84,13 +89,12 @@ class MatchReport {
       'alliance': alliance,
       'scouterName': scouterName,
       'gameData': gameData,
-      'robotDied': robotDied,
       'comments': comments,
-      'images': images,
       'createdAt': Timestamp.fromDate(createdAt),
       'isDeleted': isDeleted,
       'eventId': eventId,
       'teamId': teamId,
+      'programType': programType,
     };
   }
 
@@ -103,14 +107,13 @@ class MatchReport {
       'alliance': alliance,
       'scouterName': scouterName,
       'gameData': gameData,
-      'robotDied': robotDied,
       'comments': comments,
-      'images': images,
       'createdAt': createdAt.toIso8601String(),
       'isSynced': isSynced,
       'isDeleted': isDeleted,
       'eventId': eventId,
       'teamId': teamId,
+      'programType': programType,
     };
   }
 }
