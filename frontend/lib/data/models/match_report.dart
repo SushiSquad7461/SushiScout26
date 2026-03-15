@@ -14,6 +14,8 @@ class MatchReport {
   final DateTime createdAt;
   final bool isSynced;
   final bool isDeleted;
+  final String eventId;
+  final String teamId;
 
   MatchReport({
     required this.id,
@@ -29,6 +31,8 @@ class MatchReport {
     required this.createdAt,
     this.isSynced = false,
     this.isDeleted = false,
+    this.eventId = '',
+    this.teamId = '',
   });
 
   factory MatchReport.fromFirestore(DocumentSnapshot doc) {
@@ -47,6 +51,8 @@ class MatchReport {
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       isSynced: !doc.metadata.hasPendingWrites,
       isDeleted: data['isDeleted'] ?? false,
+      eventId: data['eventId'] ?? '',
+      teamId: data['teamId'] ?? '',
     );
   }
 
@@ -65,6 +71,8 @@ class MatchReport {
       createdAt: DateTime.parse(json['createdAt'] ?? DateTime.now().toIso8601String()),
       isSynced: json['isSynced'] ?? false,
       isDeleted: json['isDeleted'] ?? false,
+      eventId: json['eventId'] ?? '',
+      teamId: json['teamId'] ?? '',
     );
   }
 
@@ -81,6 +89,8 @@ class MatchReport {
       'images': images,
       'createdAt': Timestamp.fromDate(createdAt),
       'isDeleted': isDeleted,
+      'eventId': eventId,
+      'teamId': teamId,
     };
   }
 
@@ -99,6 +109,8 @@ class MatchReport {
       'createdAt': createdAt.toIso8601String(),
       'isSynced': isSynced,
       'isDeleted': isDeleted,
+      'eventId': eventId,
+      'teamId': teamId,
     };
   }
 }

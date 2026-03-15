@@ -7,7 +7,15 @@ from firebase_admin import firestore
 from ..services.sheets_service import get_sheets_service
 from ..services.sync_tracker import SyncTracker
 
-db = firestore.client()
+# Lazy initialization
+_db = None
+
+def get_db():
+    """Get Firestore client with lazy initialization."""
+    global _db
+    if _db is None:
+        _db = firestore.client()
+    return _db
 
 BATCH_SIZE = 400  # Firestore batch limit is 500
 
@@ -49,7 +57,8 @@ def backfill_event_to_sheets(req: https_fn.CallableRequest) -> dict:
         
         sheets_service.get_or_create_sheet(spreadsheet_id, sheet_name)
         
-        reports_ref = db.collection(f'events/{event_id}/matches')
+        db = get_db()
+        reports_ref = db.collection('matches').where('eventId', '==', event_id)
         reports = list(reports_ref.stream())
         
         reports_to_append = []  # (row_data, report_id)

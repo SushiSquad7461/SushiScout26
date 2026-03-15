@@ -85,14 +85,24 @@ def sync_report_to_sheets(event_id: str, report_id: str, report_data: dict, is_u
         raise
 
 
-@firestore_fn.on_document_written(document="events/{eventId}/matches/{reportId}", secrets=["GOOGLE_SHEETS_CREDENTIALS", "MASTER_SPREADSHEET_ID"])
+@firestore_fn.on_document_written(document="matches/{reportId}", secrets=["GOOGLE_SHEETS_CREDENTIALS", "MASTER_SPREADSHEET_ID"])
 def on_match_written(event: firestore_fn.Event):
     """Trigger when a match report is created, updated, or deleted in Firestore."""
-    event_id = event.params['eventId']
     report_id = event.params['reportId']
     
     data_before = event.data.before.to_dict() if event.data and event.data.before else None
     data_after = event.data.after.to_dict() if event.data and event.data.after else None
+    
+    # Get eventId from the document data
+    event_id = None
+    if data_after and 'eventId' in data_after:
+        event_id = data_after['eventId']
+    elif data_before and 'eventId' in data_before:
+        event_id = data_before['eventId']
+    
+    if not event_id:
+        logger.warning(f"Match {report_id} has no eventId, skipping sync")
+        return
     
     if data_before and not data_after:
         logger.info(f"Processing deleted match report: {report_id} for event {event_id}")
@@ -175,7 +185,7 @@ def backfill_event_to_sheets(req: https_fn.CallableRequest) -> dict:
         sheets_service.get_or_create_sheet(spreadsheet_id, sheet_name)
         
         db = get_db()
-        reports_ref = db.collection(f'events/{event_id}/matches')
+        reports_ref = db.collection('matches').where('eventId', '==', event_id)
         reports = list(reports_ref.stream())
         
         synced_count = 0
@@ -262,7 +272,10 @@ def update_match_from_sheets(req: https_fn.CallableRequest) -> dict:
         logger.info(f"Updating match from Sheets: {event_id}/{report_id}")
         
         db = get_db()
-        doc_ref = db.collection(f'events/{event_id}/matches').document(report_id)
+        doc_ref = db.collection('matches').document(report_id)
+        
+        # Add eventId to the match data
+        match_data['eventId'] = event_id
         
         # Merge update with existing data
         doc_ref.set(match_data, merge=True)
@@ -315,7 +328,11 @@ def sync_from_sheets_http(req: Request) -> Response:
         logger.info(f"HTTP: Updating match from Sheets: {event_id}/{report_id}")
         
         db = get_db()
-        doc_ref = db.collection(f'events/{event_id}/matches').document(report_id)
+        doc_ref = db.collection('matches').document(report_id)
+        
+        # Add eventId to the match data
+        match_data['eventId'] = event_id
+        
         doc_ref.set(match_data, merge=True)
         
         logger.info(f"Successfully updated {report_id} in Firestore from Sheets")

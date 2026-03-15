@@ -12,9 +12,8 @@ class FirestoreRepository implements ScoutingRepository {
   @override
   Stream<List<MatchReport>> watchMatches(String eventId) {
     return _firestore
-        .collection('events')
-        .doc(eventId)
         .collection('matches')
+        .where('eventId', isEqualTo: eventId)
         .where('isDeleted', isEqualTo: false)
         .orderBy('createdAt', descending: true)
         .snapshots()
@@ -28,9 +27,8 @@ class FirestoreRepository implements ScoutingRepository {
   @override
   Stream<List<MatchReport>> watchTrash(String eventId) {
     return _firestore
-        .collection('events')
-        .doc(eventId)
         .collection('matches')
+        .where('eventId', isEqualTo: eventId)
         .where('isDeleted', isEqualTo: true)
         .orderBy('createdAt', descending: true)
         .snapshots()
@@ -44,9 +42,8 @@ class FirestoreRepository implements ScoutingRepository {
   @override
   Future<List<MatchReport>> getMatches(String eventId) async {
     final snapshot = await _firestore
-        .collection('events')
-        .doc(eventId)
         .collection('matches')
+        .where('eventId', isEqualTo: eventId)
         .where('isDeleted', isEqualTo: false)
         .orderBy('createdAt', descending: true)
         .get();
@@ -55,17 +52,32 @@ class FirestoreRepository implements ScoutingRepository {
 
   @override
   Future<void> createMatch(String eventId, MatchReport match) async {
-    debugPrint('Writing match to: events/$eventId/matches/${match.id}');
+    debugPrint('Writing match to: matches/${match.id}');
 
-    // Ensure the event document exists before creating the match
     await _ensureEventExists(eventId);
 
+    final matchWithEventId = MatchReport(
+      id: match.id,
+      matchId: match.matchId,
+      matchNumber: match.matchNumber,
+      teamNumber: match.teamNumber,
+      alliance: match.alliance,
+      scouterName: match.scouterName,
+      gameData: match.gameData,
+      robotDied: match.robotDied,
+      comments: match.comments,
+      images: match.images,
+      createdAt: match.createdAt,
+      isSynced: match.isSynced,
+      isDeleted: match.isDeleted,
+      eventId: eventId,
+      teamId: match.teamId,
+    );
+
     await _firestore
-        .collection('events')
-        .doc(eventId)
         .collection('matches')
         .doc(match.id)
-        .set(match.toFirestore(), SetOptions(merge: true));
+        .set(matchWithEventId.toFirestore(), SetOptions(merge: true));
   }
 
   /// Ensures the event document exists in Firestore.
@@ -101,21 +113,34 @@ class FirestoreRepository implements ScoutingRepository {
 
   @override
   Future<void> updateMatch(String eventId, MatchReport match) async {
-    debugPrint('Updating match at: events/$eventId/matches/${match.id}');
+    debugPrint('Updating match at: matches/${match.id}');
+    final matchWithEventId = MatchReport(
+      id: match.id,
+      matchId: match.matchId,
+      matchNumber: match.matchNumber,
+      teamNumber: match.teamNumber,
+      alliance: match.alliance,
+      scouterName: match.scouterName,
+      gameData: match.gameData,
+      robotDied: match.robotDied,
+      comments: match.comments,
+      images: match.images,
+      createdAt: match.createdAt,
+      isSynced: match.isSynced,
+      isDeleted: match.isDeleted,
+      eventId: eventId,
+      teamId: match.teamId,
+    );
     await _firestore
-        .collection('events')
-        .doc(eventId)
         .collection('matches')
         .doc(match.id)
-        .set(match.toFirestore(), SetOptions(merge: true));
+        .set(matchWithEventId.toFirestore(), SetOptions(merge: true));
   }
 
   @override
   Future<void> trashMatch(String eventId, String matchId) async {
-    debugPrint('Trashing match at: events/$eventId/matches/$matchId');
+    debugPrint('Trashing match at: matches/$matchId');
     await _firestore
-        .collection('events')
-        .doc(eventId)
         .collection('matches')
         .doc(matchId)
         .update({'isDeleted': true});
@@ -124,8 +149,6 @@ class FirestoreRepository implements ScoutingRepository {
   @override
   Future<void> restoreMatch(String eventId, String matchId) async {
     await _firestore
-        .collection('events')
-        .doc(eventId)
         .collection('matches')
         .doc(matchId)
         .update({'isDeleted': false});
@@ -134,8 +157,6 @@ class FirestoreRepository implements ScoutingRepository {
   @override
   Future<void> deleteMatch(String eventId, String matchId) async {
     await _firestore
-        .collection('events')
-        .doc(eventId)
         .collection('matches')
         .doc(matchId)
         .delete();

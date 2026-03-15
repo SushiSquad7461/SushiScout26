@@ -60,10 +60,11 @@ def fetch_event_schedule(req: https_fn.CallableRequest) -> any:
             "compLevel": m['comp_level'],
             "alliances": m['alliances'],
             "startTime": datetime.fromtimestamp(m['time']) if m['time'] else None,
-            "programType": "FRC"
+            "programType": "FRC",
+            "eventId": event_key
         }
         
-        doc_ref = db.collection(f"events/{event_key}/matches").document(match_id)
+        doc_ref = db.collection("matches").document(match_id)
         batch.set(doc_ref, match_doc, merge=True)
         count += 1
         

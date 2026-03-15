@@ -3,12 +3,19 @@
 import os
 from firebase_functions import firestore_fn, logger
 from firebase_admin import firestore
-from datetime import datetime
 
 from ..services.sheets_service import get_sheets_service
 from ..services.sync_tracker import SyncTracker
 
-db = firestore.client()
+# Lazy initialization
+_db = None
+
+def get_db():
+    """Get Firestore client with lazy initialization."""
+    global _db
+    if _db is None:
+        _db = firestore.client()
+    return _db
 
 
 def get_master_spreadsheet_id() -> str:
@@ -82,10 +89,9 @@ def sync_report_to_sheets(event_id: str, report_id: str, report_data: dict, is_u
         raise
 
 
-@firestore_fn.on_document_created(document="events/{eventId}/matches/{reportId}")
+@firestore_fn.on_document_created(document="matches/{reportId}")
 def on_match_created(event: firestore_fn.Event[firestore_fn.DocumentSnapshot]):
     """Trigger when a new match report is created."""
-    event_id = event.params['eventId']
     report_id = event.params['reportId']
     
     # Get the document data
@@ -93,6 +99,12 @@ def on_match_created(event: firestore_fn.Event[firestore_fn.DocumentSnapshot]):
     
     if not report_data:
         logger.warning(f"No data found for report {report_id}")
+        return
+    
+    # Get eventId from the document data
+    event_id = report_data.get('eventId')
+    if not event_id:
+        logger.warning(f"Match {report_id} has no eventId, skipping sync")
         return
     
     logger.info(f"Processing new match report: {report_id} for event {event_id}")
@@ -106,10 +118,9 @@ def on_match_created(event: firestore_fn.Event[firestore_fn.DocumentSnapshot]):
     sync_report_to_sheets(event_id, report_id, report_data, is_update=False)
 
 
-@firestore_fn.on_document_updated(document="events/{eventId}/matches/{reportId}")
+@firestore_fn.on_document_updated(document="matches/{reportId}")
 def on_match_updated(event: firestore_fn.Event[firestore_fn.Change[firestore_fn.DocumentSnapshot]]):
     """Trigger when a match report is updated."""
-    event_id = event.params['eventId']
     report_id = event.params['reportId']
     
     # Get the new document data
@@ -117,6 +128,12 @@ def on_match_updated(event: firestore_fn.Event[firestore_fn.Change[firestore_fn.
     
     if not report_data:
         logger.warning(f"No data found for updated report {report_id}")
+        return
+    
+    # Get eventId from the document data
+    event_id = report_data.get('eventId')
+    if not event_id:
+        logger.warning(f"Match {report_id} has no eventId, skipping sync")
         return
     
     logger.info(f"Processing updated match report: {report_id} for event {event_id}")

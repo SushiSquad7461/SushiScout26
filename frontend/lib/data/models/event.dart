@@ -6,6 +6,7 @@ class Event {
   final String programType; // 'FRC' or 'FTC'
   final String tbaKey;
   final DateTime startDate;
+  final String teamId;
 
   Event({
     required this.id,
@@ -13,6 +14,7 @@ class Event {
     required this.programType,
     required this.tbaKey,
     required this.startDate,
+    this.teamId = '',
   });
 
   factory Event.fromFirestore(DocumentSnapshot doc) {
@@ -23,6 +25,7 @@ class Event {
       programType: data['programType'] ?? 'FRC',
       tbaKey: data['tbaKey'] ?? '',
       startDate: (data['startDate'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      teamId: data['teamId'] ?? '',
     );
   }
 
@@ -32,6 +35,7 @@ class Event {
       'programType': programType,
       'tbaKey': tbaKey,
       'startDate': Timestamp.fromDate(startDate),
+      'teamId': teamId,
     };
   }
 }
