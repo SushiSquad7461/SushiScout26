@@ -584,6 +584,7 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm> {
       'indexing_teleop': _teleIndexing,
       'base_expansion': _baseExpansion,
       'driver_quality': _driverQuality,
+      'robot_died': _robotDied,
     };
 
     final report = MatchReport(

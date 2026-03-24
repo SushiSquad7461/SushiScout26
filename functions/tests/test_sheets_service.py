@@ -5,12 +5,25 @@ from unittest.mock import Mock, patch, MagicMock
 import json
 from datetime import datetime
 
-from services.sheets_service import SheetsService, get_sheets_service, FRC_HEADERS
+from services.sheets_service import SheetsService, get_sheets_service, FRC_HEADERS, FTC_HEADERS, _col_letter
+
+
+class TestColLetter(unittest.TestCase):
+    """Test column letter helper."""
+
+    def test_single_letters(self):
+        self.assertEqual(_col_letter(1), 'A')
+        self.assertEqual(_col_letter(19), 'S')
+        self.assertEqual(_col_letter(26), 'Z')
+
+    def test_double_letters(self):
+        self.assertEqual(_col_letter(27), 'AA')
+        self.assertEqual(_col_letter(28), 'AB')
 
 
 class TestSheetsService(unittest.TestCase):
     """Test cases for SheetsService."""
-    
+
     def setUp(self):
         """Set up test fixtures."""
         self.mock_credentials = json.dumps({
@@ -23,7 +36,7 @@ class TestSheetsService(unittest.TestCase):
             "auth_uri": "https://accounts.google.com/o/oauth2/auth",
             "token_uri": "https://oauth2.googleapis.com/token"
         })
-    
+
     @patch('services.sheets_service.build')
     @patch('services.sheets_service.service_account.Credentials')
     def test_init(self, mock_creds_class, mock_build):
@@ -32,18 +45,36 @@ class TestSheetsService(unittest.TestCase):
         mock_creds_class.from_service_account_info.return_value = mock_creds
         mock_service = Mock()
         mock_build.return_value = mock_service
-        
+
         service = SheetsService(self.mock_credentials)
-        
+
         mock_creds_class.from_service_account_info.assert_called_once()
         mock_build.assert_called_once_with('sheets', 'v4', credentials=mock_creds)
-    
-    def test_transform_match_report(self):
-        """Test transforming match report to row format."""
+
+    def test_frc_headers(self):
+        """Test that FRC headers match the 19-column schema."""
+        self.assertEqual(len(FRC_HEADERS), 19)
+        self.assertEqual(FRC_HEADERS[0], "Timestamp")
+        self.assertEqual(FRC_HEADERS[1], "Match ID")
+        self.assertEqual(FRC_HEADERS[6], "Auto Fuel")
+        self.assertEqual(FRC_HEADERS[13], "Trench Traverse")
+        self.assertEqual(FRC_HEADERS[18], "Comments")
+
+    def test_ftc_headers(self):
+        """Test that FTC headers match the 15-column schema."""
+        self.assertEqual(len(FTC_HEADERS), 15)
+        self.assertEqual(FTC_HEADERS[0], "Timestamp")
+        self.assertEqual(FTC_HEADERS[6], "Leave")
+        self.assertEqual(FTC_HEADERS[7], "Auto Artifacts")
+        self.assertEqual(FTC_HEADERS[11], "Base Expansion")
+        self.assertEqual(FTC_HEADERS[14], "Comments")
+
+    def test_transform_frc_report(self):
+        """Test transforming FRC match report to row format."""
         with patch('services.sheets_service.build'), \
              patch('services.sheets_service.service_account.Credentials'):
             service = SheetsService(self.mock_credentials)
-        
+
         report_data = {
             'matchId': 'qm1_254',
             'matchNumber': 1,
@@ -56,39 +87,88 @@ class TestSheetsService(unittest.TestCase):
                 'teleop_fuel': 15,
                 'teleop_tower_level': 3,
                 'defense_rating': 3,
-                'driver_skill': 4
+                'driver_skill': 4,
+                'robot_died': False,
+                'trench_traverse': True,
+                'bump_traverse': False,
+                'shooting_range_close': True,
+                'shooting_range_mid': False,
+                'shooting_range_far': False,
             },
-            'robotDied': False,
             'comments': 'Great performance',
-            'images': ['img1.jpg', 'img2.jpg'],
             'createdAt': datetime(2026, 2, 17, 10, 30, 0)
         }
-        
+
         result = service.transform_match_report(report_data)
-        
-        self.assertEqual(len(result), 15)  # Should match FRC_HEADERS length
-        self.assertEqual(result[0], '2026-02-17T10:30:00')  # Timestamp
-        self.assertEqual(result[1], 'qm1_254')  # Match ID
-        self.assertEqual(result[2], 1)  # Match number
-        self.assertEqual(result[3], 254)  # Team number
-        self.assertEqual(result[4], 'Red')  # Alliance
-        self.assertEqual(result[5], 'Test Scouter')  # Scouter
-        self.assertEqual(result[6], 5)  # Auto fuel
-        self.assertEqual(result[7], 'Yes')  # Auto L1 Hang
-        self.assertEqual(result[8], 15)  # Teleop fuel
-        self.assertEqual(result[9], 'Level 3')  # Climb level
-        self.assertEqual(result[10], '3/5')  # Defense rating
-        self.assertEqual(result[11], '4/5')  # Driver skill
-        self.assertEqual(result[12], 'No')  # Robot died
-        self.assertEqual(result[13], 'Great performance')  # Comments
-        self.assertEqual(result[14], 'img1.jpg, img2.jpg')  # Images
-    
-    def test_transform_match_report_robot_died_true(self):
-        """Test robot died field when true."""
+
+        self.assertEqual(len(result), len(FRC_HEADERS))  # 19 columns
+        self.assertEqual(result[1], 'qm1_254')       # Match ID
+        self.assertEqual(result[2], 1)                 # Match #
+        self.assertEqual(result[3], 254)               # Team #
+        self.assertEqual(result[4], 'Red')             # Alliance
+        self.assertEqual(result[5], 'Test Scouter')    # Scouter
+        self.assertEqual(result[6], 5)                 # Auto Fuel
+        self.assertEqual(result[7], 'Yes')             # Auto L1 Hang
+        self.assertEqual(result[8], 15)                # Teleop Fuel
+        self.assertEqual(result[9], 'Level 3')         # Climb Level
+        self.assertEqual(result[10], '3/5')            # Defense Rating
+        self.assertEqual(result[11], '4/5')            # Driver Skill
+        self.assertEqual(result[12], 'No')             # Robot Died
+        self.assertEqual(result[13], 'Yes')            # Trench Traverse
+        self.assertEqual(result[14], 'No')             # Bump Traverse
+        self.assertEqual(result[15], 'Yes')            # Shooting Close
+        self.assertEqual(result[16], 'No')             # Shooting Mid
+        self.assertEqual(result[17], 'No')             # Shooting Far
+        self.assertEqual(result[18], 'Great performance')  # Comments
+
+    def test_transform_ftc_report(self):
+        """Test transforming FTC match report to row format."""
         with patch('services.sheets_service.build'), \
              patch('services.sheets_service.service_account.Credentials'):
             service = SheetsService(self.mock_credentials)
-        
+
+        report_data = {
+            'matchId': 'ftc_qm1_12345',
+            'matchNumber': 1,
+            'teamNumber': 12345,
+            'alliance': 'Blue',
+            'scouterName': 'FTC Scouter',
+            'programType': 'FTC',
+            'gameData': {
+                'leave': True,
+                'artifacts_auto': 3,
+                'indexing_auto': True,
+                'artifacts_teleop': 8,
+                'indexing_teleop': False,
+                'base_expansion': 'Full',
+                'driver_quality': 4.0,
+                'robot_died': False,
+            },
+            'comments': 'Solid match',
+            'createdAt': datetime(2026, 3, 1, 14, 0, 0)
+        }
+
+        result = service.transform_match_report(report_data)
+
+        self.assertEqual(len(result), len(FTC_HEADERS))  # 15 columns
+        self.assertEqual(result[1], 'ftc_qm1_12345')  # Match ID
+        self.assertEqual(result[4], 'Blue')             # Alliance
+        self.assertEqual(result[6], 'Yes')              # Leave
+        self.assertEqual(result[7], 3)                  # Auto Artifacts
+        self.assertEqual(result[8], 'Yes')              # Auto Indexing
+        self.assertEqual(result[9], 8)                  # Teleop Artifacts
+        self.assertEqual(result[10], 'No')              # Teleop Indexing
+        self.assertEqual(result[11], 'Full')            # Base Expansion
+        self.assertEqual(result[12], '4/5')             # Driver Quality
+        self.assertEqual(result[13], 'No')              # Robot Died
+        self.assertEqual(result[14], 'Solid match')     # Comments
+
+    def test_transform_frc_robot_died_true(self):
+        """Test robot died field reads from gameData.robot_died."""
+        with patch('services.sheets_service.build'), \
+             patch('services.sheets_service.service_account.Credentials'):
+            service = SheetsService(self.mock_credentials)
+
         report_data = {
             'matchId': 'qm2_254',
             'matchNumber': 2,
@@ -101,63 +181,45 @@ class TestSheetsService(unittest.TestCase):
                 'teleop_fuel': 0,
                 'teleop_tower_level': 0,
                 'defense_rating': 0,
-                'driver_skill': 0
+                'driver_skill': 0,
+                'robot_died': True,
+                'trench_traverse': False,
+                'bump_traverse': False,
+                'shooting_range_close': False,
+                'shooting_range_mid': False,
+                'shooting_range_far': False,
             },
-            'robotDied': True,
             'comments': 'Mechanical failure',
             'createdAt': datetime(2026, 2, 17, 11, 0, 0)
         }
-        
+
         result = service.transform_match_report(report_data)
-        
-        self.assertEqual(result[12], 'Yes')  # Robot died should be 'Yes'
-    
-    def test_frc_headers(self):
-        """Test that FRC headers are correct."""
-        expected_headers = [
-            "Timestamp",
-            "Match ID",
-            "Match #",
-            "Team #",
-            "Alliance",
-            "Scouter",
-            "Auto Fuel",
-            "Auto L1 Hang",
-            "Teleop Fuel",
-            "Climb Level",
-            "Defense Rating",
-            "Driver Skill",
-            "Robot Died",
-            "Comments",
-            "Images"
-        ]
-        
-        self.assertEqual(FRC_HEADERS, expected_headers)
-    
+        self.assertEqual(result[12], 'Yes')  # Robot Died
+
     def test_append_rows(self):
         """Test appending multiple rows at once."""
         with patch('services.sheets_service.build') as mock_build, \
              patch('services.sheets_service.service_account.Credentials'):
             mock_service = Mock()
             mock_build.return_value = mock_service
-            
+
             mock_append_result = Mock()
             mock_append_result.execute.return_value = {
-                'updates': {'updatedRange': '2026test!A5:O7'}
+                'updates': {'updatedRange': "'2026test'!A5:S7"}
             }
             mock_service.spreadsheets().values().append.return_value = mock_append_result
-            
+
             service = SheetsService(self.mock_credentials)
             rows = [
-                ['2026-02-17T10:00:00', 'qm1_254', 1, 254, 'Red', 'Scouter', 5, 'No', 10, 'Level 1', '3/5', '4/5', 'No', '', ''],
-                ['2026-02-17T10:15:00', 'qm2_118', 2, 118, 'Blue', 'Scouter', 3, 'No', 8, 'Level 2', '2/5', '3/5', 'No', '', ''],
+                ['ts', 'qm1', 1, 254, 'Red', 'S', 5, 'No', 10, 'L1', '3/5', '4/5', 'No', 'No', 'No', 'No', 'No', 'No', ''],
+                ['ts', 'qm2', 2, 118, 'Blue', 'S', 3, 'No', 8, 'L2', '2/5', '3/5', 'No', 'No', 'No', 'No', 'No', 'No', ''],
             ]
-            
+
             result = service.append_rows('spreadsheet_id', '2026test', rows)
-            
+
             self.assertEqual(result, 5)
             mock_service.spreadsheets().values().append.assert_called_once()
-    
+
     def test_append_rows_empty(self):
         """Test appending empty list returns 0."""
         with patch('services.sheets_service.build'), \
@@ -165,30 +227,32 @@ class TestSheetsService(unittest.TestCase):
             service = SheetsService(self.mock_credentials)
             result = service.append_rows('spreadsheet_id', '2026test', [])
             self.assertEqual(result, 0)
-    
+
     def test_update_rows(self):
-        """Test updating multiple rows in a single batch."""
+        """Test updating multiple rows uses dynamic column range."""
         with patch('services.sheets_service.build') as mock_build, \
              patch('services.sheets_service.service_account.Credentials'):
             mock_service = Mock()
             mock_build.return_value = mock_service
-            
+
             mock_batch_update = Mock()
             mock_batch_update.execute.return_value = {}
             mock_service.spreadsheets().values().batchUpdate.return_value = mock_batch_update
-            
+
             service = SheetsService(self.mock_credentials)
-            updates = [
-                (5, ['2026-02-17T10:00:00', 'qm1_254', 1, 254, 'Red', 'Scouter', 5, 'No', 10, 'Level 1', '3/5', '4/5', 'No', 'updated', '']),
-                (10, ['2026-02-17T10:15:00', 'qm2_118', 2, 118, 'Blue', 'Scouter', 3, 'No', 8, 'Level 2', '2/5', '3/5', 'No', 'updated', '']),
-            ]
-            
+            # 19-column FRC rows
+            row = ['ts', 'qm1', 1, 254, 'Red', 'S', 5, 'No', 10, 'L1', '3/5', '4/5', 'No', 'No', 'No', 'No', 'No', 'No', 'comment']
+            updates = [(5, row), (10, row)]
+
             service.update_rows('spreadsheet_id', '2026test', updates)
-            
-            mock_service.spreadsheets().values().batchUpdate.assert_called_once()
+
             call_args = mock_service.spreadsheets().values().batchUpdate.call_args
-            self.assertEqual(len(call_args[1]['body']['data']), 2)
-    
+            data = call_args[1]['body']['data']
+            self.assertEqual(len(data), 2)
+            # Should use column S (19th) not O (15th)
+            self.assertIn('S5', data[0]['range'])
+            self.assertIn('S10', data[1]['range'])
+
     def test_update_rows_empty(self):
         """Test updating with empty list does nothing."""
         with patch('services.sheets_service.build'), \
@@ -196,64 +260,64 @@ class TestSheetsService(unittest.TestCase):
             mock_service = Mock()
             service = SheetsService(self.mock_credentials)
             service.service = mock_service
-            
+
             service.update_rows('spreadsheet_id', '2026test', [])
-            
+
             mock_service.spreadsheets().values().batchUpdate.assert_not_called()
-    
+
     def test_delete_row(self):
         """Test deleting a row from the sheet."""
         with patch('services.sheets_service.build') as mock_build, \
              patch('services.sheets_service.service_account.Credentials'):
             mock_service = Mock()
             mock_build.return_value = mock_service
-            
+
             mock_get = Mock()
             mock_get.execute.return_value = {
                 'sheets': [{'properties': {'title': '2026test', 'sheetId': 0}}]
             }
             mock_service.spreadsheets().get.return_value = mock_get
-            
+
             mock_batch = Mock()
             mock_batch.execute.return_value = {}
             mock_service.spreadsheets().batchUpdate.return_value = mock_batch
-            
+
             service = SheetsService(self.mock_credentials)
             result = service.delete_row('spreadsheet_id', '2026test', 5)
-            
+
             self.assertTrue(result)
             mock_service.spreadsheets().batchUpdate.assert_called_once()
-    
+
     def test_find_row_by_report_id(self):
         """Test finding a row by report ID in Match ID column."""
         with patch('services.sheets_service.build') as mock_build, \
              patch('services.sheets_service.service_account.Credentials'):
             mock_service = Mock()
             mock_build.return_value = mock_service
-            
+
             mock_values = Mock()
             mock_values.execute.return_value = {
                 'values': [
-                    ['Timestamp', 'Match ID', 'Team #'],
-                    ['2026-02-17 10:00:00', 'qm1_254', '254'],
-                    ['2026-02-17 10:15:00', 'qm2_118', '118'],
-                    ['2026-02-17 10:30:00', 'qm3_254', '254'],
+                    ['Timestamp', 'Match ID'],
+                    ['2026-02-17 10:00:00', 'qm1_254'],
+                    ['2026-02-17 10:15:00', 'qm2_118'],
+                    ['2026-02-17 10:30:00', 'qm3_254'],
                 ]
             }
             mock_service.spreadsheets().values().get.return_value = mock_values
-            
+
             service = SheetsService(self.mock_credentials)
             result = service.find_row_by_report_id('spreadsheet_id', '2026test', 'qm2_118')
-            
-            self.assertEqual(result, 2)  # Row 2 (1-indexed)
-    
+
+            self.assertEqual(result, 3)  # Row 3 (1-indexed, header is row 1)
+
     def test_find_row_by_report_id_not_found(self):
         """Test finding a row that doesn't exist."""
         with patch('services.sheets_service.build') as mock_build, \
              patch('services.sheets_service.service_account.Credentials'):
             mock_service = Mock()
             mock_build.return_value = mock_service
-            
+
             mock_values = Mock()
             mock_values.execute.return_value = {
                 'values': [
@@ -262,47 +326,44 @@ class TestSheetsService(unittest.TestCase):
                 ]
             }
             mock_service.spreadsheets().values().get.return_value = mock_values
-            
+
             service = SheetsService(self.mock_credentials)
             result = service.find_row_by_report_id('spreadsheet_id', '2026test', 'nonexistent')
-            
+
             self.assertIsNone(result)
 
 
 class TestGetSheetsService(unittest.TestCase):
     """Test cases for get_sheets_service singleton."""
-    
+
     @patch.dict('os.environ', {'GOOGLE_SHEETS_CREDENTIALS': '{"test": "credentials"}'})
     @patch('services.sheets_service.SheetsService')
     def test_singleton_pattern(self, mock_service_class):
         """Test that get_sheets_service returns singleton."""
         mock_instance = Mock()
         mock_service_class.return_value = mock_instance
-        
+
         # Reset singleton for test
         import services.sheets_service as ss
         ss._sheets_service = None
-        
-        # First call should create instance
+
         service1 = get_sheets_service()
         mock_service_class.assert_called_once()
-        
-        # Second call should return same instance
+
         service2 = get_sheets_service()
-        mock_service_class.assert_called_once()  # Should not create new instance
-        
+        mock_service_class.assert_called_once()
+
         self.assertEqual(service1, service2)
-    
+
     @patch.dict('os.environ', {}, clear=True)
     def test_missing_credentials(self):
         """Test error when credentials not set."""
-        # Reset singleton
         import services.sheets_service as ss
         ss._sheets_service = None
-        
+
         with self.assertRaises(ValueError) as context:
             get_sheets_service()
-        
+
         self.assertIn("GOOGLE_SHEETS_CREDENTIALS not set", str(context.exception))
 
 

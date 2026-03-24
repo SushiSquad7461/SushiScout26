@@ -41,19 +41,30 @@ FTC_HEADERS = [
     "Team #",
     "Alliance",
     "Scouter",
-    "Auto Points",
-    "Teleop Points",
-    "Endgame Points",
-    "Base Points",
+    "Leave",
+    "Auto Artifacts",
+    "Auto Indexing",
+    "Teleop Artifacts",
+    "Teleop Indexing",
+    "Base Expansion",
     "Driver Quality",
     "Robot Died",
     "Comments"
 ]
 
 
+def _col_letter(n: int) -> str:
+    """Convert 1-based column number to letter (1='A', 26='Z', 27='AA')."""
+    result = ''
+    while n > 0:
+        n, remainder = divmod(n - 1, 26)
+        result = chr(65 + remainder) + result
+    return result
+
+
 class SheetsService:
     """Service for interacting with Google Sheets API."""
-    
+
     def __init__(self, credentials_json: str):
         """Initialize with service account credentials JSON string."""
         creds_dict = json.loads(credentials_json)
@@ -145,7 +156,7 @@ class SheetsService:
     def _write_headers(self, spreadsheet_id: str, sheet_name: str, program_type: str = 'FRC'):
         """Write header row to sheet."""
         headers = self.get_headers(program_type)
-        range_name = f"{sheet_name}!1:1"
+        range_name = f"'{sheet_name}'!1:1"
         body = {
             'values': [headers]
         }
@@ -192,15 +203,15 @@ class SheetsService:
                     'fields': 'userEnteredFormat(textFormat,backgroundColor,horizontalAlignment)'
                 }
             },
-            # Wrap text for comments
+            # Wrap text for comments (last column)
             {
                 'repeatCell': {
                     'range': {
                         'sheetId': sheet_id,
                         'startRowIndex': 1,
                         'endRowIndex': 1000,
-                        'startColumnIndex': column_count - 2,  # Comments column
-                        'endColumnIndex': column_count - 1
+                        'startColumnIndex': column_count - 1,
+                        'endColumnIndex': column_count
                     },
                     'cell': {
                         'userEnteredFormat': {
@@ -224,7 +235,7 @@ class SheetsService:
             
             # FRC has 19 columns, FTC has 13 columns
             frc_widths = [160, 140, 60, 70, 70, 100, 80, 90, 90, 90, 100, 100, 85, 90, 90, 90, 90, 90, 250]
-            ftc_widths = [160, 140, 60, 70, 70, 100, 80, 90, 90, 90, 100, 85, 250]
+            ftc_widths = [160, 140, 60, 70, 70, 100, 70, 100, 90, 110, 100, 110, 100, 85, 250]
             widths = ftc_widths if program_type == 'FTC' else frc_widths
             
             requests = []
@@ -264,7 +275,8 @@ class SheetsService:
     
     def append_row(self, spreadsheet_id: str, sheet_name: str, row_data: List[Any]) -> int:
         """Append a row to the sheet. Returns the row number (1-indexed)."""
-        range_name = f"{sheet_name}!A:R"
+        last_col = _col_letter(len(row_data))
+        range_name = f"'{sheet_name}'!A:{last_col}"
         
         body = {
             'values': [row_data]
@@ -279,15 +291,18 @@ class SheetsService:
         ).execute()
         
         updated_range = result['updates']['updatedRange']
-        row_number = int(updated_range.split('!')[1].split(':')[0][1:])
+        # Parse row number from range like "'Sheet'!A5:S5"
+        after_bang = updated_range.split('!')[-1]
+        row_number = int(''.join(c for c in after_bang.split(':')[0] if c.isdigit()))
         return row_number
-    
+
     def append_rows(self, spreadsheet_id: str, sheet_name: str, rows: List[List[Any]]) -> int:
         """Append multiple rows at once. Returns starting row number (1-indexed)."""
         if not rows:
             return 0
-        
-        range_name = f"{sheet_name}!A:R"
+
+        last_col = _col_letter(len(rows[0]))
+        range_name = f"'{sheet_name}'!A:{last_col}"
         body = {'values': rows}
         
         result = self.service.spreadsheets().values().append(
@@ -299,7 +314,8 @@ class SheetsService:
         ).execute()
         
         updated_range = result['updates']['updatedRange']
-        row_number = int(updated_range.split('!')[1].split(':')[0][1:])
+        after_bang = updated_range.split('!')[-1]
+        row_number = int(''.join(c for c in after_bang.split(':')[0] if c.isdigit()))
         return row_number
 
     def update_rows(self, spreadsheet_id: str, sheet_name: str, 
@@ -310,8 +326,9 @@ class SheetsService:
         
         data = []
         for row_number, row_data in updates:
+            last_col = _col_letter(len(row_data))
             data.append({
-                'range': f"{sheet_name}!A{row_number}:O{row_number}",
+                'range': f"'{sheet_name}'!A{row_number}:{last_col}{row_number}",
                 'values': [row_data]
             })
         
@@ -323,7 +340,8 @@ class SheetsService:
     
     def update_row(self, spreadsheet_id: str, sheet_name: str, row_number: int, row_data: List[Any]):
         """Update an existing row."""
-        range_name = f"{sheet_name}!A{row_number}:O{row_number}"
+        last_col = _col_letter(len(row_data))
+        range_name = f"'{sheet_name}'!A{row_number}:{last_col}{row_number}"
         
         body = {
             'values': [row_data]
@@ -338,7 +356,7 @@ class SheetsService:
     
     def find_row_by_report_id(self, spreadsheet_id: str, sheet_name: str, report_id: str) -> Optional[int]:
         """Find row number by report ID (stored in Match ID column)."""
-        range_name = f"{sheet_name}!A:R"
+        range_name = f"'{sheet_name}'!A:B"
         
         result = self.service.spreadsheets().values().get(
             spreadsheetId=spreadsheet_id,
@@ -437,11 +455,13 @@ class SheetsService:
             report_data.get('teamNumber', 0),
             report_data.get('alliance', ''),
             report_data.get('scouterName', ''),
-            game_data.get('auto_points', 0),
-            game_data.get('teleop_points', 0),
-            game_data.get('endgame_points', 0),
-            game_data.get('base_points', 0),
-            f"{game_data.get('driver_quality', 0)}/5",
+            'Yes' if game_data.get('leave', False) else 'No',
+            game_data.get('artifacts_auto', 0),
+            'Yes' if game_data.get('indexing_auto', False) else 'No',
+            game_data.get('artifacts_teleop', 0),
+            'Yes' if game_data.get('indexing_teleop', False) else 'No',
+            game_data.get('base_expansion', 'None'),
+            f"{int(game_data.get('driver_quality', 0))}/5",
             'Yes' if game_data.get('robot_died', False) else 'No',
             report_data.get('comments', '')
         ]

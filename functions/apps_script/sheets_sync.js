@@ -1,241 +1,194 @@
 /**
- * Google Apps Script to sync Google Sheets to Firestore
- * 
- * Install Instructions:
- * 1. Open your Google Sheet
- * 2. Extensions → Apps Script
- * 3. Paste this code
- * 4. Save and run onOpen() once to create menu
- * 
- * No configuration needed - uses default Firebase project
+ * Google Apps Script to sync Google Sheets ↔ Firestore
+ *
+ * SETUP (required for UrlFetchApp permissions):
+ * 1. Open your Google Sheet → Extensions → Apps Script
+ * 2. Paste this code into Code.gs
+ * 3. Copy appsscript.json into Project Settings → Show "appsscript.json" manifest
+ * 4. Set script properties (Project Settings → Script Properties):
+ *    - SYNC_API_KEY: your API key
+ * 5. Run onOpen() once to grant permissions and create the menu
+ * 6. Create an INSTALLABLE edit trigger:
+ *    a. In Apps Script editor, click Triggers (clock icon)
+ *    b. + Add Trigger
+ *    c. Function: onSheetEdit, Event source: From spreadsheet, Event type: On edit
+ *    d. Save and authorize when prompted
+ *
+ * NOTE: The simple onEdit(e) trigger CANNOT call UrlFetchApp.fetch().
+ *       You MUST use an installable trigger pointing to onSheetEdit().
  */
 
 const PROJECT_ID = 'sushiscout26-a8f5d';
 const SYNC_URL = 'https://us-central1-sushiscout26-a8f5d.cloudfunctions.net/sync_from_sheets_http';
-const BACKFILL_URL = 'https://us-central1-sushiscout26-a8f5d.cloudfunctions.net/backfill_event_to_sheets';
-const API_KEY = 'sushiscout26-sheets-api-key-2026';
 
 /**
- * Called when sheet is edited
+ * Get API key from script properties (not hardcoded).
  */
-function onEdit(e) {
-  const sheet = e.source.getActiveSheet();
-  const range = e.range;
-  
-  if (range.getRow() <= 1 || range.getNumRows() === 0) {
-    return;
-  }
-  
-  const eventName = sheet.getName();
-  if (!eventName || eventName === 'Master' || eventName.includes('Template')) {
-    return;
-  }
-  
-  const matchIdCell = sheet.getRange(range.getRow(), 2, 1, 1);
-  const matchId = matchIdCell.getValue();
-  
-  if (!matchId) {
-    return;
-  }
-  
-  Logger.log(`Sheet edited: Event=${eventName}, Match=${matchId}, Row=${range.getRow()}`);
-  syncRowToFirestore(sheet, range.getRow(), eventName, matchId);
+function getApiKey() {
+  return PropertiesService.getScriptProperties().getProperty('SYNC_API_KEY') || '';
 }
 
 /**
- * Sync a single row to Firestore
+ * Installable edit trigger handler — call this from Triggers, NOT onEdit.
+ */
+function onSheetEdit(e) {
+  const sheet = e.source.getActiveSheet();
+  const range = e.range;
+
+  if (range.getRow() <= 1 || range.getNumRows() === 0) return;
+
+  const sheetName = sheet.getName();
+  if (!sheetName || sheetName === 'Master' || sheetName.includes('Template')) return;
+
+  const matchId = sheet.getRange(range.getRow(), 2, 1, 1).getValue();
+  if (!matchId) return;
+
+  Logger.log(`Sheet edited: Event=${sheetName}, Match=${matchId}, Row=${range.getRow()}`);
+  syncRowToFirestore(sheet, range.getRow(), sheetName, matchId);
+}
+
+/**
+ * Detect program type from sheet headers.
+ * FTC sheets have "Leave" in column G; FRC sheets have "Auto Fuel".
+ */
+function detectProgramType(headers) {
+  if (headers.includes('Leave') || headers.includes('Auto Artifacts')) return 'FTC';
+  return 'FRC';
+}
+
+/**
+ * Sync a single row to Firestore via the HTTP Cloud Function.
  */
 function syncRowToFirestore(sheet, rowNum, eventName, matchId) {
   try {
     const lastCol = sheet.getLastColumn();
     const headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
     const values = sheet.getRange(rowNum, 1, 1, lastCol).getValues()[0];
-    
-    const matchData = {};
+    const programType = detectProgramType(headers);
+
+    const matchData = { gameData: {} };
+
     for (let i = 0; i < headers.length; i++) {
       const header = headers[i];
       const value = values[i];
-      
+
+      // Common fields
       switch (header) {
-        case 'Match ID':
-          matchData.matchId = String(value);
-          break;
-        case 'Match #':
-          matchData.matchNumber = parseInt(value) || 0;
-          break;
-        case 'Team #':
-          matchData.teamNumber = parseInt(value) || 0;
-          break;
-        case 'Alliance':
-          matchData.alliance = String(value);
-          break;
-        case 'Scouter':
-          matchData.scouterName = String(value);
-          break;
-        case 'Auto Fuel':
-          matchData.gameData = matchData.gameData || {};
-          matchData.gameData.auto_fuel = parseInt(value) || 0;
-          break;
-        case 'Auto L1 Hang':
-          matchData.gameData = matchData.gameData || {};
-          matchData.gameData.auto_tower_l1 = (String(value).toLowerCase() === 'yes' || value === true);
-          break;
-        case 'Teleop Fuel':
-          matchData.gameData = matchData.gameData || {};
-          matchData.gameData.teleop_fuel = parseInt(value) || 0;
-          break;
-        case 'Climb Level':
-          matchData.gameData = matchData.gameData || {};
-          const climbVal = String(value);
-          matchData.gameData.teleop_tower_level = parseInt(climbVal.replace('Level ', '')) || 0;
-          break;
-        case 'Defense Rating':
-          matchData.gameData = matchData.gameData || {};
-          matchData.gameData.defense_rating = parseInt(String(value).replace('/5', '')) || 0;
-          break;
-        case 'Driver Skill':
-          matchData.gameData = matchData.gameData || {};
-          matchData.gameData.driver_skill = parseInt(String(value).replace('/5', '')) || 0;
-          break;
-        case 'Robot Died':
-          matchData.robotDied = (String(value).toLowerCase() === 'yes' || value === true);
-          break;
-        case 'Comments':
-          matchData.comments = String(value || '');
-          break;
-        case 'Images':
-          matchData.images = value ? String(value).split(',').map(s => s.trim()).filter(s => s) : [];
-          break;
+        case 'Match ID':    matchData.matchId = String(value); break;
+        case 'Match #':     matchData.matchNumber = parseInt(value) || 0; break;
+        case 'Team #':      matchData.teamNumber = parseInt(value) || 0; break;
+        case 'Alliance':    matchData.alliance = String(value); break;
+        case 'Scouter':     matchData.scouterName = String(value); break;
+        case 'Robot Died':  matchData.gameData.robot_died = _toBool(value); break;
+        case 'Comments':    matchData.comments = String(value || ''); break;
+
+        // FRC fields
+        case 'Auto Fuel':       matchData.gameData.auto_fuel = parseInt(value) || 0; break;
+        case 'Auto L1 Hang':    matchData.gameData.auto_tower_l1 = _toBool(value); break;
+        case 'Teleop Fuel':     matchData.gameData.teleop_fuel = parseInt(value) || 0; break;
+        case 'Climb Level':     matchData.gameData.teleop_tower_level = _parseClimb(value); break;
+        case 'Defense Rating':  matchData.gameData.defense_rating = _parseRating(value); break;
+        case 'Driver Skill':    matchData.gameData.driver_skill = _parseRating(value); break;
+        case 'Trench Traverse': matchData.gameData.trench_traverse = _toBool(value); break;
+        case 'Bump Traverse':   matchData.gameData.bump_traverse = _toBool(value); break;
+        case 'Shooting Close':  matchData.gameData.shooting_range_close = _toBool(value); break;
+        case 'Shooting Mid':    matchData.gameData.shooting_range_mid = _toBool(value); break;
+        case 'Shooting Far':    matchData.gameData.shooting_range_far = _toBool(value); break;
+
+        // FTC fields
+        case 'Leave':            matchData.gameData.leave = _toBool(value); break;
+        case 'Auto Artifacts':   matchData.gameData.artifacts_auto = parseInt(value) || 0; break;
+        case 'Auto Indexing':    matchData.gameData.indexing_auto = _toBool(value); break;
+        case 'Teleop Artifacts': matchData.gameData.artifacts_teleop = parseInt(value) || 0; break;
+        case 'Teleop Indexing':  matchData.gameData.indexing_teleop = _toBool(value); break;
+        case 'Base Expansion':   matchData.gameData.base_expansion = String(value || 'None'); break;
+        case 'Driver Quality':   matchData.gameData.driver_quality = _parseRating(value); break;
       }
     }
-    
+
+    matchData.programType = programType;
+
     const payload = {
       eventId: eventName,
       reportId: matchId,
       data: matchData
     };
-    
+
     const options = {
       method: 'POST',
-      headers: { 
+      headers: {
         'Content-Type': 'application/json',
-        'X-API-Key': API_KEY
+        'X-API-Key': getApiKey()
       },
       payload: JSON.stringify(payload),
       muteHttpExceptions: true
     };
-    
+
     const response = UrlFetchApp.fetch(SYNC_URL, options);
-    const responseCode = response.getResponseCode();
-    
-    if (responseCode === 200) {
-      Logger.log(`Synced row ${rowNum} to Firestore: ${eventName}/${matchId}`);
+    const code = response.getResponseCode();
+
+    if (code === 200) {
+      Logger.log(`Synced row ${rowNum}: ${eventName}/${matchId}`);
     } else {
-      Logger.log(`Error syncing: ${responseCode} - ${response.getContentText()}`);
+      Logger.log(`Sync error ${code}: ${response.getContentText()}`);
     }
-    
   } catch (error) {
     Logger.log(`Error syncing to Firestore: ${error.message}`);
   }
 }
 
+// --- Helpers ---
+
+function _toBool(value) {
+  if (typeof value === 'boolean') return value;
+  return String(value).toLowerCase() === 'yes' || String(value).toLowerCase() === 'true';
+}
+
+function _parseClimb(value) {
+  const s = String(value);
+  if (s === 'No Climb' || s === '0') return 0;
+  const match = s.match(/(\d+)/);
+  return match ? parseInt(match[1]) : 0;
+}
+
+function _parseRating(value) {
+  return parseInt(String(value).replace('/5', '')) || 0;
+}
+
+// --- Menu & Bulk Operations ---
+
 /**
- * Sync all rows from Sheets to Firestore
+ * Sync all data rows from every event sheet to Firestore.
  */
 function syncAllRows() {
   const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
   const sheets = spreadsheet.getSheets();
-  
   let syncedCount = 0;
-  
+
   for (const sheet of sheets) {
-    const sheetName = sheet.getName();
-    if (sheetName === 'Master' || sheetName.includes('Template')) {
-      continue;
-    }
-    
-    Logger.log(`Syncing sheet: ${sheetName}`);
-    
+    const name = sheet.getName();
+    if (name === 'Master' || name.includes('Template')) continue;
+
     const lastRow = sheet.getLastRow();
     if (lastRow <= 1) continue;
-    
-    for (let rowNum = 2; rowNum <= lastRow; rowNum++) {
-      const matchId = sheet.getRange(rowNum, 2, 1, 1).getValue();
-      if (matchId) {
-        syncRowToFirestore(sheet, rowNum, sheetName, matchId);
+
+    for (let r = 2; r <= lastRow; r++) {
+      const id = sheet.getRange(r, 2, 1, 1).getValue();
+      if (id) {
+        syncRowToFirestore(sheet, r, name, id);
         syncedCount++;
       }
     }
   }
-  
-  Logger.log(`Sync complete. Synced ${syncedCount} rows.`);
+
   SpreadsheetApp.getUi().alert(`Sync complete! Synced ${syncedCount} rows to Firestore.`);
 }
 
 /**
- * Backfill: Sync from Firestore to Sheets
- */
-function backfillFromFirestore() {
-  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
-  const sheets = spreadsheet.getSheets();
-  
-  // Let user select which event to backfill
-  const sheetNames = sheets
-    .map(s => s.getName())
-    .filter(n => n !== 'Master' && !n.includes('Template'));
-  
-  if (sheetNames.length === 0) {
-    SpreadsheetApp.getUi().alert('No event sheets found.');
-    return;
-  }
-  
-  // Simple prompt for event name
-  const eventName = SpreadsheetApp.getUi().prompt(
-    'Backfill from Firestore',
-    'Enter the event ID to backfill (e.g., 2026TEST):',
-    SpreadsheetApp.getUi().ButtonSet.OK_CANCEL
-  ).getResponseText();
-  
-  if (!eventName) return;
-  
-  SpreadsheetApp.getUi().alert(`Starting backfill for event: ${eventName}\n\nThis will take a moment...`);
-  
-  try {
-    const options = {
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'X-API-Key': API_KEY
-      },
-      payload: JSON.stringify({ eventId: eventName }),
-      muteHttpExceptions: true
-    };
-    
-    const response = UrlFetchApp.fetch(BACKFILL_URL, options);
-    const responseCode = response.getResponseCode();
-    const responseText = response.getContentText();
-    
-    if (responseCode === 200) {
-      const result = JSON.parse(responseText);
-      SpreadsheetApp.getUi().alert(
-        `Backfill complete!\n\nSynced: ${result.syncedCount}\nFailed: ${result.failedCount}`
-      );
-    } else {
-      SpreadsheetApp.getUi().alert(`Backfill failed: ${responseText}`);
-    }
-    
-  } catch (error) {
-    SpreadsheetApp.getUi().alert(`Error: ${error.message}`);
-  }
-}
-
-/**
- * Create menu when spreadsheet opens
+ * Create menu when spreadsheet opens.
  */
 function onOpen() {
-  const ui = SpreadsheetApp.getUi();
-  ui.createMenu('🔥 Firestore Sync')
+  SpreadsheetApp.getUi().createMenu('Firestore Sync')
     .addItem('Sync Sheets → Firestore', 'syncAllRows')
-    .addItem('Backfill Firestore → Sheets', 'backfillFromFirestore')
     .addToUi();
 }
