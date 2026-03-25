@@ -497,6 +497,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             AppHaptics.medium();
             final eventCode =
                 ref.read(settingsProvider)[PrefKeys.eventCode] ?? "Unknown";
+            final programType =
+                ref.read(settingsProvider)[PrefKeys.programType] ?? "FRC";
             final event = await ref.read(hybridRepositoryProvider).getEvent(eventCode);
 
             if (!mounted) return;
@@ -505,14 +507,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text(
-                    "Event '$eventCode' not found. Defaulting to FRC.",
+                    "Event '$eventCode' not found. Defaulting to $programType.",
                   ),
                 ),
               );
               final dummyEvent = Event(
                 id: eventCode,
                 name: "Dummy/Offline Event",
-                programType: "FRC",
+                programType: programType,
                 tbaKey: eventCode,
                 startDate: DateTime.now(),
               );
@@ -523,6 +525,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 ),
               );
               return;
+            }
+
+            // Firestore-wins: sync local preference to match event
+            if (event.programType != programType) {
+              ref.read(settingsProvider.notifier).setProgramType(event.programType);
             }
 
             Navigator.of(context).push(
