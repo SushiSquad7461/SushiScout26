@@ -11,6 +11,7 @@ initialize_app()
 
 # Import tba_sync so its Cloud Functions are discoverable by the Firebase runtime
 from tba_sync import fetch_event_schedule  # noqa: E402, F401
+from ftc_api import fetch_ftc_schedule  # noqa: E402, F401
 
 # Lazy initialization
 _db = None
