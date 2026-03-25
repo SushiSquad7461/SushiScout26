@@ -44,14 +44,6 @@ class AppDatabase extends _$AppDatabase {
     .get();
   }
 
-  /// Watch all non-deleted matches for an event (reactive stream)
-  Stream<List<LocalMatchReport>> watchMatchesForEvent(String eventId) {
-    return (select(localMatchReports)
-      ..where((m) => m.eventId.equals(eventId) & m.isDeleted.equals(false))
-      ..orderBy([(m) => OrderingTerm.desc(m.createdAt)]))
-    .watch();
-  }
-
   /// Get all deleted matches (trash) for an event
   Future<List<LocalMatchReport>> getDeletedMatchesForEvent(String eventId) {
     return (select(localMatchReports)
@@ -297,85 +289,57 @@ class AppDatabase extends _$AppDatabase {
 
   // Statistics
 
-  /// Get total match count across all events (non-deleted)
-  Future<int> getMatchCount() async {
+  /// Runs a COUNT(*) query on [table] with an optional [where] clause.
+  Future<int> _countWhere<T extends HasResultSet>(
+    ResultSetImplementation<T, dynamic> table, [
+    Expression<bool>? where,
+  ]) async {
     final countExpr = countAll();
-    final query = selectOnly(localMatchReports)
-      ..where(localMatchReports.isDeleted.equals(false))
-      ..addColumns([countExpr]);
+    final query = selectOnly(table)..addColumns([countExpr]);
+    if (where != null) query.where(where);
     final row = await query.getSingle();
     return row.read(countExpr) ?? 0;
   }
+
+  /// Get total match count across all events (non-deleted)
+  Future<int> getMatchCount() =>
+      _countWhere(localMatchReports, localMatchReports.isDeleted.equals(false));
 
   /// Get match count for a specific event (non-deleted)
-  Future<int> getMatchCountForEvent(String eventId) async {
-    final countExpr = countAll();
-    final query = selectOnly(localMatchReports)
-      ..where(localMatchReports.eventId.equals(eventId) &
-          localMatchReports.isDeleted.equals(false))
-      ..addColumns([countExpr]);
-    final row = await query.getSingle();
-    return row.read(countExpr) ?? 0;
-  }
+  Future<int> getMatchCountForEvent(String eventId) =>
+      _countWhere(localMatchReports,
+          localMatchReports.eventId.equals(eventId) &
+          localMatchReports.isDeleted.equals(false));
 
-  /// Get count of unsynced items (efficient COUNT query)
-  Future<int> getUnsyncedCount() async {
-    final countExpr = countAll();
-    final query = selectOnly(localMatchReports)
-      ..where(localMatchReports.isSynced.equals(false))
-      ..addColumns([countExpr]);
-    final row = await query.getSingle();
-    return row.read(countExpr) ?? 0;
-  }
+  /// Get count of unsynced items
+  Future<int> getUnsyncedCount() =>
+      _countWhere(localMatchReports, localMatchReports.isSynced.equals(false));
 
-  /// Get count of items in trash (efficient COUNT query)
-  Future<int> getTrashCount(String eventId) async {
-    final countExpr = countAll();
-    final query = selectOnly(localMatchReports)
-      ..where(localMatchReports.eventId.equals(eventId) &
-          localMatchReports.isDeleted.equals(true))
-      ..addColumns([countExpr]);
-    final row = await query.getSingle();
-    return row.read(countExpr) ?? 0;
-  }
+  /// Get count of items in trash
+  Future<int> getTrashCount(String eventId) =>
+      _countWhere(localMatchReports,
+          localMatchReports.eventId.equals(eventId) &
+          localMatchReports.isDeleted.equals(true));
 
   /// Get sync queue statistics broken down by status
   Future<SyncQueueStats> getSyncQueueStats() async {
-    final countExpr = countAll();
+    final pending = await _countWhere(
+        syncQueue, syncQueue.retryCount.isSmallerThanValue(10));
+    final failed = await _countWhere(
+        syncQueue, syncQueue.retryCount.isBiggerOrEqualValue(10));
+    final total = await _countWhere(syncQueue);
 
-    // Total pending (under retry limit)
-    final pendingQuery = selectOnly(syncQueue)
-      ..where(syncQueue.retryCount.isSmallerThanValue(10))
-      ..addColumns([countExpr]);
-    final pendingRow = await pendingQuery.getSingle();
-    final pending = pendingRow.read(countExpr) ?? 0;
-
-    // Failed (at or over retry limit)
-    final failedQuery = selectOnly(syncQueue)
-      ..where(syncQueue.retryCount.isBiggerOrEqualValue(10))
-      ..addColumns([countExpr]);
-    final failedRow = await failedQuery.getSingle();
-    final failed = failedRow.read(countExpr) ?? 0;
-
-    // Total in queue
-    final totalQuery = selectOnly(syncQueue)
-      ..addColumns([countExpr]);
-    final totalRow = await totalQuery.getSingle();
-    final total = totalRow.read(countExpr) ?? 0;
-
-    // Oldest pending operation timestamp
     final oldestExpr = syncQueue.createdAt.min();
     final oldestQuery = selectOnly(syncQueue)
       ..where(syncQueue.retryCount.isSmallerThanValue(10))
       ..addColumns([oldestExpr]);
     final oldestRow = await oldestQuery.getSingle();
-    final oldestPending = oldestRow.read(oldestExpr);
 
     return SyncQueueStats(
       totalOperations: total,
       pendingOperations: pending,
       failedOperations: failed,
-      oldestPendingAt: oldestPending,
+      oldestPendingAt: oldestRow.read(oldestExpr),
     );
   }
 

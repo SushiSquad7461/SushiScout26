@@ -77,13 +77,6 @@ class HybridRepository implements ScoutingRepository {
       
       // Initial load from local DB
       _refreshMatchStream(eventId);
-      
-      // Listen to local DB changes
-      _db.getMatchesForEvent(eventId).then((localMatches) {
-        if (!controller!.isClosed) {
-          controller.add(localMatches.map(_toMatchReport).toList());
-        }
-      });
 
       // Setup real-time Firestore listener for this event
       _setupFirestoreSubscription(eventId);
@@ -156,13 +149,6 @@ class HybridRepository implements ScoutingRepository {
 
       // Initial load from local DB
       _refreshTrashStream(eventId);
-
-      // Listen to local DB changes for immediate emission
-      _db.getDeletedMatchesForEvent(eventId).then((deletedMatches) {
-        if (!controller!.isClosed) {
-          controller.add(deletedMatches.map(_toMatchReport).toList());
-        }
-      });
     }
 
     return controller.stream;

@@ -55,9 +55,7 @@ class FirestoreRepository implements ScoutingRepository {
   Future<void> createMatch(String eventId, MatchReport match) async {
     _logger.d('Writing match to: matches/${match.id}');
 
-    final event = await getEvent(eventId);
-    final programType = event?.programType ?? 'FRC';
-    await _ensureEventExists(eventId);
+    final programType = await _getOrCreateEvent(eventId);
 
     final prepared = _prepareForFirestore(match, eventId, programType);
     await _firestore
@@ -78,25 +76,29 @@ class FirestoreRepository implements ScoutingRepository {
     );
   }
 
-  /// Ensures the event document exists in Firestore.
-  Future<void> _ensureEventExists(String eventId) async {
+  /// Gets the event's programType, creating the event document if needed.
+  /// Combines getEvent + ensureEventExists into a single read to avoid double-reads.
+  Future<String> _getOrCreateEvent(String eventId) async {
     try {
       final eventDoc = _firestore.collection('events').doc(eventId);
       final docSnapshot = await eventDoc.get();
 
-      if (!docSnapshot.exists) {
-        _logger.i('Auto-creating event $eventId in Firestore');
-        await eventDoc.set({
-          'name': eventId,
-          'programType': 'FRC',
-          'tbaKey': eventId,
-          'startDate': Timestamp.fromDate(DateTime.now()),
-          'createdAt': Timestamp.fromDate(DateTime.now()),
-          'autoCreated': true,
-        }, SetOptions(merge: true));
+      if (docSnapshot.exists) {
+        return Event.fromFirestore(docSnapshot).programType;
       }
+
+      _logger.i('Auto-creating event $eventId in Firestore');
+      await eventDoc.set({
+        'name': eventId,
+        'programType': 'FRC',
+        'tbaKey': eventId,
+        'startDate': Timestamp.fromDate(DateTime.now()),
+        'createdAt': Timestamp.fromDate(DateTime.now()),
+        'autoCreated': true,
+      }, SetOptions(merge: true));
+      return 'FRC';
     } catch (e, stackTrace) {
-      _logger.e('Failed to ensure event exists', error: e, stackTrace: stackTrace);
+      _logger.e('Failed to get or create event', error: e, stackTrace: stackTrace);
       rethrow;
     }
   }
@@ -105,8 +107,7 @@ class FirestoreRepository implements ScoutingRepository {
   Future<void> updateMatch(String eventId, MatchReport match) async {
     _logger.d('Updating match at: matches/${match.id}');
 
-    final event = await getEvent(eventId);
-    final programType = event?.programType ?? 'FRC';
+    final programType = await _getOrCreateEvent(eventId);
 
     final prepared = _prepareForFirestore(match, eventId, programType);
     await _firestore
