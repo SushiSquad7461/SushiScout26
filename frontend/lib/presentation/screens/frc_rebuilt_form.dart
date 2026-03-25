@@ -12,6 +12,8 @@ import '../widgets/counter_card.dart';
 import '../../data/local/preferences.dart';
 import '../theme/app_theme.dart';
 import '../../core/animations.dart';
+import '../../data/services/schedule_service.dart';
+import 'package:cloud_firestore/cloud_firestore.dart' show FirebaseFirestore;
 
 /// FRC "Rebuilt" 2026 scouting form with Material 3 styling.
 class FrcRebuiltForm extends ScoutingFormWidget {
@@ -78,6 +80,79 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm>
     _scouterNameCtrl.dispose();
     _commentsCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadSchedule() async {
+    final settings = ref.read(settingsProvider);
+    final eventCode = settings[PrefKeys.eventCode] ?? '';
+    final programType = settings[PrefKeys.programType] ?? 'FRC';
+    if (eventCode.isEmpty) return;
+
+    try {
+      await ref.read(scheduleServiceProvider).fetchSchedule(
+        eventCode: eventCode,
+        programType: programType,
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not fetch schedule. Enter match details manually.')),
+        );
+      }
+      return;
+    }
+
+    if (!mounted) return;
+
+    final snapshot = await FirebaseFirestore.instance
+        .collection('matches')
+        .where('eventId', isEqualTo: eventCode)
+        .where('programType', isEqualTo: programType)
+        .orderBy('matchNumber')
+        .get();
+
+    final scheduleMatches = snapshot.docs
+        .map((doc) => doc.data())
+        .where((d) => d['compLevel'] != null)
+        .toList();
+
+    if (!mounted) return;
+
+    if (scheduleMatches.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No schedule found. Enter match details manually.')),
+      );
+      return;
+    }
+
+    showModalBottomSheet(
+      context: context,
+      builder: (ctx) => ListView.builder(
+        itemCount: scheduleMatches.length,
+        itemBuilder: (ctx, i) {
+          final m = scheduleMatches[i];
+          final matchNum = m['matchNumber'] ?? 0;
+          final alliances = m['alliances'] as Map<String, dynamic>?;
+          final teams = m['teams'] as List<dynamic>?;
+          String subtitle = '';
+          if (alliances != null) {
+            final red = (alliances['red']?['team_keys'] as List?)?.join(', ') ?? '';
+            final blue = (alliances['blue']?['team_keys'] as List?)?.join(', ') ?? '';
+            subtitle = 'Red: $red | Blue: $blue';
+          } else if (teams != null) {
+            subtitle = teams.map((t) => '${t['teamNumber']}').join(', ');
+          }
+          return ListTile(
+            title: Text('Match $matchNum'),
+            subtitle: subtitle.isNotEmpty ? Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis) : null,
+            onTap: () {
+              _matchNumberCtrl.text = '$matchNum';
+              Navigator.pop(ctx);
+            },
+          );
+        },
+      ),
+    );
   }
 
   void _nextPage() {
@@ -254,6 +329,12 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm>
           textInputAction: TextInputAction.next,
           validator: (v) => FormValidators.required(v, "Scouter Name"),
           autovalidateMode: AutovalidateMode.onUserInteraction,
+        ),
+        const SizedBox(height: AppTheme.spacingMd),
+        OutlinedButton.icon(
+          icon: const Icon(Icons.calendar_month_rounded),
+          label: const Text('Load Schedule'),
+          onPressed: _loadSchedule,
         ),
         const SizedBox(height: AppTheme.spacingMd),
 
