@@ -282,7 +282,11 @@ class _ShimmerLoadingState extends State<ShimmerLoading>
   @override
   Widget build(BuildContext context) {
     if (!widget.isLoading) return widget.child;
-    
+
+    final colorScheme = Theme.of(context).colorScheme;
+    final baseColor = colorScheme.surfaceContainerHighest;
+    final highlightColor = colorScheme.surfaceContainerLow;
+
     return AnimatedBuilder(
       animation: _controller,
       builder: (context, child) {
@@ -290,9 +294,9 @@ class _ShimmerLoadingState extends State<ShimmerLoading>
           shaderCallback: (bounds) {
             return LinearGradient(
               colors: [
-                Colors.grey[300]!,
-                Colors.grey[100]!,
-                Colors.grey[300]!,
+                baseColor,
+                highlightColor,
+                baseColor,
               ],
               stops: const [0.0, 0.5, 1.0],
               begin: Alignment(-1.0 + _controller.value * 2, 0),
@@ -300,7 +304,7 @@ class _ShimmerLoadingState extends State<ShimmerLoading>
             ).createShader(bounds);
           },
           child: Container(
-            color: Colors.grey[300],
+            color: baseColor,
             child: widget.child,
           ),
         );

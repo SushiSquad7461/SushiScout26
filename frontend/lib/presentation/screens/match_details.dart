@@ -14,8 +14,10 @@ class MatchDetailsScreen extends StatelessWidget {
     final colorScheme = theme.colorScheme;
     final allianceColor = AppTheme.allianceColor(match.alliance);
 
-    // Determine program type based on data keys
-    final isFtc = match.gameData.containsKey('artifacts_auto');
+    // Determine program type: prefer top-level field, fall back to key detection
+    final isFtc = match.programType == 'FTC' ||
+        (match.programType.isEmpty &&
+            match.gameData.containsKey('artifacts_auto'));
 
     return Scaffold(
       body: CustomScrollView(
@@ -52,10 +54,25 @@ class MatchDetailsScreen extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: AppTheme.spacingSm),
-                      Text(
-                        "${match.alliance} Alliance",
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          color: allianceColor.withValues(alpha: 0.8),
+                      // Alliance badge with colored background
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: AppTheme.spacingSm,
+                          vertical: AppTheme.spacingXs,
+                        ),
+                        decoration: BoxDecoration(
+                          color: allianceColor.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(AppTheme.spacingSm),
+                          border: Border.all(
+                            color: allianceColor.withValues(alpha: 0.4),
+                          ),
+                        ),
+                        child: Text(
+                          "${match.alliance} Alliance",
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            color: allianceColor,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
                     ],
@@ -65,7 +82,7 @@ class MatchDetailsScreen extends StatelessWidget {
             ),
           ),
 
-          // Scouter info
+          // Scouter info and status chips
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(
@@ -89,23 +106,45 @@ class MatchDetailsScreen extends StatelessWidget {
                     ),
                   ),
                   const Spacer(),
-                  if (match.isSynced)
-                    Chip(
-                      avatar: Icon(
-                        Icons.cloud_done,
-                        size: 16,
-                        color: colorScheme.primary,
-                      ),
-                      label: const Text("Synced"),
-                      backgroundColor: colorScheme.primaryContainer.withValues(
-                        alpha: 0.5,
-                      ),
-                      side: BorderSide.none,
-                      padding: EdgeInsets.zero,
-                      labelPadding: const EdgeInsets.only(
-                        right: AppTheme.spacingSm,
-                      ),
+                  // Program type chip
+                  Chip(
+                    avatar: Icon(
+                      isFtc ? Icons.precision_manufacturing : Icons.build,
+                      size: 16,
+                      color: colorScheme.onSecondaryContainer,
                     ),
+                    label: Text(isFtc ? "FTC" : "FRC"),
+                    backgroundColor: colorScheme.secondaryContainer.withValues(
+                      alpha: 0.5,
+                    ),
+                    side: BorderSide.none,
+                    padding: EdgeInsets.zero,
+                    labelPadding: const EdgeInsets.only(
+                      right: AppTheme.spacingSm,
+                    ),
+                  ),
+                  const SizedBox(width: AppTheme.spacingXs),
+                  // Synced status chip
+                  Chip(
+                    avatar: Icon(
+                      match.isSynced ? Icons.cloud_done : Icons.cloud_off,
+                      size: 16,
+                      color: match.isSynced
+                          ? colorScheme.primary
+                          : colorScheme.onSurfaceVariant,
+                    ),
+                    label: Text(match.isSynced ? "Synced" : "Local"),
+                    backgroundColor: match.isSynced
+                        ? colorScheme.primaryContainer.withValues(alpha: 0.5)
+                        : colorScheme.surfaceContainerHighest.withValues(
+                            alpha: 0.5,
+                          ),
+                    side: BorderSide.none,
+                    padding: EdgeInsets.zero,
+                    labelPadding: const EdgeInsets.only(
+                      right: AppTheme.spacingSm,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -117,9 +156,9 @@ class MatchDetailsScreen extends StatelessWidget {
             sliver: SliverList(
               delegate: SliverChildListDelegate([
                 if (isFtc)
-                  ..._buildFtcSections(context)
+                  ..._buildFtcSections(context, allianceColor)
                 else
-                  ..._buildFrcSections(context),
+                  ..._buildFrcSections(context, allianceColor),
 
                 // Comments section
                 if (match.comments.isNotEmpty) ...[
@@ -127,6 +166,7 @@ class MatchDetailsScreen extends StatelessWidget {
                   _SectionCard(
                     title: "Comments",
                     icon: Icons.comment_outlined,
+                    accentColor: allianceColor,
                     children: [
                       Text(match.comments, style: theme.textTheme.bodyMedium),
                     ],
@@ -166,13 +206,14 @@ class MatchDetailsScreen extends StatelessWidget {
     );
   }
 
-  List<Widget> _buildFrcSections(BuildContext context) {
+  List<Widget> _buildFrcSections(BuildContext context, Color allianceColor) {
     final data = match.gameData;
 
     return [
       _SectionCard(
         title: "Autonomous",
         icon: Icons.smart_toy_outlined,
+        accentColor: allianceColor,
         children: [
           _DataRow(label: "Fuel Scored", value: "${data['auto_fuel'] ?? 0}"),
           _DataRow(
@@ -185,6 +226,7 @@ class MatchDetailsScreen extends StatelessWidget {
       _SectionCard(
         title: "Teleop",
         icon: Icons.sports_esports_outlined,
+        accentColor: allianceColor,
         children: [
           _DataRow(label: "Fuel Scored", value: "${data['teleop_fuel'] ?? 0}"),
           _DataRow(
@@ -195,8 +237,45 @@ class MatchDetailsScreen extends StatelessWidget {
       ),
       const SizedBox(height: AppTheme.spacingMd),
       _SectionCard(
+        title: "Traversal",
+        icon: Icons.route_outlined,
+        accentColor: allianceColor,
+        children: [
+          _DataRow(
+            label: "Trench Traverse",
+            value: (data['trench_traverse'] ?? false) ? "Yes" : "No",
+          ),
+          _DataRow(
+            label: "Bump Traverse",
+            value: (data['bump_traverse'] ?? false) ? "Yes" : "No",
+          ),
+        ],
+      ),
+      const SizedBox(height: AppTheme.spacingMd),
+      _SectionCard(
+        title: "Shooting Range",
+        icon: Icons.gps_fixed_outlined,
+        accentColor: allianceColor,
+        children: [
+          _DataRow(
+            label: "Close Range",
+            value: (data['shooting_range_close'] ?? false) ? "Yes" : "No",
+          ),
+          _DataRow(
+            label: "Mid Range",
+            value: (data['shooting_range_mid'] ?? false) ? "Yes" : "No",
+          ),
+          _DataRow(
+            label: "Far Range",
+            value: (data['shooting_range_far'] ?? false) ? "Yes" : "No",
+          ),
+        ],
+      ),
+      const SizedBox(height: AppTheme.spacingMd),
+      _SectionCard(
         title: "Performance",
         icon: Icons.analytics_outlined,
+        accentColor: allianceColor,
         children: [
           _RatingRow(
             label: "Defense Rating",
@@ -208,13 +287,14 @@ class MatchDetailsScreen extends StatelessWidget {
     ];
   }
 
-  List<Widget> _buildFtcSections(BuildContext context) {
+  List<Widget> _buildFtcSections(BuildContext context, Color allianceColor) {
     final data = match.gameData;
 
     return [
       _SectionCard(
         title: "Autonomous",
         icon: Icons.smart_toy_outlined,
+        accentColor: allianceColor,
         children: [
           _DataRow(
             label: "Leave",
@@ -231,6 +311,7 @@ class MatchDetailsScreen extends StatelessWidget {
       _SectionCard(
         title: "Teleop",
         icon: Icons.sports_esports_outlined,
+        accentColor: allianceColor,
         children: [
           _DataRow(
             label: "Artifacts",
@@ -246,6 +327,7 @@ class MatchDetailsScreen extends StatelessWidget {
       _SectionCard(
         title: "Endgame",
         icon: Icons.flag_outlined,
+        accentColor: allianceColor,
         children: [
           _DataRow(
             label: "Base Expansion",
@@ -261,15 +343,17 @@ class MatchDetailsScreen extends StatelessWidget {
   }
 }
 
-/// Section card with title and icon
+/// Section card with title, icon, and alliance-colored accent strip
 class _SectionCard extends StatelessWidget {
   final String title;
   final IconData icon;
+  final Color accentColor;
   final List<Widget> children;
 
   const _SectionCard({
     required this.title,
     required this.icon,
+    required this.accentColor,
     required this.children,
   });
 
@@ -279,26 +363,49 @@ class _SectionCard extends StatelessWidget {
     final colorScheme = theme.colorScheme;
 
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(AppTheme.spacingMd),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+        ),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Row(
-              children: [
-                Icon(icon, size: 20, color: colorScheme.primary),
-                const SizedBox(width: AppTheme.spacingSm),
-                Text(
-                  title,
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    color: colorScheme.primary,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
+            // Alliance-colored accent strip
+            Container(
+              width: 4,
+              color: accentColor,
             ),
-            const SizedBox(height: AppTheme.spacingMd),
-            ...children,
+            // Card content
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(AppTheme.spacingMd),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(icon, size: 20, color: colorScheme.primary),
+                        const SizedBox(width: AppTheme.spacingSm),
+                        Text(
+                          title,
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            color: colorScheme.primary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const Divider(height: AppTheme.spacingLg),
+                    ...children,
+                  ],
+                ),
+              ),
+            ),
           ],
         ),
       ),
