@@ -263,9 +263,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                           await ref.read(hybridRepositoryProvider).clearAllLocalData();
                           if (context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Local data cleared successfully'),
-                                backgroundColor: Colors.green,
+                              SnackBar(
+                                content: const Text('Local data cleared successfully'),
+                                backgroundColor: Theme.of(context).colorScheme.primary,
                               ),
                             );
                           }
@@ -274,7 +274,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
                                 content: Text('Error clearing data: $e'),
-                                backgroundColor: Colors.red,
+                                backgroundColor: Theme.of(context).colorScheme.error,
                               ),
                             );
                           }

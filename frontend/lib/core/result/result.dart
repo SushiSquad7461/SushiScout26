@@ -132,7 +132,7 @@ extension NullableResultExtensions<T> on T? {
   /// Converts a nullable value to a Result
   /// Returns success if not null, failure with given error if null
   Result<T, AppError> toResultOr(AppError Function() onNull) =>
-      this != null ? Result.success(this!) : Result.failure(onNull());
+      this != null ? Result.success(this as T) : Result.failure(onNull());
 }
 
 /// Extension methods for Futures that return Results
