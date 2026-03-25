@@ -33,6 +33,7 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm> {
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   
   int _currentPage = 0;
+  bool _submitting = false;
 
   // Form Data
   final _matchNumberCtrl = TextEditingController();
@@ -77,6 +78,7 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm> {
   }
 
   void _nextPage() {
+    if (_submitting) return;
     if (_currentPage == 0) {
       if (!_formKey.currentState!.validate()) {
         return;
@@ -167,13 +169,21 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm> {
 
           // Next/Submit button
           FilledButton.icon(
-            onPressed: _nextPage,
-            icon: Icon(
-              _currentPage == 4
-                  ? Icons.check_rounded
-                  : Icons.arrow_forward_rounded,
-            ),
-            label: Text(_currentPage == 4 ? "Submit" : "Next"),
+            onPressed: _submitting ? null : _nextPage,
+            icon: _submitting
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : Icon(
+                    _currentPage == 4
+                        ? Icons.check_rounded
+                        : Icons.arrow_forward_rounded,
+                  ),
+            label: Text(_currentPage == 4
+                ? (_submitting ? "Saving..." : "Submit")
+                : "Next"),
           ),
         ],
       ),
@@ -634,6 +644,7 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm> {
   }
 
   Future<void> _submit() async {
+    setState(() => _submitting = true);
     final gameData = {
       'auto_fuel': _autoFuel,
       'auto_tower_l1': _autoTowerL1,
@@ -682,6 +693,8 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm> {
           context,
         ).showSnackBar(SnackBar(content: Text("Error saving: $e"), backgroundColor: Theme.of(context).colorScheme.error));
       }
+    } finally {
+      if (mounted) setState(() => _submitting = false);
     }
   }
 }

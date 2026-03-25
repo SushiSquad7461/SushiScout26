@@ -33,6 +33,7 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm> {
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   
   int _currentPage = 0;
+  bool _submitting = false;
 
   // Form Data
   final _matchNumberCtrl = TextEditingController();
@@ -74,6 +75,7 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm> {
   }
 
   void _nextPage() {
+    if (_submitting) return;
     if (_currentPage == 0) {
       if (!_formKey.currentState!.validate()) {
         return;
@@ -161,13 +163,21 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm> {
           const Spacer(),
 
           FilledButton.icon(
-            onPressed: _nextPage,
-            icon: Icon(
-              _currentPage == 4
-                  ? Icons.check_rounded
-                  : Icons.arrow_forward_rounded,
-            ),
-            label: Text(_currentPage == 4 ? "Submit" : "Next"),
+            onPressed: _submitting ? null : _nextPage,
+            icon: _submitting
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : Icon(
+                    _currentPage == 4
+                        ? Icons.check_rounded
+                        : Icons.arrow_forward_rounded,
+                  ),
+            label: Text(_currentPage == 4
+                ? (_submitting ? "Saving..." : "Submit")
+                : "Next"),
           ),
         ],
       ),
@@ -576,6 +586,7 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm> {
   }
 
   Future<void> _submit() async {
+    setState(() => _submitting = true);
     final gameData = {
       'leave': _leave,
       'artifacts_auto': _autoArtifacts,
@@ -620,6 +631,8 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm> {
           context,
         ).showSnackBar(SnackBar(content: Text("Error saving: $e"), backgroundColor: Theme.of(context).colorScheme.error));
       }
+    } finally {
+      if (mounted) setState(() => _submitting = false);
     }
   }
 }
