@@ -355,10 +355,6 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm>
     );
   }
 
-  // ... (Auto, Teleop, Endgame, Review, Submit methods need update)
-  // I will update the rest in the next block to ensure full file replacement or just critical parts.
-  // Actually, I can replace the rest as well to update _submit.
-  
   Widget _buildAuto(BuildContext context) {
     final settings = ref.watch(settingsProvider);
     final fuelIncrement = int.tryParse(settings[PrefKeys.fuelIncrement] ?? '1') ?? 1;
