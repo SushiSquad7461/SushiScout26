@@ -530,7 +530,7 @@ class _MatchCard extends ConsumerWidget {
       summary = "No data recorded";
     }
 
-    final allianceColor = match.alliance == 'Red' ? Colors.red : Colors.blue;
+    final allianceColor = AppTheme.allianceColor(match.alliance);
 
     return Card(
       elevation: 0,

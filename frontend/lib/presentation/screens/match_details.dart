@@ -12,7 +12,7 @@ class MatchDetailsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final allianceColor = match.alliance == 'Red' ? Colors.red : Colors.blue;
+    final allianceColor = AppTheme.allianceColor(match.alliance);
 
     // Determine program type based on data keys
     final isFtc = match.gameData.containsKey('artifacts_auto');

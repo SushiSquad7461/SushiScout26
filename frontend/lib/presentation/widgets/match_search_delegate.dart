@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../data/models/match_report.dart';
 import '../screens/match_details.dart';
+import '../theme/app_theme.dart';
 
 class MatchSearchDelegate extends SearchDelegate<MatchReport?> {
   final List<MatchReport> matches;
@@ -61,7 +62,7 @@ class MatchSearchDelegate extends SearchDelegate<MatchReport?> {
       itemCount: filteredMatches.length,
       itemBuilder: (context, index) {
         final match = filteredMatches[index];
-        final allianceColor = match.alliance == 'Red' ? Colors.red : Colors.blue;
+        final allianceColor = AppTheme.allianceColor(match.alliance);
 
         return ListTile(
           leading: Container(

@@ -497,7 +497,7 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm> {
   Widget _buildReview(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final allianceColor = _alliance == 'Red' ? Colors.red : Colors.blue;
+    final allianceColor = AppTheme.allianceColor(_alliance);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,

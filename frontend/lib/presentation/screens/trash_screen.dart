@@ -188,7 +188,7 @@ class _TrashCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final allianceColor = match.alliance == 'Red' ? Colors.red : Colors.blue;
+    final allianceColor = AppTheme.allianceColor(match.alliance);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: AppTheme.spacingSm),

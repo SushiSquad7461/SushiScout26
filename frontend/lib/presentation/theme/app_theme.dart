@@ -264,6 +264,15 @@ class AppTheme {
     );
   }
 
+  // Alliance colors — used across match cards, forms, and details
+  static const Color allianceRed = Color(0xFFD32F2F);
+  static const Color allianceBlue = Color(0xFF1976D2);
+
+  /// Get alliance color by name
+  static Color allianceColor(String alliance) {
+    return alliance == 'Red' ? allianceRed : allianceBlue;
+  }
+
   /// Standard spacing values following M3 guidelines
   static const double spacingXs = 4;
   static const double spacingSm = 8;
