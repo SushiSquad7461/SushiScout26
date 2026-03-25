@@ -83,9 +83,8 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm>
   }
 
   Future<void> _loadSchedule() async {
-    final settings = ref.read(settingsProvider);
-    final eventCode = settings[PrefKeys.eventCode] ?? '';
-    final programType = settings[PrefKeys.programType] ?? 'FRC';
+    final eventCode = widget.eventId;
+    final programType = widget.event.programType;
     if (eventCode.isEmpty) return;
 
     try {
@@ -104,17 +103,27 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm>
 
     if (!mounted) return;
 
-    final snapshot = await FirebaseFirestore.instance
-        .collection('matches')
-        .where('eventId', isEqualTo: eventCode)
-        .where('programType', isEqualTo: programType)
-        .orderBy('matchNumber')
-        .get();
+    List<Map<String, dynamic>> scheduleMatches;
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('matches')
+          .where('eventId', isEqualTo: eventCode)
+          .where('programType', isEqualTo: programType)
+          .orderBy('matchNumber')
+          .get();
 
-    final scheduleMatches = snapshot.docs
-        .map((doc) => doc.data())
-        .where((d) => d['compLevel'] != null)
-        .toList();
+      scheduleMatches = snapshot.docs
+          .map((doc) => doc.data())
+          .where((d) => d['compLevel'] != null)
+          .toList();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not load schedule. Enter match details manually.')),
+        );
+      }
+      return;
+    }
 
     if (!mounted) return;
 
