@@ -55,7 +55,7 @@ class FirestoreRepository implements ScoutingRepository {
   Future<void> createMatch(String eventId, MatchReport match) async {
     _logger.d('Writing match to: matches/${match.id}');
 
-    final programType = await _getOrCreateEvent(eventId);
+    final programType = await _getOrCreateEvent(eventId, fallbackProgramType: match.programType);
 
     final prepared = _prepareForFirestore(match, eventId, programType);
     await _firestore
@@ -78,7 +78,7 @@ class FirestoreRepository implements ScoutingRepository {
 
   /// Gets the event's programType, creating the event document if needed.
   /// Combines getEvent + ensureEventExists into a single read to avoid double-reads.
-  Future<String> _getOrCreateEvent(String eventId) async {
+  Future<String> _getOrCreateEvent(String eventId, {String fallbackProgramType = 'FRC'}) async {
     try {
       final eventDoc = _firestore.collection('events').doc(eventId);
       final docSnapshot = await eventDoc.get();
@@ -90,13 +90,13 @@ class FirestoreRepository implements ScoutingRepository {
       _logger.i('Auto-creating event $eventId in Firestore');
       await eventDoc.set({
         'name': eventId,
-        'programType': 'FRC',
+        'programType': fallbackProgramType,
         'tbaKey': eventId,
         'startDate': Timestamp.fromDate(DateTime.now()),
         'createdAt': Timestamp.fromDate(DateTime.now()),
         'autoCreated': true,
       }, SetOptions(merge: true));
-      return 'FRC';
+      return fallbackProgramType;
     } catch (e, stackTrace) {
       _logger.e('Failed to get or create event', error: e, stackTrace: stackTrace);
       rethrow;
@@ -107,7 +107,7 @@ class FirestoreRepository implements ScoutingRepository {
   Future<void> updateMatch(String eventId, MatchReport match) async {
     _logger.d('Updating match at: matches/${match.id}');
 
-    final programType = await _getOrCreateEvent(eventId);
+    final programType = await _getOrCreateEvent(eventId, fallbackProgramType: match.programType);
 
     final prepared = _prepareForFirestore(match, eventId, programType);
     await _firestore
