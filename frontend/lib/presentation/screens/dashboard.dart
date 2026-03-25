@@ -17,6 +17,7 @@ import '../widgets/sync_status_indicator.dart';
 import '../widgets/match_search_delegate.dart';
 
 import '../../data/services/export_service.dart';
+import '../../core/validation/form_validators.dart';
 
 class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
@@ -84,7 +85,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               title: const Text("Export as Excel"),
               onTap: () {
                 Navigator.pop(context);
-                ExportService.exportToExcel(matches);
+                _exportExcel(matches);
               },
             ),
             ListTile(
@@ -92,7 +93,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               title: const Text("Export as PDF"),
               onTap: () {
                 Navigator.pop(context);
-                ExportService.exportToPdf(matches);
+                _exportPdf(matches);
               },
             ),
           ],
@@ -152,6 +153,36 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text("Error sharing file: $e")));
+      }
+    }
+  }
+
+  Future<void> _exportExcel(List<MatchReport> matches) async {
+    try {
+      await ExportService.exportToExcel(matches);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Excel export failed: $e"),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _exportPdf(List<MatchReport> matches) async {
+    try {
+      await ExportService.exportToPdf(matches);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("PDF export failed: $e"),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
       }
     }
   }
@@ -508,7 +539,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   }
 }
 
-/// Material 3 styled match card
+/// Material 3 styled match card with alliance color strip and sync indicator
 class _MatchCard extends ConsumerWidget {
   final MatchReport match;
   const _MatchCard({required this.match});
@@ -522,10 +553,10 @@ class _MatchCard extends ConsumerWidget {
     String summary = "";
     if (match.gameData.containsKey('auto_fuel')) {
       summary =
-          "Auto: ${match.gameData['auto_fuel']} • Tele: ${match.gameData['teleop_fuel']}";
+          "Auto: ${match.gameData['auto_fuel']} | Tele: ${match.gameData['teleop_fuel']}";
     } else if (match.gameData.containsKey('artifacts_auto')) {
       summary =
-          "Auto: ${match.gameData['artifacts_auto']} • Tele: ${match.gameData['artifacts_teleop']}";
+          "Auto: ${match.gameData['artifacts_auto']} | Tele: ${match.gameData['artifacts_teleop']}";
     } else {
       summary = "No data recorded";
     }
@@ -535,6 +566,10 @@ class _MatchCard extends ConsumerWidget {
     return Card(
       elevation: 0,
       color: colorScheme.surfaceContainerLow,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
+      ),
       child: InkWell(
         onTap: () {
           AppHaptics.selection();
@@ -549,84 +584,125 @@ class _MatchCard extends ConsumerWidget {
           _showContextMenu(context, ref);
         },
         borderRadius: BorderRadius.circular(AppTheme.cardRadius),
-        child: Padding(
-          padding: const EdgeInsets.all(AppTheme.spacingMd),
+        child: IntrinsicHeight(
           child: Row(
             children: [
-              // Match number badge
+              // Colored left border strip showing alliance color
               Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: allianceColor.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(AppTheme.buttonRadius),
-                ),
-                child: Center(
-                  child: Text(
-                    "${match.matchNumber}",
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      color: allianceColor,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
+                width: 4,
+                color: allianceColor,
               ),
 
-              const SizedBox(width: AppTheme.spacingMd),
-
-              // Match info
+              // Main card content
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Text(
-                          "Team ${match.teamNumber}",
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
+                child: Padding(
+                  padding: const EdgeInsets.all(AppTheme.spacingMd),
+                  child: Row(
+                    children: [
+                      // Match number badge
+                      Container(
+                        width: 48,
+                        height: 48,
+                        decoration: BoxDecoration(
+                          color: allianceColor.withValues(alpha: 0.15),
+                          borderRadius:
+                              BorderRadius.circular(AppTheme.buttonRadius),
                         ),
-                        const SizedBox(width: AppTheme.spacingSm),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: allianceColor.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
+                        child: Center(
                           child: Text(
-                            match.alliance,
-                            style: theme.textTheme.labelSmall?.copyWith(
+                            "${match.matchNumber}",
+                            style: theme.textTheme.titleMedium?.copyWith(
                               color: allianceColor,
-                              fontWeight: FontWeight.w600,
+                              fontWeight: FontWeight.bold,
                             ),
                           ),
                         ),
-                      ],
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      summary,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
                       ),
-                    ),
-                  ],
-                ),
-              ),
 
-              // Sync status
-              Icon(
-                match.isSynced
-                    ? Icons.cloud_done_rounded
-                    : Icons.cloud_upload_outlined,
-                color: match.isSynced
-                    ? colorScheme.primary
-                    : colorScheme.outline,
-                size: 24,
+                      const SizedBox(width: AppTheme.spacingMd),
+
+                      // Match info
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Row(
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    "Q${match.matchNumber} \u2022 Team ${match.teamNumber}",
+                                    style:
+                                        theme.textTheme.titleMedium?.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                const SizedBox(width: AppTheme.spacingSm),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color:
+                                        allianceColor.withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    match.alliance,
+                                    style:
+                                        theme.textTheme.labelSmall?.copyWith(
+                                      color: allianceColor,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              summary,
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: colorScheme.onSurfaceVariant,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            if (match.scouterName.isNotEmpty) ...[
+                              const SizedBox(height: 2),
+                              Text(
+                                "Scouted by ${match.scouterName}",
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: colorScheme.onSurfaceVariant
+                                      .withValues(alpha: 0.7),
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+
+                      const SizedBox(width: AppTheme.spacingSm),
+
+                      // Sync status icon
+                      Tooltip(
+                        message:
+                            match.isSynced ? "Synced" : "Pending sync",
+                        child: Icon(
+                          match.isSynced
+                              ? Icons.check_circle_rounded
+                              : Icons.schedule_rounded,
+                          color: match.isSynced
+                              ? colorScheme.primary
+                              : colorScheme.outline,
+                          size: 20,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ],
           ),
@@ -636,19 +712,39 @@ class _MatchCard extends ConsumerWidget {
   }
 
   void _showContextMenu(BuildContext context, WidgetRef ref) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
 
     showModalBottomSheet(
       context: context,
-      builder: (context) => SafeArea(
+      builder: (sheetContext) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // Header showing which match this menu is for
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppTheme.spacingMd,
+                vertical: AppTheme.spacingSm,
+              ),
+              child: Row(
+                children: [
+                  Text(
+                    "Q${match.matchNumber} \u2022 Team ${match.teamNumber}",
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
             ListTile(
               leading: Icon(Icons.info_outline, color: colorScheme.primary),
               title: const Text("View Details"),
               onTap: () {
-                Navigator.pop(context);
+                AppHaptics.selection();
+                Navigator.pop(sheetContext);
                 Navigator.of(context).push(
                   MaterialPageRoute(
                     builder: (context) => MatchDetailsScreen(match: match),
@@ -663,7 +759,8 @@ class _MatchCard extends ConsumerWidget {
                 style: TextStyle(color: colorScheme.error),
               ),
               onTap: () {
-                Navigator.pop(context);
+                AppHaptics.heavy();
+                Navigator.pop(sheetContext);
                 _moveToTrash(context, ref);
               },
             ),
@@ -677,13 +774,36 @@ class _MatchCard extends ConsumerWidget {
     final eventCode = ref.read(settingsProvider)[PrefKeys.eventCode];
     if (eventCode == null || eventCode.isEmpty) return;
 
-    final repo = ref.read(hybridRepositoryProvider);
-    await repo.trashMatch(eventCode, match.id);
+    try {
+      final repo = ref.read(hybridRepositoryProvider);
+      await repo.trashMatch(eventCode, match.id);
 
-    if (context.mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("Match moved to trash")));
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text("Match moved to trash"),
+            action: SnackBarAction(
+              label: "Undo",
+              onPressed: () async {
+                try {
+                  await repo.restoreMatch(eventCode, match.id);
+                } catch (_) {
+                  // Silently fail undo — user can restore from trash screen
+                }
+              },
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Failed to trash match: $e"),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
     }
   }
 }
@@ -763,8 +883,10 @@ class _SettingsSheetState extends ConsumerState<_SettingsSheet> {
 
             const SizedBox(height: AppTheme.spacingMd),
 
-            TextField(
+            TextFormField(
               controller: _eventCodeCtrl,
+              autovalidateMode: AutovalidateMode.onUserInteraction,
+              validator: FormValidators.eventCode,
               decoration: const InputDecoration(
                 labelText: "Event Code",
                 prefixIcon: Icon(Icons.event_outlined),

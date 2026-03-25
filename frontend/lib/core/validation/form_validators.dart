@@ -46,6 +46,25 @@ class FormValidators {
     return number(value, min: 1, max: 99999, fieldName: 'Team number');
   }
 
+  /// Validates event code format (alphanumeric, 4-20 chars)
+  static String? eventCode(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return 'Event code is required';
+    }
+
+    final trimmed = value.trim();
+
+    if (trimmed.length < 4 || trimmed.length > 20) {
+      return 'Event code must be 4-20 characters';
+    }
+
+    if (!RegExp(r'^[a-zA-Z0-9]+$').hasMatch(trimmed)) {
+      return 'Event code must be letters and digits only';
+    }
+
+    return null;
+  }
+
   /// Combines multiple validators
   static String? Function(String?) compose(List<String? Function(String?)> validators) {
     return (value) {
