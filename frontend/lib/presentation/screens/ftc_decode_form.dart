@@ -431,6 +431,7 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm> {
 
         TextFormField(
           controller: _commentsCtrl,
+          maxLength: 500,
           decoration: const InputDecoration(
             labelText: "Comments",
             alignLabelWithHint: true,

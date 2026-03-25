@@ -496,6 +496,7 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm> {
 
         TextFormField(
           controller: _commentsCtrl,
+          maxLength: 500,
           decoration: const InputDecoration(
             labelText: "Comments",
             alignLabelWithHint: true,
