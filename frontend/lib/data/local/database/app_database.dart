@@ -9,13 +9,13 @@ export 'tables.dart';
 part 'app_database.g.dart';
 
 /// The main database class for SushiScout
-/// 
+///
 /// Uses Drift (formerly Moor) for type-safe SQLite operations.
 /// Supports offline-first architecture with sync capabilities.
 @DriftDatabase(tables: [LocalMatchReports, LocalEvents, SyncQueue, SyncConflicts])
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(connect());
-  
+
   AppDatabase.forTesting(super.connection);
 
   @override
@@ -35,13 +35,21 @@ class AppDatabase extends _$AppDatabase {
   );
 
   // Match Report Queries
-  
+
   /// Get all non-deleted matches for an event
   Future<List<LocalMatchReport>> getMatchesForEvent(String eventId) {
     return (select(localMatchReports)
       ..where((m) => m.eventId.equals(eventId) & m.isDeleted.equals(false))
       ..orderBy([(m) => OrderingTerm.desc(m.createdAt)]))
     .get();
+  }
+
+  /// Watch all non-deleted matches for an event (reactive stream)
+  Stream<List<LocalMatchReport>> watchMatchesForEvent(String eventId) {
+    return (select(localMatchReports)
+      ..where((m) => m.eventId.equals(eventId) & m.isDeleted.equals(false))
+      ..orderBy([(m) => OrderingTerm.desc(m.createdAt)]))
+    .watch();
   }
 
   /// Get all deleted matches (trash) for an event
@@ -57,6 +65,52 @@ class AppDatabase extends _$AppDatabase {
     return (select(localMatchReports)
       ..where((m) => m.id.equals(id)))
     .getSingleOrNull();
+  }
+
+  /// Get all non-deleted matches for a specific team number across all events
+  Future<List<LocalMatchReport>> getMatchesByTeamNumber(int teamNumber) {
+    return (select(localMatchReports)
+      ..where((m) => m.teamNumber.equals(teamNumber) & m.isDeleted.equals(false))
+      ..orderBy([(m) => OrderingTerm.desc(m.createdAt)]))
+    .get();
+  }
+
+  /// Get all non-deleted matches for a specific team number within an event
+  Future<List<LocalMatchReport>> getMatchesByTeamNumberForEvent(
+    String eventId,
+    int teamNumber,
+  ) {
+    return (select(localMatchReports)
+      ..where((m) =>
+          m.eventId.equals(eventId) &
+          m.teamNumber.equals(teamNumber) &
+          m.isDeleted.equals(false))
+      ..orderBy([(m) => OrderingTerm.asc(m.matchNumber)]))
+    .get();
+  }
+
+  /// Search matches by team number, match number, or scouter name within an event
+  Future<List<LocalMatchReport>> searchMatches(
+    String eventId,
+    String query,
+  ) {
+    final q = query.trim();
+    if (q.isEmpty) return getMatchesForEvent(eventId);
+
+    final asInt = int.tryParse(q);
+    return (select(localMatchReports)
+      ..where((m) {
+        final base = m.eventId.equals(eventId) & m.isDeleted.equals(false);
+        if (asInt != null) {
+          // Numeric query: match against team number or match number
+          return base &
+              (m.teamNumber.equals(asInt) | m.matchNumber.equals(asInt));
+        }
+        // Text query: match against scouter name (case-insensitive via LIKE)
+        return base & m.scouterName.like('%$q%');
+      })
+      ..orderBy([(m) => OrderingTerm.desc(m.createdAt)]))
+    .get();
   }
 
   /// Insert or update a match
@@ -121,6 +175,21 @@ class AppDatabase extends _$AppDatabase {
     return into(localEvents).insertOnConflictUpdate(event);
   }
 
+  /// Delete an event and all its associated matches
+  Future<void> deleteEvent(String id) {
+    return transaction(() async {
+      await (delete(localMatchReports)
+        ..where((m) => m.eventId.equals(id)))
+      .go();
+      await (delete(syncQueue)
+        ..where((s) => s.eventId.equals(id)))
+      .go();
+      await (delete(localEvents)
+        ..where((e) => e.id.equals(id)))
+      .go();
+    });
+  }
+
   // Sync Queue Queries
 
   /// Add an operation to the sync queue
@@ -128,7 +197,7 @@ class AppDatabase extends _$AppDatabase {
     return into(syncQueue).insert(entry);
   }
 
-  /// Get all pending sync operations
+  /// Get all pending sync operations (retry count below threshold)
   Future<List<SyncQueueData>> getPendingSyncOperations() {
     return (select(syncQueue)
       ..where((s) => s.retryCount.isSmallerThanValue(10))
@@ -172,9 +241,24 @@ class AppDatabase extends _$AppDatabase {
     ));
   }
 
-  /// Clear completed sync operations
-  Future<void> clearCompletedSyncOperations() {
+  /// Clear all sync operations (use with caution)
+  Future<void> clearAllSyncOperations() {
     return delete(syncQueue).go();
+  }
+
+  /// Clear only failed sync operations that have exceeded max retries
+  Future<void> clearFailedSyncOperations({int maxRetries = 10}) {
+    return (delete(syncQueue)
+      ..where((s) => s.retryCount.isBiggerOrEqualValue(maxRetries)))
+    .go();
+  }
+
+  /// Get sync operations that have exceeded retry threshold
+  Future<List<SyncQueueData>> getFailedSyncOperations({int maxRetries = 10}) {
+    return (select(syncQueue)
+      ..where((s) => s.retryCount.isBiggerOrEqualValue(maxRetries))
+      ..orderBy([(s) => OrderingTerm.desc(s.lastAttempt)]))
+    .get();
   }
 
   // Conflict Resolution Queries
@@ -203,30 +287,132 @@ class AppDatabase extends _$AppDatabase {
     ));
   }
 
-  // Statistics
-
-  /// Get count of unsynced items
-  Future<int> getUnsyncedCount() async {
-    final count = await (select(localMatchReports)
-      ..where((m) => m.isSynced.equals(false)))
-    .get();
-    return count.length;
+  /// Clear resolved conflicts older than the given duration
+  Future<void> clearResolvedConflicts({Duration olderThan = const Duration(days: 30)}) {
+    final cutoff = DateTime.now().subtract(olderThan);
+    return (delete(syncConflicts)
+      ..where((c) => c.isResolved.equals(true) & c.resolvedAt.isSmallerThanValue(cutoff)))
+    .go();
   }
 
-  /// Get count of items in trash
+  // Statistics
+
+  /// Get total match count across all events (non-deleted)
+  Future<int> getMatchCount() async {
+    final countExpr = countAll();
+    final query = selectOnly(localMatchReports)
+      ..where(localMatchReports.isDeleted.equals(false))
+      ..addColumns([countExpr]);
+    final row = await query.getSingle();
+    return row.read(countExpr) ?? 0;
+  }
+
+  /// Get match count for a specific event (non-deleted)
+  Future<int> getMatchCountForEvent(String eventId) async {
+    final countExpr = countAll();
+    final query = selectOnly(localMatchReports)
+      ..where(localMatchReports.eventId.equals(eventId) &
+          localMatchReports.isDeleted.equals(false))
+      ..addColumns([countExpr]);
+    final row = await query.getSingle();
+    return row.read(countExpr) ?? 0;
+  }
+
+  /// Get count of unsynced items (efficient COUNT query)
+  Future<int> getUnsyncedCount() async {
+    final countExpr = countAll();
+    final query = selectOnly(localMatchReports)
+      ..where(localMatchReports.isSynced.equals(false))
+      ..addColumns([countExpr]);
+    final row = await query.getSingle();
+    return row.read(countExpr) ?? 0;
+  }
+
+  /// Get count of items in trash (efficient COUNT query)
   Future<int> getTrashCount(String eventId) async {
-    final count = await (select(localMatchReports)
-      ..where((m) => m.eventId.equals(eventId) & m.isDeleted.equals(true)))
-    .get();
-    return count.length;
+    final countExpr = countAll();
+    final query = selectOnly(localMatchReports)
+      ..where(localMatchReports.eventId.equals(eventId) &
+          localMatchReports.isDeleted.equals(true))
+      ..addColumns([countExpr]);
+    final row = await query.getSingle();
+    return row.read(countExpr) ?? 0;
+  }
+
+  /// Get sync queue statistics broken down by status
+  Future<SyncQueueStats> getSyncQueueStats() async {
+    final countExpr = countAll();
+
+    // Total pending (under retry limit)
+    final pendingQuery = selectOnly(syncQueue)
+      ..where(syncQueue.retryCount.isSmallerThanValue(10))
+      ..addColumns([countExpr]);
+    final pendingRow = await pendingQuery.getSingle();
+    final pending = pendingRow.read(countExpr) ?? 0;
+
+    // Failed (at or over retry limit)
+    final failedQuery = selectOnly(syncQueue)
+      ..where(syncQueue.retryCount.isBiggerOrEqualValue(10))
+      ..addColumns([countExpr]);
+    final failedRow = await failedQuery.getSingle();
+    final failed = failedRow.read(countExpr) ?? 0;
+
+    // Total in queue
+    final totalQuery = selectOnly(syncQueue)
+      ..addColumns([countExpr]);
+    final totalRow = await totalQuery.getSingle();
+    final total = totalRow.read(countExpr) ?? 0;
+
+    // Oldest pending operation timestamp
+    final oldestExpr = syncQueue.createdAt.min();
+    final oldestQuery = selectOnly(syncQueue)
+      ..where(syncQueue.retryCount.isSmallerThanValue(10))
+      ..addColumns([oldestExpr]);
+    final oldestRow = await oldestQuery.getSingle();
+    final oldestPending = oldestRow.read(oldestExpr);
+
+    return SyncQueueStats(
+      totalOperations: total,
+      pendingOperations: pending,
+      failedOperations: failed,
+      oldestPendingAt: oldestPending,
+    );
+  }
+
+  /// Purge soft-deleted matches older than the given duration
+  Future<int> purgeOldDeletedMatches({Duration olderThan = const Duration(days: 30)}) {
+    final cutoff = DateTime.now().subtract(olderThan);
+    return (delete(localMatchReports)
+      ..where((m) => m.isDeleted.equals(true) & m.updatedAt.isSmallerThanValue(cutoff)))
+    .go();
   }
 
   /// Clear all data (for testing/logout)
-  Future<void> clearAllData() async {
-    await delete(localMatchReports).go();
-    await delete(localEvents).go();
-    await delete(syncQueue).go();
-    await delete(syncConflicts).go();
+  Future<void> clearAllData() {
+    return transaction(() async {
+      await delete(syncQueue).go();
+      await delete(syncConflicts).go();
+      await delete(localMatchReports).go();
+      await delete(localEvents).go();
+    });
   }
+}
+
+/// Statistics about the sync queue
+class SyncQueueStats {
+  final int totalOperations;
+  final int pendingOperations;
+  final int failedOperations;
+  final DateTime? oldestPendingAt;
+
+  const SyncQueueStats({
+    required this.totalOperations,
+    required this.pendingOperations,
+    required this.failedOperations,
+    this.oldestPendingAt,
+  });
+
+  bool get hasFailedOperations => failedOperations > 0;
+  bool get hasPendingWork => pendingOperations > 0;
 }
 

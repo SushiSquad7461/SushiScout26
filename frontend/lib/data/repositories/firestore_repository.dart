@@ -1,11 +1,12 @@
-import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../core/logger.dart';
 import '../models/event.dart';
 import '../models/match_report.dart';
 import 'scouting_repository.dart';
 
 class FirestoreRepository implements ScoutingRepository {
   final FirebaseFirestore _firestore;
+  final Logger _logger = const Logger('FIRESTORE');
 
   FirestoreRepository(this._firestore);
 
@@ -52,53 +53,39 @@ class FirestoreRepository implements ScoutingRepository {
 
   @override
   Future<void> createMatch(String eventId, MatchReport match) async {
-    debugPrint('Writing match to: matches/${match.id}');
+    _logger.d('Writing match to: matches/${match.id}');
 
-    // Get programType from event
     final event = await getEvent(eventId);
     final programType = event?.programType ?? 'FRC';
-
     await _ensureEventExists(eventId);
 
-    // Merge robot_died into gameData for Firestore
-    final gameDataWithRobotDied = Map<String, dynamic>.from(match.gameData);
-    gameDataWithRobotDied['robot_died'] = match.robotDied;
-
-    final matchWithEventId = MatchReport(
-      id: match.id,
-      matchId: match.matchId,
-      matchNumber: match.matchNumber,
-      teamNumber: match.teamNumber,
-      alliance: match.alliance,
-      scouterName: match.scouterName,
-      gameData: gameDataWithRobotDied,
-      comments: match.comments,
-      createdAt: match.createdAt,
-      isSynced: match.isSynced,
-      isDeleted: match.isDeleted,
-      eventId: eventId,
-      teamId: match.teamId,
-      programType: programType,
-    );
-
+    final prepared = _prepareForFirestore(match, eventId, programType);
     await _firestore
         .collection('matches')
         .doc(match.id)
-        .set(matchWithEventId.toFirestore(), SetOptions(merge: true));
+        .set(prepared.toFirestore(), SetOptions(merge: true));
+  }
+
+  /// Prepares a match for Firestore by merging robot_died into gameData
+  /// and setting eventId + programType.
+  MatchReport _prepareForFirestore(MatchReport match, String eventId, String programType) {
+    final gameData = Map<String, dynamic>.from(match.gameData)
+      ..['robot_died'] = match.robotDied;
+    return match.copyWith(
+      gameData: gameData,
+      eventId: eventId,
+      programType: programType,
+    );
   }
 
   /// Ensures the event document exists in Firestore.
-  /// If it doesn't exist, creates it with default data from local or basic info.
   Future<void> _ensureEventExists(String eventId) async {
     try {
       final eventDoc = _firestore.collection('events').doc(eventId);
-      debugPrint('Checking if event $eventId exists in Firestore...');
       final docSnapshot = await eventDoc.get();
 
       if (!docSnapshot.exists) {
-        debugPrint('Event $eventId does not exist in Firestore, creating it...');
-        // Create a basic event document - the actual event data
-        // should be synced separately or created via an event management UI
+        _logger.i('Auto-creating event $eventId in Firestore');
         await eventDoc.set({
           'name': eventId,
           'programType': 'FRC',
@@ -107,54 +94,30 @@ class FirestoreRepository implements ScoutingRepository {
           'createdAt': Timestamp.fromDate(DateTime.now()),
           'autoCreated': true,
         }, SetOptions(merge: true));
-        debugPrint('Event $eventId created successfully in Firestore');
-      } else {
-        debugPrint('Event $eventId already exists in Firestore');
       }
     } catch (e, stackTrace) {
-      debugPrint('ERROR: Failed to ensure event exists: $e');
-      debugPrint('Stack trace: $stackTrace');
+      _logger.e('Failed to ensure event exists', error: e, stackTrace: stackTrace);
       rethrow;
     }
   }
 
   @override
   Future<void> updateMatch(String eventId, MatchReport match) async {
-    debugPrint('Updating match at: matches/${match.id}');
-    
-    // Get programType from event
+    _logger.d('Updating match at: matches/${match.id}');
+
     final event = await getEvent(eventId);
     final programType = event?.programType ?? 'FRC';
-    
-    // Merge robot_died into gameData for Firestore
-    final gameDataWithRobotDied = Map<String, dynamic>.from(match.gameData);
-    gameDataWithRobotDied['robot_died'] = match.robotDied;
-    
-    final matchWithEventId = MatchReport(
-      id: match.id,
-      matchId: match.matchId,
-      matchNumber: match.matchNumber,
-      teamNumber: match.teamNumber,
-      alliance: match.alliance,
-      scouterName: match.scouterName,
-      gameData: gameDataWithRobotDied,
-      comments: match.comments,
-      createdAt: match.createdAt,
-      isSynced: match.isSynced,
-      isDeleted: match.isDeleted,
-      eventId: eventId,
-      teamId: match.teamId,
-      programType: programType,
-    );
+
+    final prepared = _prepareForFirestore(match, eventId, programType);
     await _firestore
         .collection('matches')
         .doc(match.id)
-        .set(matchWithEventId.toFirestore(), SetOptions(merge: true));
+        .set(prepared.toFirestore(), SetOptions(merge: true));
   }
 
   @override
   Future<void> trashMatch(String eventId, String matchId) async {
-    debugPrint('Trashing match at: matches/$matchId');
+    _logger.d('Trashing match: $matchId');
     await _firestore
         .collection('matches')
         .doc(matchId)

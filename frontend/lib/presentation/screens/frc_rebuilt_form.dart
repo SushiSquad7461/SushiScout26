@@ -28,7 +28,8 @@ class FrcRebuiltForm extends ScoutingFormWidget {
   Map<String, dynamic> collectGameData() => {};
 }
 
-class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm> {
+class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm>
+    with KeyboardDismissMixin {
   final PageController _pageController = PageController();
   final MatchTimerController _timerController = MatchTimerController();
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
@@ -71,6 +72,7 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm> {
   @override
   void dispose() {
     _pageController.dispose();
+    _timerController.dispose();
     _matchNumberCtrl.dispose();
     _teamNumberCtrl.dispose();
     _scouterNameCtrl.dispose();
@@ -111,29 +113,31 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.event.name),
-        bottom: MatchTimer(controller: _timerController),
-      ),
-      body: SafeArea(
-        child: Form(
-          key: _formKey,
-          child: PageView(
-            controller: _pageController,
-            physics: const NeverScrollableScrollPhysics(),
-            onPageChanged: (idx) => setState(() => _currentPage = idx),
-            children: [
-              _buildPage("Setup", _buildSetup(context)),
-              _buildPage("Autonomous", _buildAuto(context)),
-              _buildPage("Teleop", _buildTeleop(context)),
-              _buildPage("Endgame", _buildEndgame(context)),
-              _buildPage("Review & Submit", _buildReview(context)),
-            ],
+    return dismissKeyboardOnTap(
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(widget.event.name),
+          bottom: MatchTimer(controller: _timerController),
+        ),
+        body: SafeArea(
+          child: Form(
+            key: _formKey,
+            child: PageView(
+              controller: _pageController,
+              physics: const NeverScrollableScrollPhysics(),
+              onPageChanged: (idx) => setState(() => _currentPage = idx),
+              children: [
+                _buildPage("Setup", _buildSetup(context)),
+                _buildPage("Autonomous", _buildAuto(context)),
+                _buildPage("Teleop", _buildTeleop(context)),
+                _buildPage("Endgame", _buildEndgame(context)),
+                _buildPage("Review & Submit", _buildReview(context)),
+              ],
+            ),
           ),
         ),
+        bottomNavigationBar: _buildBottomBar(context, colorScheme),
       ),
-      bottomNavigationBar: _buildBottomBar(context, colorScheme),
     );
   }
 
