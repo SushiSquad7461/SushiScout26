@@ -47,6 +47,14 @@ class _ImagePickerWidgetState extends State<ImagePickerWidget> {
       widget.onImagesChanged(_images);
     } catch (e) {
       debugPrint("Error picking image: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to pick image: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 

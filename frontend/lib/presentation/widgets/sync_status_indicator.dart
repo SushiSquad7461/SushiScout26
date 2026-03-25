@@ -22,7 +22,7 @@ class SyncStatusNotifier extends Notifier<SyncStatus> {
     });
     return const SyncStatus.idle();
   }
-  
+
   void setStatus(SyncStatus status) => state = status;
 }
 
@@ -35,7 +35,7 @@ final pendingSyncCountProvider = StreamProvider<int>((ref) {
 /// Sync status indicator widget showing online/offline state and pending changes
 class SyncStatusIndicator extends ConsumerWidget {
   final bool compact;
-  
+
   const SyncStatusIndicator({
     super.key,
     this.compact = false,
@@ -89,7 +89,7 @@ class SyncStatusIndicator extends ConsumerWidget {
         );
       } : null,
       child: Tooltip(
-        message: isOnline 
+        message: isOnline
           ? (pendingCount > 0 ? '$pendingCount changes pending sync. Tap to sync now.' : 'All changes synced. Tap to force sync.')
           : 'Working offline - changes will sync when connection is restored',
         child: compact
@@ -106,32 +106,55 @@ class SyncStatusIndicator extends ConsumerWidget {
     bool showBadge,
     int pendingCount,
   ) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Stack(
       clipBehavior: Clip.none,
       children: [
         Icon(icon, color: color, size: 20),
         if (showBadge && pendingCount > 0)
           Positioned(
-            right: -8,
-            top: -4,
+            right: -10,
+            top: -6,
             child: Container(
-              padding: const EdgeInsets.all(2),
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
               decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.error,
-                shape: BoxShape.circle,
+                color: colorScheme.error,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: colorScheme.surface,
+                  width: 1.5,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: colorScheme.error.withValues(alpha: 0.4),
+                    blurRadius: 4,
+                    offset: const Offset(0, 1),
+                  ),
+                ],
               ),
               constraints: const BoxConstraints(
-                minWidth: 14,
-                minHeight: 14,
+                minWidth: 18,
+                minHeight: 16,
               ),
-              child: Text(
-                pendingCount > 99 ? '99+' : '$pendingCount',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 8,
-                  fontWeight: FontWeight.bold,
+              child: AnimatedSwitcher(
+                duration: AppAnimations.quick,
+                transitionBuilder: (child, animation) {
+                  return ScaleTransition(
+                    scale: animation,
+                    child: child,
+                  );
+                },
+                child: Text(
+                  pendingCount > 99 ? '99+' : '$pendingCount',
+                  key: ValueKey<int>(pendingCount),
+                  style: TextStyle(
+                    color: colorScheme.onError,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  textAlign: TextAlign.center,
                 ),
-                textAlign: TextAlign.center,
               ),
             ),
           ),
@@ -148,13 +171,13 @@ class SyncStatusIndicator extends ConsumerWidget {
     int pendingCount,
   ) {
     final colorScheme = Theme.of(context).colorScheme;
-    
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withOpacity(0.2)),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -179,12 +202,28 @@ class SyncStatusIndicator extends ConsumerWidget {
             ],
           ),
           const SizedBox(width: 6),
-          Text(
-            label,
-            style: TextStyle(
-              color: color,
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
+          AnimatedSwitcher(
+            duration: AppAnimations.quick,
+            transitionBuilder: (child, animation) {
+              return FadeTransition(
+                opacity: animation,
+                child: SlideTransition(
+                  position: Tween<Offset>(
+                    begin: const Offset(0, 0.3),
+                    end: Offset.zero,
+                  ).animate(animation),
+                  child: child,
+                ),
+              );
+            },
+            child: Text(
+              label,
+              key: ValueKey<String>(label),
+              style: TextStyle(
+                color: color,
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ),
         ],
@@ -194,74 +233,150 @@ class SyncStatusIndicator extends ConsumerWidget {
 }
 
 /// Floating sync status bar that appears at the top
-class SyncStatusBar extends ConsumerWidget {
+class SyncStatusBar extends ConsumerStatefulWidget {
   const SyncStatusBar({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<SyncStatusBar> createState() => _SyncStatusBarState();
+}
+
+class _SyncStatusBarState extends ConsumerState<SyncStatusBar>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _pulseController;
+  late Animation<double> _pulseAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulseController = AnimationController(
+      duration: const Duration(milliseconds: 2000),
+      vsync: this,
+    );
+    _pulseAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _pulseController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final isOnline = ref.watch(manager.isOnlineProvider);
     final pendingCountAsync = ref.watch(pendingSyncCountProvider);
     final pendingCount = pendingCountAsync.asData?.value ?? 0;
-    
+
     if (isOnline && pendingCount == 0) {
+      // Stop animation when nothing is pending
+      _pulseController.stop();
       return const SizedBox.shrink();
     }
 
+    // Pulse when there are pending syncs
+    if (pendingCount > 0 && !_pulseController.isAnimating) {
+      _pulseController.repeat(reverse: true);
+    } else if (pendingCount == 0) {
+      _pulseController.stop();
+    }
+
     final colorScheme = Theme.of(context).colorScheme;
-    final backgroundColor = isOnline 
-      ? colorScheme.tertiaryContainer 
+    final backgroundColor = isOnline
+      ? colorScheme.tertiaryContainer
       : colorScheme.errorContainer;
-    final textColor = isOnline 
-      ? colorScheme.onTertiaryContainer 
+    final textColor = isOnline
+      ? colorScheme.onTertiaryContainer
       : colorScheme.onErrorContainer;
+    final accentColor = isOnline
+      ? colorScheme.tertiary
+      : colorScheme.error;
 
     return AnimatedContainer(
-      duration: const Duration(milliseconds: 300),
+      duration: AppAnimations.normal,
       curve: Curves.easeInOut,
       width: double.infinity,
-      color: backgroundColor,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: SafeArea(
-        bottom: false,
-        child: Row(
-          children: [
-            Icon(
-              isOnline ? Icons.cloud_upload : Icons.cloud_off,
-              size: 16,
-              color: textColor,
+      decoration: BoxDecoration(
+        color: backgroundColor,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Progress-style bar at the top that pulses
+          if (pendingCount > 0)
+            AnimatedBuilder(
+              animation: _pulseAnimation,
+              builder: (context, child) {
+                return Container(
+                  height: 3,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        accentColor.withValues(alpha: 0.3),
+                        accentColor.withValues(alpha: 0.6 + _pulseAnimation.value * 0.4),
+                        accentColor.withValues(alpha: 0.3),
+                      ],
+                      stops: [
+                        0.0,
+                        0.3 + _pulseAnimation.value * 0.4,
+                        1.0,
+                      ],
+                    ),
+                  ),
+                );
+              },
             ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                isOnline 
-                  ? '$pendingCount ${pendingCount == 1 ? 'change' : 'changes'} pending sync'
-                  : 'Working offline - changes will sync when connected',
-                style: TextStyle(
-                  color: textColor,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: SafeArea(
+              bottom: false,
+              child: Row(
+                children: [
+                  Icon(
+                    isOnline ? Icons.cloud_upload : Icons.cloud_off,
+                    size: 16,
+                    color: textColor,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: AnimatedSwitcher(
+                      duration: AppAnimations.quick,
+                      child: Text(
+                        isOnline
+                          ? '$pendingCount ${pendingCount == 1 ? 'change' : 'changes'} pending sync'
+                          : 'Working offline - changes will sync when connected',
+                        key: ValueKey<String>('$isOnline-$pendingCount'),
+                        style: TextStyle(
+                          color: textColor,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (isOnline)
+                    TextButton.icon(
+                      onPressed: () => _triggerSync(),
+                      icon: const Icon(Icons.sync, size: 16),
+                      label: const Text('Sync Now'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: textColor,
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                    ),
+                ],
               ),
             ),
-            if (isOnline)
-              TextButton.icon(
-                onPressed: () => _triggerSync(ref),
-                icon: const Icon(Icons.sync, size: 16),
-                label: const Text('Sync Now'),
-                style: TextButton.styleFrom(
-                  foregroundColor: textColor,
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-              ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
-  void _triggerSync(WidgetRef ref) {
+  void _triggerSync() {
     ref.read(manager.syncManagerProvider).forceSync();
     AppHaptics.medium();
   }
@@ -301,12 +416,14 @@ class _SyncingPulseIndicatorState extends State<SyncingPulseIndicator>
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return AnimatedBuilder(
       animation: _animation,
       builder: (context, child) {
         return Opacity(
           opacity: _animation.value,
-          child: const Icon(Icons.sync, color: Colors.blue),
+          child: Icon(Icons.sync, color: colorScheme.primary),
         );
       },
     );
@@ -316,7 +433,7 @@ class _SyncingPulseIndicatorState extends State<SyncingPulseIndicator>
 /// Sealed class for sync status
 sealed class SyncStatus {
   const SyncStatus();
-  
+
   const factory SyncStatus.idle() = SyncStatusIdle;
   const factory SyncStatus.syncing() = SyncStatusSyncing;
   const factory SyncStatus.error(String message) = SyncStatusError;

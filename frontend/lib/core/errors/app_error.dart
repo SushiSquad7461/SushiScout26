@@ -24,17 +24,12 @@ class NetworkError extends AppError {
   final bool isRetryable;
 
   const NetworkError(
-    String message, {
-    String? code,
-    dynamic details,
-    StackTrace? stackTrace,
+    super.message, {
+    super.code,
+    super.details,
+    super.stackTrace,
     this.isRetryable = true,
-  }) : super(
-          message,
-          code: code,
-          details: details,
-          stackTrace: stackTrace,
-        );
+  });
 
   factory NetworkError.noConnection() => const NetworkError(
         'No internet connection. Please check your network and try again.',
@@ -68,17 +63,12 @@ class ValidationError extends AppError {
   final Map<String, String>? fieldErrors;
 
   const ValidationError(
-    String message, {
-    String? code,
+    super.message, {
+    super.code,
     this.fieldErrors,
-    dynamic details,
-    StackTrace? stackTrace,
-  }) : super(
-          message,
-          code: code,
-          details: details,
-          stackTrace: stackTrace,
-        );
+    super.details,
+    super.stackTrace,
+  });
 
   factory ValidationError.requiredField(String field) => ValidationError(
         '$field is required',
@@ -107,18 +97,13 @@ class SyncError extends AppError {
   final int? retryCount;
 
   const SyncError(
-    String message, {
-    String? code,
+    super.message, {
+    super.code,
     this.entityId,
     this.retryCount,
-    dynamic details,
-    StackTrace? stackTrace,
-  }) : super(
-          message,
-          code: code,
-          details: details,
-          stackTrace: stackTrace,
-        );
+    super.details,
+    super.stackTrace,
+  });
 
   factory SyncError.conflict(String entityId) => SyncError(
         'Data conflict detected. Your changes will be queued for manual review.',
@@ -148,16 +133,11 @@ class SyncError extends AppError {
 /// Error for storage/local database issues
 class StorageError extends AppError {
   const StorageError(
-    String message, {
-    String? code,
-    dynamic details,
-    StackTrace? stackTrace,
-  }) : super(
-          message,
-          code: code,
-          details: details,
-          stackTrace: stackTrace,
-        );
+    super.message, {
+    super.code,
+    super.details,
+    super.stackTrace,
+  });
 
   factory StorageError.full() => const StorageError(
         'Storage is full. Please free up space and try again.',
@@ -179,16 +159,11 @@ class StorageError extends AppError {
 /// Error for authentication/authorization issues
 class AuthError extends AppError {
   const AuthError(
-    String message, {
-    String? code,
-    dynamic details,
-    StackTrace? stackTrace,
-  }) : super(
-          message,
-          code: code,
-          details: details,
-          stackTrace: stackTrace,
-        );
+    super.message, {
+    super.code,
+    super.details,
+    super.stackTrace,
+  });
 
   factory AuthError.unauthenticated() => const AuthError(
         'Please sign in to continue.',
@@ -209,15 +184,12 @@ class AuthError extends AppError {
 /// Error for unexpected/unknown issues
 class UnknownError extends AppError {
   const UnknownError(
-    String message, {
+    super.message, {
     String? code,
-    dynamic details,
-    StackTrace? stackTrace,
+    super.details,
+    super.stackTrace,
   }) : super(
-          message,
           code: code ?? 'UNKNOWN',
-          details: details,
-          stackTrace: stackTrace,
         );
 
   factory UnknownError.fromException(dynamic error, StackTrace? stackTrace) =>

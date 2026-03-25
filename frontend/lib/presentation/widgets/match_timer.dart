@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../../core/animations.dart';
 import '../theme/app_theme.dart';
 
 /// Controller for programmatically starting the match timer.
@@ -16,7 +17,9 @@ class MatchTimerController extends ChangeNotifier {
 /// - M3 color tokens for phase colors
 /// - Linear progress indicator
 /// - 48dp minimum touch targets for controls
-/// - Long-press to reset functionality
+/// - Visible reset button when timer is running or paused mid-match
+/// - Haptic feedback on start, pause, and reset
+/// - Semantic labels for accessibility
 class MatchTimer extends StatefulWidget implements PreferredSizeWidget {
   final VoidCallback? onMatchFinished;
   final MatchTimerController? controller;
@@ -43,6 +46,10 @@ class _MatchTimerState extends State<MatchTimer> {
     if (_secondsRemaining <= 30) return "ENDGAME"; // Last 30s
     return "TELEOP";
   }
+
+  /// Whether the timer has been started at least once (not at initial state).
+  bool get _hasStarted =>
+      _isRunning || _secondsRemaining != _totalDuration;
 
   Color _getPhaseColor(ColorScheme colorScheme) {
     switch (_currentPhase) {
@@ -96,9 +103,11 @@ class _MatchTimerState extends State<MatchTimer> {
   void _toggleTimer() {
     if (_isRunning) {
       _stopTimer();
+      AppHaptics.light();
     } else {
       if (_secondsRemaining <= 0) _resetTimer();
       _startTimer();
+      AppHaptics.medium();
     }
   }
 
@@ -110,6 +119,7 @@ class _MatchTimerState extends State<MatchTimer> {
         setState(() => _secondsRemaining--);
       } else {
         _stopTimer();
+        AppHaptics.heavy();
         widget.onMatchFinished?.call();
       }
     });
@@ -122,6 +132,7 @@ class _MatchTimerState extends State<MatchTimer> {
 
   void _resetTimer() {
     _stopTimer();
+    AppHaptics.error();
     if (mounted) setState(() => _secondsRemaining = _totalDuration);
   }
 
@@ -135,6 +146,7 @@ class _MatchTimerState extends State<MatchTimer> {
     final minutes = _secondsRemaining ~/ 60;
     final seconds = (_secondsRemaining % 60).toString().padLeft(2, '0');
     final progress = 1.0 - (_secondsRemaining / _totalDuration);
+    final timeString = "$minutes:$seconds";
 
     return Container(
       height: 64,
@@ -169,68 +181,95 @@ class _MatchTimerState extends State<MatchTimer> {
               child: Row(
                 children: [
                   // Play/Pause button (48dp minimum)
-                  IconButton(
-                    onPressed: _toggleTimer,
-                    icon: Icon(
-                      _isRunning
-                          ? Icons.pause_rounded
-                          : Icons.play_arrow_rounded,
+                  Semantics(
+                    label: _isRunning
+                        ? 'Pause match timer'
+                        : _secondsRemaining <= 0
+                            ? 'Restart match timer'
+                            : 'Start match timer',
+                    button: true,
+                    child: IconButton(
+                      onPressed: _toggleTimer,
+                      icon: Icon(
+                        _isRunning
+                            ? Icons.pause_rounded
+                            : Icons.play_arrow_rounded,
+                      ),
+                      iconSize: 28,
+                      style: IconButton.styleFrom(
+                        foregroundColor: phaseColor,
+                        minimumSize: const Size(48, 48),
+                      ),
+                      tooltip: _isRunning ? "Pause" : "Start",
                     ),
-                    iconSize: 28,
-                    style: IconButton.styleFrom(
-                      foregroundColor: phaseColor,
-                      minimumSize: const Size(48, 48),
-                    ),
-                    tooltip: _isRunning ? "Pause" : "Start",
                   ),
+
+                  // Reset button — visible when timer has been used
+                  if (_hasStarted)
+                    Semantics(
+                      label: 'Reset match timer to 2 minutes 15 seconds',
+                      button: true,
+                      child: IconButton(
+                        onPressed: _resetTimer,
+                        icon: const Icon(Icons.replay_rounded),
+                        iconSize: 22,
+                        style: IconButton.styleFrom(
+                          foregroundColor: colorScheme.onSurfaceVariant,
+                          minimumSize: const Size(48, 48),
+                        ),
+                        tooltip: "Reset",
+                      ),
+                    ),
 
                   const SizedBox(width: AppTheme.spacingSm),
 
                   // Phase label
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: AppTheme.spacingSm,
-                      vertical: AppTheme.spacingXs,
-                    ),
-                    decoration: BoxDecoration(
-                      color: phaseColor.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(AppTheme.spacingSm),
-                    ),
-                    child: Text(
-                      _currentPhase,
-                      style: theme.textTheme.labelMedium?.copyWith(
-                        color: phaseColor,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1.2,
+                  Semantics(
+                    label: 'Current match phase: ${_currentPhase.toLowerCase()}',
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppTheme.spacingSm,
+                        vertical: AppTheme.spacingXs,
+                      ),
+                      decoration: BoxDecoration(
+                        color: phaseColor.withValues(alpha: 0.15),
+                        borderRadius:
+                            BorderRadius.circular(AppTheme.spacingSm),
+                      ),
+                      child: Text(
+                        _currentPhase,
+                        style: theme.textTheme.labelMedium?.copyWith(
+                          color: phaseColor,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1.2,
+                        ),
                       ),
                     ),
                   ),
 
                   const Spacer(),
 
-                  // Timer display (long-press to reset)
-                  Tooltip(
-                    message: "Long press to reset",
-                    child: GestureDetector(
-                      onLongPress: _resetTimer,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: AppTheme.spacingMd,
-                          vertical: AppTheme.spacingSm,
+                  // Timer display
+                  Semantics(
+                    label: '$minutes minutes and ${_secondsRemaining % 60} seconds remaining',
+                    liveRegion: true,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppTheme.spacingMd,
+                        vertical: AppTheme.spacingSm,
+                      ),
+                      decoration: BoxDecoration(
+                        color: phaseColor.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(
+                          AppTheme.cardRadius,
                         ),
-                        decoration: BoxDecoration(
-                          color: phaseColor.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(
-                            AppTheme.cardRadius,
-                          ),
-                        ),
-                        child: Text(
-                          "$minutes:$seconds",
-                          style: theme.textTheme.headlineSmall?.copyWith(
-                            color: phaseColor,
-                            fontWeight: FontWeight.bold,
-                            fontFeatures: const [FontFeature.tabularFigures()],
-                          ),
+                      ),
+                      child: Text(
+                        timeString,
+                        style: theme.textTheme.headlineSmall?.copyWith(
+                          color: phaseColor,
+                          fontWeight: FontWeight.bold,
+                          fontFeatures: const [FontFeature.tabularFigures()],
                         ),
                       ),
                     ),

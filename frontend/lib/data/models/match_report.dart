@@ -16,12 +16,31 @@ class MatchReport {
   final String teamId;
   final String programType; // 'FRC' or 'FTC'
 
+  // Common
   bool get robotDied => gameData['robot_died'] ?? false;
+  bool get isFtc => programType == 'FTC' || gameData.containsKey('artifacts_auto');
+
+  // FRC getters
+  int get autoFuel => gameData['auto_fuel'] ?? 0;
+  bool get autoTowerL1 => gameData['auto_tower_l1'] ?? false;
+  int get teleopFuel => gameData['teleop_fuel'] ?? 0;
+  int get teleopTowerLevel => gameData['teleop_tower_level'] ?? 0;
+  int get defenseRating => gameData['defense_rating'] ?? 0;
+  int get driverSkill => gameData['driver_skill'] ?? 0;
   bool get trenchTraverse => gameData['trench_traverse'] ?? false;
   bool get bumpTraverse => gameData['bump_traverse'] ?? false;
   bool get shootingRangeClose => gameData['shooting_range_close'] ?? false;
   bool get shootingRangeMid => gameData['shooting_range_mid'] ?? false;
   bool get shootingRangeFar => gameData['shooting_range_far'] ?? false;
+
+  // FTC getters
+  bool get leave => gameData['leave'] ?? false;
+  int get artifactsAuto => gameData['artifacts_auto'] ?? 0;
+  bool get indexingAuto => gameData['indexing_auto'] ?? false;
+  int get artifactsTeleop => gameData['artifacts_teleop'] ?? 0;
+  bool get indexingTeleop => gameData['indexing_teleop'] ?? false;
+  String get baseExpansion => gameData['base_expansion'] ?? 'None';
+  double get driverQuality => (gameData['driver_quality'] ?? 0).toDouble();
 
   MatchReport({
     required this.id,
@@ -96,6 +115,40 @@ class MatchReport {
       'teamId': teamId,
       'programType': programType,
     };
+  }
+
+  MatchReport copyWith({
+    String? id,
+    String? matchId,
+    int? matchNumber,
+    int? teamNumber,
+    String? alliance,
+    String? scouterName,
+    Map<String, dynamic>? gameData,
+    String? comments,
+    DateTime? createdAt,
+    bool? isSynced,
+    bool? isDeleted,
+    String? eventId,
+    String? teamId,
+    String? programType,
+  }) {
+    return MatchReport(
+      id: id ?? this.id,
+      matchId: matchId ?? this.matchId,
+      matchNumber: matchNumber ?? this.matchNumber,
+      teamNumber: teamNumber ?? this.teamNumber,
+      alliance: alliance ?? this.alliance,
+      scouterName: scouterName ?? this.scouterName,
+      gameData: gameData ?? this.gameData,
+      comments: comments ?? this.comments,
+      createdAt: createdAt ?? this.createdAt,
+      isSynced: isSynced ?? this.isSynced,
+      isDeleted: isDeleted ?? this.isDeleted,
+      eventId: eventId ?? this.eventId,
+      teamId: teamId ?? this.teamId,
+      programType: programType ?? this.programType,
+    );
   }
 
   Map<String, dynamic> toJson() {

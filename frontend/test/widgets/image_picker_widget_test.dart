@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:frontend/presentation/widgets/image_picker_widget.dart';
@@ -7,7 +6,6 @@ void main() {
   testWidgets('ImagePickerWidget displays initial images', (tester) async {
     // Arrange
     final images = ['path/to/image1.jpg', 'path/to/image2.jpg'];
-    List<String> updatedImages = [];
 
     // Act
     await tester.pumpWidget(
@@ -15,7 +13,7 @@ void main() {
         home: Scaffold(
           body: ImagePickerWidget(
             initialImages: images,
-            onImagesChanged: (list) => updatedImages = list,
+            onImagesChanged: (_) {},
           ),
         ),
       ),

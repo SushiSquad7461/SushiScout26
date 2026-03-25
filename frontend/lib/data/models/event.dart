@@ -38,4 +38,49 @@ class Event {
       'teamId': teamId,
     };
   }
+
+  Event copyWith({
+    String? id,
+    String? name,
+    String? programType,
+    String? tbaKey,
+    DateTime? startDate,
+    String? teamId,
+  }) {
+    return Event(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      programType: programType ?? this.programType,
+      tbaKey: tbaKey ?? this.tbaKey,
+      startDate: startDate ?? this.startDate,
+      teamId: teamId ?? this.teamId,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is Event &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          name == other.name &&
+          programType == other.programType &&
+          tbaKey == other.tbaKey &&
+          startDate == other.startDate &&
+          teamId == other.teamId;
+
+  @override
+  int get hashCode => Object.hash(
+        id,
+        name,
+        programType,
+        tbaKey,
+        startDate,
+        teamId,
+      );
+
+  @override
+  String toString() =>
+      'Event(id: $id, name: $name, programType: $programType, '
+      'tbaKey: $tbaKey, startDate: $startDate, teamId: $teamId)';
 }

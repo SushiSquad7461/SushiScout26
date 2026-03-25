@@ -7,7 +7,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/errors/app_error.dart';
 import '../../../core/logger.dart';
 import '../../../core/network/retry.dart';
-import '../../../core/result/result.dart';
 import '../../models/match_report.dart';
 import '../database/app_database.dart';
 import '../../repositories/firestore_repository.dart';
@@ -41,7 +40,7 @@ final isOnlineProvider = Provider<bool>((ref) {
   return connectivityAsync.when(
     data: (result) => result != ConnectivityResult.none,
     loading: () => true, // Assume online while loading
-    error: (_, __) => false,
+    error: (_, _) => false,
   );
 });
 

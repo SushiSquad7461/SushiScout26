@@ -4,7 +4,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:frontend/presentation/widgets/sync_status_indicator.dart';
 import 'package:frontend/data/local/sync/sync_manager.dart' as manager;
-import 'package:mockito/mockito.dart';
 
 // Mock SyncManager is hard because it's a concrete class with private members.
 // But we can override the provider to return a FakeSyncManager.
