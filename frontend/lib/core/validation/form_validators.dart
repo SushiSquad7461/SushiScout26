@@ -38,12 +38,12 @@ class FormValidators {
     return number(value, min: 1, max: 200, fieldName: 'Match number');
   }
 
-  /// Validates team number format (e.g. 1-9999)
+  /// Validates team number format (e.g. 1-99999, supports FRC and FTC)
   static String? teamNumber(String? value) {
     final requiredError = required(value, 'Team number');
     if (requiredError != null) return requiredError;
-    
-    return number(value, min: 1, max: 9999, fieldName: 'Team number');
+
+    return number(value, min: 1, max: 99999, fieldName: 'Team number');
   }
 
   /// Combines multiple validators
