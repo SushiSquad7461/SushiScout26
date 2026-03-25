@@ -44,6 +44,7 @@ dependencies:
   path_provider: ^2.1.5
   firebase_core: ^4.4.0
   cloud_firestore: ^6.1.1
+  cloud_functions: ^6.0.6
   drift: ^2.21.0
   sqlite3_flutter_libs: ^0.5.24
   connectivity_plus: ^6.0.3
