@@ -896,6 +896,32 @@ class _SettingsSheetState extends ConsumerState<_SettingsSheet> {
                   ref.read(settingsProvider.notifier).setEventCode(val),
             ),
 
+            const SizedBox(height: AppTheme.spacingMd),
+
+            Text(
+              "Program Type",
+              style: theme.textTheme.labelLarge?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: AppTheme.spacingSm),
+            SegmentedButton<String>(
+              segments: const [
+                ButtonSegment(
+                  value: 'FRC',
+                  label: Text('FRC'),
+                ),
+                ButtonSegment(
+                  value: 'FTC',
+                  label: Text('FTC'),
+                ),
+              ],
+              selected: {ref.watch(settingsProvider)[PrefKeys.programType] ?? 'FRC'},
+              onSelectionChanged: (selection) {
+                ref.read(settingsProvider.notifier).setProgramType(selection.first);
+              },
+            ),
+
             const SizedBox(height: AppTheme.spacingLg),
 
             // Appearance section
