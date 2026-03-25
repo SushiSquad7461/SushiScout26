@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:frontend/main.dart' as app;
-import 'package:frontend/data/repositories/scouting_repository.dart';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();

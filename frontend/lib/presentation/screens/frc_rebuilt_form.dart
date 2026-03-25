@@ -448,7 +448,7 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm> {
       children: [
         // Climb dropdown
         DropdownButtonFormField<int>(
-          value: _teleopTower,
+          initialValue: _teleopTower,
           decoration: const InputDecoration(
             labelText: "Climb Result",
             prefixIcon: Icon(Icons.trending_up),

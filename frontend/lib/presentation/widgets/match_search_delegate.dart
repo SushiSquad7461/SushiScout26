@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../data/models/match_report.dart';
 import '../screens/match_details.dart';
-import '../theme/app_theme.dart';
 
 class MatchSearchDelegate extends SearchDelegate<MatchReport?> {
   final List<MatchReport> matches;
@@ -69,7 +68,7 @@ class MatchSearchDelegate extends SearchDelegate<MatchReport?> {
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: allianceColor.withOpacity(0.1),
+              color: allianceColor.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Center(

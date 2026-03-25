@@ -66,7 +66,7 @@ class ExportService {
               level: 0,
               child: pw.Text("SushiScout Match Reports"),
             ),
-            pw.Table.fromTextArray(
+            pw.TableHelper.fromTextArray(
               context: context,
               data: <List<String>>[
                 <String>['Match', 'Team', 'Alliance', 'Auto', 'Teleop', 'Climb'],

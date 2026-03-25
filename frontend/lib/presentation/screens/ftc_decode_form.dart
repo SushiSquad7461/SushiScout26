@@ -391,7 +391,7 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         DropdownButtonFormField<String>(
-          value: _baseExpansion,
+          initialValue: _baseExpansion,
           decoration: const InputDecoration(
             labelText: "Base Expansion",
             prefixIcon: Icon(Icons.open_in_full),

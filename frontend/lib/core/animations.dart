@@ -159,7 +159,6 @@ class StaggeredListAnimation extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: children.asMap().entries.map((entry) {
-        final index = entry.key;
         final child = entry.value;
         
         return TweenAnimationBuilder<double>(

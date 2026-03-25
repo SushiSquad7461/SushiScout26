@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/local/preferences.dart';
 import '../../data/models/match_report.dart';
-import '../../data/repositories/scouting_repository.dart';
 import '../theme/app_theme.dart';
 
 import '../../data/repositories/hybrid_repository.dart';
