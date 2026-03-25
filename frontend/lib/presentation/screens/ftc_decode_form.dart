@@ -11,6 +11,7 @@ import '../widgets/match_timer.dart';
 import '../widgets/counter_card.dart';
 import '../../data/local/preferences.dart';
 import '../theme/app_theme.dart';
+import '../../core/animations.dart';
 
 /// FTC "DECODE" scouting form with Material 3 styling.
 class FtcDecodeForm extends ScoutingFormWidget {
@@ -297,17 +298,48 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm> {
             ButtonSegment(
               value: 'Red',
               label: Text('Red Alliance'),
-              icon: Icon(Icons.shield, color: Colors.red),
+              icon: Icon(Icons.shield, color: AppTheme.allianceRed),
             ),
             ButtonSegment(
               value: 'Blue',
               label: Text('Blue Alliance'),
-              icon: Icon(Icons.shield, color: Colors.blue),
+              icon: Icon(Icons.shield, color: AppTheme.allianceBlue),
             ),
           ],
           selected: {_alliance},
-          onSelectionChanged: (val) => setState(() => _alliance = val.first),
+          onSelectionChanged: (val) {
+            AppHaptics.selection();
+            setState(() => _alliance = val.first);
+          },
           showSelectedIcon: false,
+          style: ButtonStyle(
+            backgroundColor: WidgetStateProperty.resolveWith((states) {
+              if (states.contains(WidgetState.selected)) {
+                final color = _alliance == 'Red'
+                    ? AppTheme.allianceRed
+                    : AppTheme.allianceBlue;
+                return color.withValues(alpha: 0.2);
+              }
+              return null;
+            }),
+            foregroundColor: WidgetStateProperty.resolveWith((states) {
+              if (states.contains(WidgetState.selected)) {
+                return _alliance == 'Red'
+                    ? AppTheme.allianceRed
+                    : AppTheme.allianceBlue;
+              }
+              return null;
+            }),
+            side: WidgetStateProperty.resolveWith((states) {
+              if (states.contains(WidgetState.selected)) {
+                final color = _alliance == 'Red'
+                    ? AppTheme.allianceRed
+                    : AppTheme.allianceBlue;
+                return BorderSide(color: color, width: 2);
+              }
+              return null;
+            }),
+          ),
         ),
       ],
     );
