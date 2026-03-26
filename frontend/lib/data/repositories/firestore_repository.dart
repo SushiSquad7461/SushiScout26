@@ -52,6 +52,11 @@ class FirestoreRepository implements ScoutingRepository {
     return snapshot.docs.map((doc) => MatchReport.fromFirestore(doc)).toList();
   }
 
+  Future<List<MatchReport>> getDeletedMatches(String eventId) async {
+    final snapshot = await _matchesQuery(eventId, isDeleted: true).get();
+    return snapshot.docs.map((doc) => MatchReport.fromFirestore(doc)).toList();
+  }
+
   @override
   Future<void> createMatch(String eventId, MatchReport match, {String? teamIdOverride}) async {
     _logger.d('Writing match to: matches/${match.id}');

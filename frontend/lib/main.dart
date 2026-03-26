@@ -8,6 +8,7 @@ import 'data/repositories/firestore_repository.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'data/local/preferences.dart';
 import 'data/local/sync/sync_manager.dart';
+import 'presentation/providers/auth_provider.dart';
 import 'presentation/widgets/auth_wrapper.dart';
 import 'presentation/theme/app_theme.dart';
 
@@ -25,6 +26,7 @@ void main() async {
   final container = ProviderContainer(
     overrides: [
       sharedPreferencesProvider.overrideWithValue(prefs),
+      activeTeamIdProvider.overrideWith((ref) => ref.watch(currentTeamIdProvider)),
       firestoreRepositoryProvider.overrideWith((ref) {
         final teamId = ref.watch(activeTeamIdProvider);
         return FirestoreRepository(FirebaseFirestore.instance, teamId: teamId);

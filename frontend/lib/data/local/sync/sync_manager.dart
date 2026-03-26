@@ -216,6 +216,7 @@ class SyncManager {
 
   /// Update the pending count stream
   Future<void> _updatePendingCount() async {
+    if (_db == null) return;
     final pendingOps = await db.getPendingSyncOperations();
     _pendingCountController.add(pendingOps.length);
   }

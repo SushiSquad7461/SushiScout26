@@ -39,7 +39,14 @@ class TeamRepository {
       }
       
       transaction.set(teamRef, team.toFirestore());
-      
+
+      // Write to members subcollection so isTeamMember() rule works
+      final memberRef = teamRef.collection('members').doc(createdBy);
+      transaction.set(memberRef, {
+        'role': 'admin',
+        'joinedAt': Timestamp.fromDate(DateTime.now()),
+      });
+
       final userRef = _firestore.collection('users').doc(createdBy);
       transaction.update(userRef, {
         'currentTeamId': teamRef.id,
@@ -89,6 +96,13 @@ class TeamRepository {
       transaction.update(teamRef, {
         'memberCount': FieldValue.increment(1),
       });
+
+      // Write to members subcollection so isTeamMember() rule works
+      final memberRef = teamRef.collection('members').doc(userId);
+      transaction.set(memberRef, {
+        'role': 'member',
+        'joinedAt': Timestamp.fromDate(DateTime.now()),
+      });
     });
 
     return team;
@@ -131,6 +145,10 @@ class TeamRepository {
       transaction.update(teamRef, {
         'memberCount': FieldValue.increment(-1),
       });
+
+      // Remove from members subcollection
+      final memberRef = teamRef.collection('members').doc(userId);
+      transaction.delete(memberRef);
     });
   }
 

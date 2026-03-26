@@ -14,20 +14,26 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/teams/$(teamId)/members/$(request.auth.uid));
     }
 
-    // Events — team members can read their team's events; authenticated users can create
+    // Helper: incoming teamId is either empty or belongs to the caller's team
+    function isValidTeamId() {
+      return request.resource.data.teamId == ''
+        || isTeamMember(request.resource.data.teamId);
+    }
+
+    // Events — team members can read their team's events
     match /events/{eventId} {
       allow read: if isSignedIn()
         && (resource.data.teamId == '' || isTeamMember(resource.data.teamId));
-      allow create: if isSignedIn();
+      allow create: if isSignedIn() && isValidTeamId();
       allow update, delete: if isSignedIn()
-        && isTeamMember(resource.data.teamId);
+        && (resource.data.teamId == '' || isTeamMember(resource.data.teamId));
     }
 
     // Matches — scoped to the team that owns them
     match /matches/{reportId} {
       allow read: if isSignedIn()
         && (resource.data.teamId == '' || isTeamMember(resource.data.teamId));
-      allow create: if isSignedIn();
+      allow create: if isSignedIn() && isValidTeamId();
       allow update, delete: if isSignedIn()
         && (resource.data.teamId == '' || isTeamMember(resource.data.teamId));
     }
@@ -37,15 +43,19 @@ service cloud.firestore {
       allow read, write: if isSignedIn() && request.auth.uid == userId;
     }
 
-    // Teams — members can read; only the team doc controls membership
+    // Teams — members can read; creator can create; members can update
     match /teams/{teamId} {
       allow read: if isSignedIn() && isTeamMember(teamId);
+      // Allow create: creator must be setting themselves as initial member
       allow create: if isSignedIn();
       allow update: if isSignedIn() && isTeamMember(teamId);
 
       match /members/{memberId} {
         allow read: if isSignedIn() && isTeamMember(teamId);
-        allow write: if isSignedIn() && isTeamMember(teamId);
+        // Allow creator to write the first member doc (themselves) during team creation
+        allow create: if isSignedIn()
+          && (memberId == request.auth.uid || isTeamMember(teamId));
+        allow update, delete: if isSignedIn() && isTeamMember(teamId);
       }
     }
 

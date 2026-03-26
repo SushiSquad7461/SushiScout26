@@ -274,16 +274,22 @@ def update_match_from_sheets(req: https_fn.CallableRequest) -> dict:
     Called by Apps Script when a row is edited in Sheets.
     """
     try:
+        if not req.auth:
+            raise https_fn.HttpsError(
+                code=https_fn.FunctionsErrorCode.UNAUTHENTICATED,
+                message="Must be authenticated"
+            )
+
         event_id = req.data.get('eventId')
         report_id = req.data.get('reportId')
         match_data = req.data.get('data', {})
-        
+
         if not event_id or not report_id:
             raise https_fn.HttpsError(
                 code=https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
                 message="Missing eventId or reportId"
             )
-        
+
         logger.info(f"Updating match from Sheets: {event_id}/{report_id}")
 
         db = get_db()

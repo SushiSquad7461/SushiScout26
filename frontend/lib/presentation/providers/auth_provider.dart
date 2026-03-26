@@ -278,10 +278,14 @@ class AuthNotifier extends Notifier<AuthState> {
     try {
       final userId = state.userId;
       if (userId == null) return;
-      
+
       final teamRepo = ref.read(teamRepositoryProvider);
       final team = await teamRepo.getTeam(teamId);
-      
+
+      // Persist to Firestore so it survives app restarts
+      final authRepo = ref.read(authRepositoryProvider);
+      await authRepo.updateCurrentTeamId(teamId);
+
       state = state.copyWith(
         currentTeamId: teamId,
         isMasterTeamMember: team?.isMasterTeam ?? false,

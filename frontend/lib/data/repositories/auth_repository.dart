@@ -44,11 +44,19 @@ class AuthRepository {
   Future<UserProfile?> refreshUserProfile() async {
     final user = _authService.currentUser;
     if (user == null) return null;
-    
+
     final doc = await _firestore.collection('users').doc(user.uid).get();
     if (doc.exists) {
       return UserProfile.fromFirestore(doc);
     }
     return null;
+  }
+
+  Future<void> updateCurrentTeamId(String teamId) async {
+    final user = _authService.currentUser;
+    if (user == null) return;
+    await _firestore.collection('users').doc(user.uid).update({
+      'currentTeamId': teamId,
+    });
   }
 }

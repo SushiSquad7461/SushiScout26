@@ -266,10 +266,9 @@ class HybridRepository implements ScoutingRepository {
   Future<void> _refreshTrashStreamWeb(String eventId) async {
     final controller = _trashStreamControllers[eventId];
     if (controller == null || controller.isClosed) return;
-    
+
     try {
-      final allMatches = await _firestore.getMatches(eventId);
-      final deleted = allMatches.where((m) => m.isDeleted).toList();
+      final deleted = await _firestore.getDeletedMatches(eventId);
       if (!controller.isClosed) {
         controller.add(deleted);
       }
