@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/animations.dart';
 import '../../data/local/sync/sync_manager.dart' as manager;
@@ -9,6 +10,11 @@ final syncStatusProvider = NotifierProvider<SyncStatusNotifier, SyncStatus>(Sync
 class SyncStatusNotifier extends Notifier<SyncStatus> {
   @override
   SyncStatus build() {
+    // On web, Firebase handles sync automatically - always idle/success
+    if (kIsWeb) {
+      return const SyncStatus.success();
+    }
+    
     // Listen to SyncManager stream and update state
     final syncManager = ref.watch(manager.syncManagerProvider);
     syncManager.syncStream.listen((status) {
@@ -28,6 +34,11 @@ class SyncStatusNotifier extends Notifier<SyncStatus> {
 
 /// Provider for pending sync count
 final pendingSyncCountProvider = StreamProvider<int>((ref) {
+  // On web, Firebase handles sync automatically - no pending count
+  if (kIsWeb) {
+    return Stream.value(0);
+  }
+  
   final syncManager = ref.watch(manager.syncManagerProvider);
   return syncManager.pendingCountStream;
 });
@@ -43,6 +54,11 @@ class SyncStatusIndicator extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // On web, Firebase handles sync automatically - show simplified indicator
+    if (kIsWeb) {
+      return _buildWebIndicator(context);
+    }
+
     final isOnline = ref.watch(manager.isOnlineProvider);
     final syncStatus = ref.watch(syncStatusProvider);
     final pendingCountAsync = ref.watch(pendingSyncCountProvider);
@@ -230,6 +246,39 @@ class SyncStatusIndicator extends ConsumerWidget {
       ),
     );
   }
+
+  /// Simplified indicator for web - Firebase handles sync automatically
+  Widget _buildWebIndicator(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    
+    if (compact) {
+      return Icon(Icons.cloud_done, color: colorScheme.primary, size: 20);
+    }
+    
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: colorScheme.primary.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: colorScheme.primary.withOpacity(0.2)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.cloud_done, color: colorScheme.primary, size: 16),
+          const SizedBox(width: 6),
+          Text(
+            'Synced',
+            style: TextStyle(
+              color: colorScheme.primary,
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 /// Floating sync status bar that appears at the top
@@ -265,6 +314,11 @@ class _SyncStatusBarState extends ConsumerState<SyncStatusBar>
 
   @override
   Widget build(BuildContext context) {
+    // On web, Firebase handles sync automatically - don't show the bar
+    if (kIsWeb) {
+      return const SizedBox.shrink();
+    }
+
     final isOnline = ref.watch(manager.isOnlineProvider);
     final pendingCountAsync = ref.watch(pendingSyncCountProvider);
     final pendingCount = pendingCountAsync.asData?.value ?? 0;

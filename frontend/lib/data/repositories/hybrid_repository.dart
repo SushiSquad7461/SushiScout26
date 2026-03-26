@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:drift/drift.dart'; // Needed for Value
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/errors/app_error.dart';
 import '../../core/logger.dart';
@@ -26,10 +27,11 @@ final hybridRepositoryProvider = Provider<HybridRepository>((ref) {
 /// - Writes: To local DB + queue for sync to Firestore
 /// - Sync: Automatic when online, queued when offline
 /// 
-/// This ensures the app works completely offline while maintaining
-/// data consistency when connectivity is available.
+/// On web, uses Firebase directly (with its built-in offline persistence)
+/// since SQLite/Drift is not available.
+
 class HybridRepository implements ScoutingRepository {
-  final AppDatabase _db;
+  final AppDatabase? _db;
   final FirestoreRepository _firestore;
   final SyncManager _syncManager;
   final Logger _logger = const Logger('REPO');
@@ -38,11 +40,23 @@ class HybridRepository implements ScoutingRepository {
   final _trashStreamControllers = <String, StreamController<List<MatchReport>>>{};
   final _firestoreSubscriptions = <String, StreamSubscription<List<MatchReport>>>{};
 
-  HybridRepository(this._db, this._firestore, this._syncManager) {
-    _initializeStreams();
+  bool get isLocalDbAvailable => _db != null;
+  
+  AppDatabase get db {
+    if (_db == null) {
+      throw StateError('Local database not available on this platform');
+    }
+    return _db!;
   }
+  
+  HybridRepository(this._db, this._firestore, this._syncManager);
+
+  bool get _isWeb => kIsWeb;
 
   void _initializeStreams() {
+    // On web, we don't have a sync manager with streams, so skip
+    if (_isWeb) return;
+    
     // Listen to sync status changes to refresh streams
     _syncManager.syncStream.listen((status) {
       if (status is SyncCompleted && status.success > 0) {
@@ -64,14 +78,50 @@ class HybridRepository implements ScoutingRepository {
   Stream<List<MatchReport>> watchMatches(String eventId) {
     _logger.d('Watching matches for event: $eventId');
     
-    // Create or get existing stream controller
+    // On web, use Firestore directly (has built-in offline persistence)
+    if (_isWeb) {
+      return _watchMatchesWeb(eventId);
+    }
+    
+    // Native: use local DB + Firestore sync
+    return _watchMatchesNative(eventId);
+  }
+
+  Stream<List<MatchReport>> _watchMatchesWeb(String eventId) {
+    var controller = _matchStreamControllers[eventId];
+    if (controller == null || controller.isClosed) {
+      controller = StreamController<List<MatchReport>>.broadcast();
+      _matchStreamControllers[eventId] = controller;
+      
+      // Load from Firestore directly
+      _refreshMatchStreamWeb(eventId);
+      
+      // Setup real-time Firestore listener
+      final subscription = _firestore.watchMatches(eventId).listen(
+        (matches) async {
+          await Future.microtask(() async {
+            if (!controller!.isClosed) {
+              controller.add(matches);
+            }
+          });
+        },
+        onError: (e) {
+          _logger.w('Firestore stream error', error: e);
+        },
+      );
+      _firestoreSubscriptions[eventId] = subscription;
+    }
+    
+    return controller.stream;
+  }
+
+  Stream<List<MatchReport>> _watchMatchesNative(String eventId) {
+    _initializeStreams();
+    
     var controller = _matchStreamControllers[eventId];
     if (controller == null || controller.isClosed) {
       controller = StreamController<List<MatchReport>>.broadcast(
-        onCancel: () {
-          // Optional: Cancel firestore subscription when no listeners?
-          // For now, we keep it alive to ensure background updates continue
-        },
+        onCancel: () {},
       );
       _matchStreamControllers[eventId] = controller;
       
@@ -91,22 +141,19 @@ class HybridRepository implements ScoutingRepository {
     _logger.d('Setting up Firestore subscription for event: $eventId');
     final subscription = _firestore.watchMatches(eventId).listen(
       (remoteMatches) async {
-        // Workaround for Windows: Ensure Firestore callbacks run on main thread
         await Future.microtask(() async {
           _logger.d('Received ${remoteMatches.length} matches from Firestore stream');
           try {
-            // Use batch transaction for better performance and to reduce UI jitter
-            await _db.batch((batch) {
+            await db.batch((batch) {
               for (final match in remoteMatches) {
                 batch.insert(
-                  _db.localMatchReports,
+                  db.localMatchReports,
                   _toLocalMatchReport(match, eventId),
                   mode: InsertMode.insertOrReplace,
                 );
               }
             });
             
-            // Refresh the stream to show new data
             _refreshMatchStream(eventId);
           } catch (e) {
             _logger.e('Error syncing remote matches to local DB', error: e);
@@ -121,7 +168,30 @@ class HybridRepository implements ScoutingRepository {
     _firestoreSubscriptions[eventId] = subscription;
   }
 
+  Future<void> _refreshMatchStreamWeb(String eventId) async {
+    final controller = _matchStreamControllers[eventId];
+    if (controller == null || controller.isClosed) return;
+    
+    try {
+      final matches = await _firestore.getMatches(eventId);
+      if (!controller.isClosed) {
+        controller.add(matches);
+      }
+    } catch (e) {
+      _logger.e('Error refreshing match stream', error: e);
+      if (!controller.isClosed) {
+        controller.addError(e);
+      }
+    }
+  }
+
   Future<void> _refreshMatchStream(String eventId) async {
+    // On web, use different logic
+    if (_isWeb) {
+      await _refreshMatchStreamWeb(eventId);
+      return;
+    }
+    
     final controller = _matchStreamControllers[eventId];
     if (controller == null || controller.isClosed) return;
     
@@ -142,6 +212,45 @@ class HybridRepository implements ScoutingRepository {
   Stream<List<MatchReport>> watchTrash(String eventId) {
     _logger.d('Watching trash for event: $eventId');
 
+    // On web, use Firestore directly
+    if (_isWeb) {
+      return _watchTrashWeb(eventId);
+    }
+    
+    return _watchTrashNative(eventId);
+  }
+
+  Stream<List<MatchReport>> _watchTrashWeb(String eventId) {
+    var controller = _trashStreamControllers[eventId];
+    if (controller == null || controller.isClosed) {
+      controller = StreamController<List<MatchReport>>.broadcast();
+      _trashStreamControllers[eventId] = controller;
+
+      // Load from Firestore directly
+      _refreshTrashStreamWeb(eventId);
+
+      // Listen to Firestore for trash changes
+      final subscription = _firestore.watchTrash(eventId).listen(
+        (matches) async {
+          await Future.microtask(() async {
+            if (!controller!.isClosed) {
+              controller.add(matches.where((m) => m.isDeleted).toList());
+            }
+          });
+        },
+        onError: (e) {
+          _logger.w('Firestore trash stream error', error: e);
+        },
+      );
+      _firestoreSubscriptions['trash_$eventId'] = subscription;
+    }
+
+    return controller.stream;
+  }
+
+  Stream<List<MatchReport>> _watchTrashNative(String eventId) {
+    _initializeStreams();
+    
     var controller = _trashStreamControllers[eventId];
     if (controller == null || controller.isClosed) {
       controller = StreamController<List<MatchReport>>.broadcast();
@@ -154,12 +263,35 @@ class HybridRepository implements ScoutingRepository {
     return controller.stream;
   }
 
+  Future<void> _refreshTrashStreamWeb(String eventId) async {
+    final controller = _trashStreamControllers[eventId];
+    if (controller == null || controller.isClosed) return;
+
+    try {
+      final deleted = await _firestore.getDeletedMatches(eventId);
+      if (!controller.isClosed) {
+        controller.add(deleted);
+      }
+    } catch (e) {
+      _logger.e('Error refreshing trash stream', error: e);
+      if (!controller.isClosed) {
+        controller.addError(e);
+      }
+    }
+  }
+
   Future<void> _refreshTrashStream(String eventId) async {
+    // On web, use different logic
+    if (_isWeb) {
+      await _refreshTrashStreamWeb(eventId);
+      return;
+    }
+    
     final controller = _trashStreamControllers[eventId];
     if (controller == null || controller.isClosed) return;
     
     try {
-      final deleted = await _db.getDeletedMatchesForEvent(eventId);
+      final deleted = await db.getDeletedMatchesForEvent(eventId);
       if (!controller.isClosed) {
         controller.add(deleted.map(_toMatchReport).toList());
       }
@@ -175,8 +307,13 @@ class HybridRepository implements ScoutingRepository {
   Future<List<MatchReport>> getMatches(String eventId) async {
     _logger.d('Getting matches for event: $eventId');
     
-    // Always read from local DB first (fast, works offline)
-    final localMatches = await _db.getMatchesForEvent(eventId);
+    // On web, use Firestore directly
+    if (_isWeb) {
+      return _firestore.getMatches(eventId);
+    }
+    
+    // Native: read from local DB first
+    final localMatches = await db.getMatchesForEvent(eventId);
     
     // Background refresh from Firestore (if online)
     _refreshFromFirestore(eventId).catchError((e) {
@@ -198,11 +335,8 @@ class HybridRepository implements ScoutingRepository {
 
       _logger.d('Found ${firestoreMatches.length} matches in Firestore, updating local DB');
 
-      // Update local DB with firestore data
-      // Note: We don't call _refreshMatchStream here to avoid infinite loops.
-      // The stream will be updated through the Firestore subscription or next getMatches call.
       for (final match in firestoreMatches) {
-        await _db.upsertMatch(_toLocalMatchReport(match, eventId));
+        await db.upsertMatch(_toLocalMatchReport(match, eventId));
       }
 
       _logger.d('Refreshed ${firestoreMatches.length} matches from Firestore');
@@ -219,9 +353,22 @@ class HybridRepository implements ScoutingRepository {
       'matchId': match.id,
     });
     
+    // On web, write directly to Firestore (handles offline automatically)
+    if (_isWeb) {
+      try {
+        await _firestore.createMatch(eventId, match);
+        await _refreshMatchStreamWeb(eventId);
+        _logger.i('Match created in Firestore');
+      } catch (e, stackTrace) {
+        _logger.e('Failed to create match', error: e, stackTrace: stackTrace);
+        throw StorageError('Failed to create match: $e');
+      }
+      return;
+    }
+    
     try {
       // 1. Save to local DB immediately
-      await _db.upsertMatch(_toLocalMatchReport(match, eventId));
+      await db.upsertMatch(_toLocalMatchReport(match, eventId));
       
       // 2. Queue for sync to Firestore
       await _syncManager.queueCreate(eventId, match);
@@ -247,9 +394,22 @@ class HybridRepository implements ScoutingRepository {
       'matchId': match.id,
     });
     
+    // On web, write directly to Firestore
+    if (_isWeb) {
+      try {
+        await _firestore.updateMatch(eventId, match);
+        await _refreshMatchStreamWeb(eventId);
+        _logger.i('Match updated in Firestore');
+      } catch (e, stackTrace) {
+        _logger.e('Failed to update match', error: e, stackTrace: stackTrace);
+        throw StorageError('Failed to update match: $e');
+      }
+      return;
+    }
+    
     try {
       // 1. Save to local DB immediately
-      await _db.upsertMatch(_toLocalMatchReport(match, eventId));
+      await db.upsertMatch(_toLocalMatchReport(match, eventId));
       
       // 2. Queue for sync to Firestore
       await _syncManager.queueUpdate(eventId, match);
@@ -275,9 +435,23 @@ class HybridRepository implements ScoutingRepository {
       'matchId': matchId,
     });
     
+    // On web, write directly to Firestore
+    if (_isWeb) {
+      try {
+        await _firestore.trashMatch(eventId, matchId);
+        await _refreshMatchStreamWeb(eventId);
+        await _refreshTrashStreamWeb(eventId);
+        _logger.i('Match trashed in Firestore');
+      } catch (e, stackTrace) {
+        _logger.e('Failed to trash match', error: e, stackTrace: stackTrace);
+        throw StorageError('Failed to trash match: $e');
+      }
+      return;
+    }
+    
     try {
       // 1. Soft delete in local DB
-      await _db.softDeleteMatch(matchId);
+      await db.softDeleteMatch(matchId);
       
       // 2. Queue delete for sync
       await _syncManager.queueDelete(eventId, matchId);
@@ -300,12 +474,26 @@ class HybridRepository implements ScoutingRepository {
       'matchId': matchId,
     });
     
+  // On web, write directly to Firestore
+  if (_isWeb) {
+    try {
+      await _firestore.restoreMatch(eventId, matchId);
+      await _refreshMatchStreamWeb(eventId);
+      await _refreshTrashStreamWeb(eventId);
+      _logger.i('Match restored in Firestore');
+    } catch (e, stackTrace) {
+      _logger.e('Failed to restore match', error: e, stackTrace: stackTrace);
+      throw StorageError('Failed to restore match: $e');
+    }
+    return;
+  }
+    
     try {
       // 1. Restore in local DB
-      await _db.restoreMatch(matchId);
+      await db.restoreMatch(matchId);
       
       // 2. Get the restored match
-      final localMatch = await _db.getMatch(matchId);
+      final localMatch = await db.getMatch(matchId);
       if (localMatch != null) {
         // 3. Queue update to restore in Firestore too
         final match = _toMatchReport(localMatch);
@@ -330,9 +518,22 @@ class HybridRepository implements ScoutingRepository {
       'matchId': matchId,
     });
     
+    // On web, delete directly from Firestore
+    if (_isWeb) {
+      try {
+        await _firestore.deleteMatch(eventId, matchId);
+        await _refreshTrashStreamWeb(eventId);
+        _logger.i('Match permanently deleted from Firestore');
+      } catch (e, stackTrace) {
+        _logger.e('Failed to delete match', error: e, stackTrace: stackTrace);
+        throw StorageError('Failed to delete match: $e');
+      }
+      return;
+    }
+    
     try {
       // 1. Permanently delete from local DB
-      await _db.permanentlyDeleteMatch(matchId);
+      await db.permanentlyDeleteMatch(matchId);
       
       // 2. Queue hard delete for Firestore
       await _syncManager.queueHardDelete(eventId, matchId);
@@ -351,8 +552,18 @@ class HybridRepository implements ScoutingRepository {
   Future<Event?> getEvent(String eventId) async {
     _logger.d('Getting event: $eventId');
     
+    // On web, use Firestore directly
+    if (_isWeb) {
+      try {
+        return await _firestore.getEvent(eventId);
+      } catch (e) {
+        _logger.w('Failed to get event from Firestore', error: e);
+        return null;
+      }
+    }
+    
     // Try local first
-    final localEvent = await _db.getEvent(eventId);
+    final localEvent = await db.getEvent(eventId);
     if (localEvent != null) {
       return _toEvent(localEvent);
     }
@@ -362,7 +573,7 @@ class HybridRepository implements ScoutingRepository {
       final firestoreEvent = await _firestore.getEvent(eventId);
       if (firestoreEvent != null) {
         // Cache locally
-        await _db.upsertEvent(_toLocalEvent(firestoreEvent));
+        await db.upsertEvent(_toLocalEvent(firestoreEvent));
         return firestoreEvent;
       }
     } catch (e) {
@@ -376,13 +587,23 @@ class HybridRepository implements ScoutingRepository {
   Future<List<Event>> getEvents() async {
     _logger.d('Getting all events');
     
+    // On web, use Firestore directly
+    if (_isWeb) {
+      try {
+        return await _firestore.getEvents();
+      } catch (e) {
+        _logger.w('Failed to get events from Firestore', error: e);
+        return [];
+      }
+    }
+    
     // Get from local DB
-    final localEvents = await _db.getAllEvents();
+    final localEvents = await db.getAllEvents();
     
     // Background refresh from Firestore
     _firestore.getEvents().then((firestoreEvents) async {
       for (final event in firestoreEvents) {
-        await _db.upsertEvent(_toLocalEvent(event));
+        await db.upsertEvent(_toLocalEvent(event));
       }
     }).catchError((e) {
       _logger.w('Failed to refresh events from Firestore', error: e);
@@ -394,18 +615,42 @@ class HybridRepository implements ScoutingRepository {
   /// Force sync all pending changes
   Future<void> forceSync() async {
     _logger.i('Force sync requested');
+    
+    // On web, Firebase handles offline automatically
+    if (_isWeb) {
+      _logger.i('Web platform - Firestore handles offline persistence automatically');
+      return;
+    }
+    
     await _syncManager.forceSync();
   }
 
   /// Get sync statistics
   Future<SyncStats> getSyncStats() {
+    // On web, no sync queue needed
+    if (_isWeb) {
+      return Future.value(const SyncStats(
+        pendingOperations: 0,
+        unsyncedItems: 0,
+        unresolvedConflicts: 0,
+        lastSyncTime: null,
+      ));
+    }
+    
     return _syncManager.getSyncStats();
   }
 
   /// Clear all local data including matches, events, and sync queue
   Future<void> clearAllLocalData() async {
     _logger.i('Clearing all local data');
-    await _db.clearAllData();
+    
+    // On web, nothing to clear
+    if (_isWeb) {
+      _logger.i('Web platform - no local data to clear');
+      return;
+    }
+    
+    await db.clearAllData();
     _logger.i('All local data cleared');
   }
 
@@ -439,6 +684,7 @@ class HybridRepository implements ScoutingRepository {
       isSynced: local.isSynced,
       isDeleted: local.isDeleted,
       eventId: local.eventId,
+      teamId: local.teamId,
       programType: programType,
     );
   }
@@ -457,6 +703,7 @@ class HybridRepository implements ScoutingRepository {
       comments: Value(match.comments),
       isSynced: Value(match.isSynced),
       isDeleted: Value(match.isDeleted),
+      teamId: Value(match.teamId),
       createdAt: Value(match.createdAt),
       updatedAt: Value(DateTime.now()),
     );
@@ -469,6 +716,7 @@ class HybridRepository implements ScoutingRepository {
       programType: local.programType,
       tbaKey: local.tbaKey,
       startDate: local.startDate,
+      teamId: local.teamId,
     );
   }
 
@@ -479,6 +727,7 @@ class HybridRepository implements ScoutingRepository {
       programType: Value(event.programType),
       tbaKey: Value(event.tbaKey),
       startDate: Value(event.startDate),
+      teamId: Value(event.teamId),
     );
   }
 }

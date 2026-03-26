@@ -6,17 +6,27 @@ import 'scouting_repository.dart';
 
 class FirestoreRepository implements ScoutingRepository {
   final FirebaseFirestore _firestore;
+  final String? teamId;
   final Logger _logger = const Logger('FIRESTORE');
 
-  FirestoreRepository(this._firestore);
+  FirestoreRepository(this._firestore, {this.teamId});
+
+  /// Builds a base query on the matches collection, filtered by eventId and
+  /// optionally by teamId if one was provided at construction time.
+  Query<Map<String, dynamic>> _matchesQuery(String eventId, {required bool isDeleted}) {
+    Query<Map<String, dynamic>> query = _firestore
+        .collection('matches')
+        .where('eventId', isEqualTo: eventId)
+        .where('isDeleted', isEqualTo: isDeleted);
+    if (teamId != null && teamId!.isNotEmpty) {
+      query = query.where('teamId', isEqualTo: teamId);
+    }
+    return query.orderBy('createdAt', descending: true);
+  }
 
   @override
   Stream<List<MatchReport>> watchMatches(String eventId) {
-    return _firestore
-        .collection('matches')
-        .where('eventId', isEqualTo: eventId)
-        .where('isDeleted', isEqualTo: false)
-        .orderBy('createdAt', descending: true)
+    return _matchesQuery(eventId, isDeleted: false)
         .snapshots()
         .map(
           (snapshot) => snapshot.docs
@@ -27,11 +37,7 @@ class FirestoreRepository implements ScoutingRepository {
 
   @override
   Stream<List<MatchReport>> watchTrash(String eventId) {
-    return _firestore
-        .collection('matches')
-        .where('eventId', isEqualTo: eventId)
-        .where('isDeleted', isEqualTo: true)
-        .orderBy('createdAt', descending: true)
+    return _matchesQuery(eventId, isDeleted: true)
         .snapshots()
         .map(
           (snapshot) => snapshot.docs
@@ -42,22 +48,23 @@ class FirestoreRepository implements ScoutingRepository {
 
   @override
   Future<List<MatchReport>> getMatches(String eventId) async {
-    final snapshot = await _firestore
-        .collection('matches')
-        .where('eventId', isEqualTo: eventId)
-        .where('isDeleted', isEqualTo: false)
-        .orderBy('createdAt', descending: true)
-        .get();
+    final snapshot = await _matchesQuery(eventId, isDeleted: false).get();
+    return snapshot.docs.map((doc) => MatchReport.fromFirestore(doc)).toList();
+  }
+
+  Future<List<MatchReport>> getDeletedMatches(String eventId) async {
+    final snapshot = await _matchesQuery(eventId, isDeleted: true).get();
     return snapshot.docs.map((doc) => MatchReport.fromFirestore(doc)).toList();
   }
 
   @override
-  Future<void> createMatch(String eventId, MatchReport match) async {
+  Future<void> createMatch(String eventId, MatchReport match, {String? teamIdOverride}) async {
     _logger.d('Writing match to: matches/${match.id}');
 
-    final programType = await _getOrCreateEvent(eventId, fallbackProgramType: match.programType);
+    final effectiveTeamId = teamIdOverride ?? teamId;
+    final programType = await _getOrCreateEvent(eventId, fallbackProgramType: match.programType, teamId: effectiveTeamId);
 
-    final prepared = _prepareForFirestore(match, eventId, programType);
+    final prepared = _prepareForFirestore(match, eventId, programType, teamId: effectiveTeamId);
     await _firestore
         .collection('matches')
         .doc(match.id)
@@ -65,20 +72,21 @@ class FirestoreRepository implements ScoutingRepository {
   }
 
   /// Prepares a match for Firestore by merging robot_died into gameData
-  /// and setting eventId + programType.
-  MatchReport _prepareForFirestore(MatchReport match, String eventId, String programType) {
+  /// and setting eventId + programType + teamId.
+  MatchReport _prepareForFirestore(MatchReport match, String eventId, String programType, {String? teamId}) {
     final gameData = Map<String, dynamic>.from(match.gameData)
       ..['robot_died'] = match.robotDied;
     return match.copyWith(
       gameData: gameData,
       eventId: eventId,
       programType: programType,
+      teamId: teamId ?? match.teamId,
     );
   }
 
   /// Gets the event's programType, creating the event document if needed.
   /// Combines getEvent + ensureEventExists into a single read to avoid double-reads.
-  Future<String> _getOrCreateEvent(String eventId, {String fallbackProgramType = 'FRC'}) async {
+  Future<String> _getOrCreateEvent(String eventId, {String fallbackProgramType = 'FRC', String? teamId}) async {
     try {
       final eventDoc = _firestore.collection('events').doc(eventId);
       final docSnapshot = await eventDoc.get();
@@ -94,6 +102,7 @@ class FirestoreRepository implements ScoutingRepository {
         'tbaKey': eventId,
         'startDate': Timestamp.fromDate(DateTime.now()),
         'createdAt': Timestamp.fromDate(DateTime.now()),
+        'teamId': teamId ?? '',
         'autoCreated': true,
       }, SetOptions(merge: true));
       return fallbackProgramType;
@@ -104,12 +113,13 @@ class FirestoreRepository implements ScoutingRepository {
   }
 
   @override
-  Future<void> updateMatch(String eventId, MatchReport match) async {
+  Future<void> updateMatch(String eventId, MatchReport match, {String? teamIdOverride}) async {
     _logger.d('Updating match at: matches/${match.id}');
 
-    final programType = await _getOrCreateEvent(eventId, fallbackProgramType: match.programType);
+    final effectiveTeamId = teamIdOverride ?? teamId;
+    final programType = await _getOrCreateEvent(eventId, fallbackProgramType: match.programType, teamId: effectiveTeamId);
 
-    final prepared = _prepareForFirestore(match, eventId, programType);
+    final prepared = _prepareForFirestore(match, eventId, programType, teamId: effectiveTeamId);
     await _firestore
         .collection('matches')
         .doc(match.id)
@@ -152,7 +162,11 @@ class FirestoreRepository implements ScoutingRepository {
 
   @override
   Future<List<Event>> getEvents() async {
-    final snapshot = await _firestore.collection('events').get();
+    Query<Map<String, dynamic>> query = _firestore.collection('events');
+    if (teamId != null && teamId!.isNotEmpty) {
+      query = query.where('teamId', isEqualTo: teamId);
+    }
+    final snapshot = await query.get();
     return snapshot.docs.map((doc) => Event.fromFirestore(doc)).toList();
   }
 }
