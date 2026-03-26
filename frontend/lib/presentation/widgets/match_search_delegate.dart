@@ -62,14 +62,14 @@ class MatchSearchDelegate extends SearchDelegate<MatchReport?> {
       itemCount: filteredMatches.length,
       itemBuilder: (context, index) {
         final match = filteredMatches[index];
-        final allianceColor = match.alliance == 'Red' ? Colors.red : Colors.blue;
+        final allianceColor = AppTheme.allianceColor(match.alliance);
 
         return ListTile(
           leading: Container(
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: allianceColor.withOpacity(0.1),
+              color: allianceColor.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Center(

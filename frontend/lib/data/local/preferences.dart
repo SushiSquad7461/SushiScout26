@@ -10,6 +10,7 @@ class PrefKeys {
   static const String colorSeed =
       'color_seed'; // 'salmon', 'blue', 'green', 'purple'
   static const String fuelIncrement = 'fuel_increment';
+  static const String programType = 'program_type';
 }
 
 // Provider for SharedPreferences instance (overridden in main)
@@ -32,6 +33,7 @@ class SettingsNotifier extends Notifier<Map<String, String>> {
       PrefKeys.themeMode: _prefs.getString(PrefKeys.themeMode) ?? 'system',
       PrefKeys.colorSeed: _prefs.getString(PrefKeys.colorSeed) ?? 'salmon',
       PrefKeys.fuelIncrement: _prefs.getString(PrefKeys.fuelIncrement) ?? '1',
+      PrefKeys.programType: _prefs.getString(PrefKeys.programType) ?? 'FRC',
     };
   }
 
@@ -63,6 +65,11 @@ class SettingsNotifier extends Notifier<Map<String, String>> {
   Future<void> setFuelIncrement(String value) async {
     await _prefs.setString(PrefKeys.fuelIncrement, value);
     state = {...state, PrefKeys.fuelIncrement: value};
+  }
+
+  Future<void> setProgramType(String value) async {
+    await _prefs.setString(PrefKeys.programType, value);
+    state = {...state, PrefKeys.programType: value};
   }
 }
 

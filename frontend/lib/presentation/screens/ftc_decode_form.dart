@@ -9,9 +9,11 @@ import '../../data/repositories/hybrid_repository.dart';
 import '../widgets/scouting_form_widget.dart';
 import '../widgets/match_timer.dart';
 import '../widgets/counter_card.dart';
-import '../widgets/image_picker_widget.dart';
 import '../../data/local/preferences.dart';
 import '../theme/app_theme.dart';
+import '../../core/animations.dart';
+import '../../data/services/schedule_service.dart';
+import 'package:cloud_firestore/cloud_firestore.dart' show FirebaseFirestore;
 
 /// FTC "DECODE" scouting form with Material 3 styling.
 class FtcDecodeForm extends ScoutingFormWidget {
@@ -28,12 +30,14 @@ class FtcDecodeForm extends ScoutingFormWidget {
   Map<String, dynamic> collectGameData() => {};
 }
 
-class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm> {
+class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm>
+    with KeyboardDismissMixin {
   final PageController _pageController = PageController();
   final MatchTimerController _timerController = MatchTimerController();
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   
   int _currentPage = 0;
+  bool _submitting = false;
 
   // Form Data
   final _matchNumberCtrl = TextEditingController();
@@ -56,7 +60,6 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm> {
   String _baseExpansion = 'None';
   double _driverQuality = 0;
   final _commentsCtrl = TextEditingController();
-  List<String> _images = [];
 
   @override
   void initState() {
@@ -68,6 +71,7 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm> {
   @override
   void dispose() {
     _pageController.dispose();
+    _timerController.dispose();
     _matchNumberCtrl.dispose();
     _teamNumberCtrl.dispose();
     _scouterNameCtrl.dispose();
@@ -75,7 +79,90 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm> {
     super.dispose();
   }
 
+  Future<void> _loadSchedule() async {
+    final eventCode = widget.eventId;
+    final programType = widget.event.programType;
+    if (eventCode.isEmpty) return;
+
+    try {
+      await ref.read(scheduleServiceProvider).fetchSchedule(
+        eventCode: eventCode,
+        programType: programType,
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not fetch schedule. Enter match details manually.')),
+        );
+      }
+      return;
+    }
+
+    if (!mounted) return;
+
+    List<Map<String, dynamic>> scheduleMatches;
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('matches')
+          .where('eventId', isEqualTo: eventCode)
+          .where('programType', isEqualTo: programType)
+          .orderBy('matchNumber')
+          .get();
+
+      scheduleMatches = snapshot.docs
+          .map((doc) => doc.data())
+          .where((d) => d['compLevel'] != null)
+          .toList();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not load schedule. Enter match details manually.')),
+        );
+      }
+      return;
+    }
+
+    if (!mounted) return;
+
+    if (scheduleMatches.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No schedule found. Enter match details manually.')),
+      );
+      return;
+    }
+
+    showModalBottomSheet(
+      context: context,
+      builder: (ctx) => ListView.builder(
+        itemCount: scheduleMatches.length,
+        itemBuilder: (ctx, i) {
+          final m = scheduleMatches[i];
+          final matchNum = m['matchNumber'] ?? 0;
+          final alliances = m['alliances'] as Map<String, dynamic>?;
+          final teams = m['teams'] as List<dynamic>?;
+          String subtitle = '';
+          if (alliances != null) {
+            final red = (alliances['red']?['team_keys'] as List?)?.join(', ') ?? '';
+            final blue = (alliances['blue']?['team_keys'] as List?)?.join(', ') ?? '';
+            subtitle = 'Red: $red | Blue: $blue';
+          } else if (teams != null) {
+            subtitle = teams.map((t) => '${t['teamNumber']}').join(', ');
+          }
+          return ListTile(
+            title: Text('Match $matchNum'),
+            subtitle: subtitle.isNotEmpty ? Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis) : null,
+            onTap: () {
+              _matchNumberCtrl.text = '$matchNum';
+              Navigator.pop(ctx);
+            },
+          );
+        },
+      ),
+    );
+  }
+
   void _nextPage() {
+    if (_submitting) return;
     if (_currentPage == 0) {
       if (!_formKey.currentState!.validate()) {
         return;
@@ -107,29 +194,31 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.event.name),
-        bottom: MatchTimer(controller: _timerController),
-      ),
-      body: SafeArea(
-        child: Form(
-          key: _formKey,
-          child: PageView(
-            controller: _pageController,
-            physics: const NeverScrollableScrollPhysics(),
-            onPageChanged: (idx) => setState(() => _currentPage = idx),
-            children: [
-              _buildPage("Setup", _buildSetup(context)),
-              _buildPage("Autonomous", _buildAuto(context)),
-              _buildPage("Teleop", _buildTeleop(context)),
-              _buildPage("Endgame", _buildEndgame(context)),
-              _buildPage("Review & Submit", _buildReview(context)),
-            ],
+    return dismissKeyboardOnTap(
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(widget.event.name),
+          bottom: MatchTimer(controller: _timerController),
+        ),
+        body: SafeArea(
+          child: Form(
+            key: _formKey,
+            child: PageView(
+              controller: _pageController,
+              physics: const NeverScrollableScrollPhysics(),
+              onPageChanged: (idx) => setState(() => _currentPage = idx),
+              children: [
+                _buildPage("Setup", _buildSetup(context)),
+                _buildPage("Autonomous", _buildAuto(context)),
+                _buildPage("Teleop", _buildTeleop(context)),
+                _buildPage("Endgame", _buildEndgame(context)),
+                _buildPage("Review & Submit", _buildReview(context)),
+              ],
+            ),
           ),
         ),
+        bottomNavigationBar: _buildBottomBar(context, colorScheme),
       ),
-      bottomNavigationBar: _buildBottomBar(context, colorScheme),
     );
   }
 
@@ -163,13 +252,21 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm> {
           const Spacer(),
 
           FilledButton.icon(
-            onPressed: _nextPage,
-            icon: Icon(
-              _currentPage == 4
-                  ? Icons.check_rounded
-                  : Icons.arrow_forward_rounded,
-            ),
-            label: Text(_currentPage == 4 ? "Submit" : "Next"),
+            onPressed: _submitting ? null : _nextPage,
+            icon: _submitting
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : Icon(
+                    _currentPage == 4
+                        ? Icons.check_rounded
+                        : Icons.arrow_forward_rounded,
+                  ),
+            label: Text(_currentPage == 4
+                ? (_submitting ? "Saving..." : "Submit")
+                : "Next"),
           ),
         ],
       ),
@@ -237,6 +334,12 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm> {
           autovalidateMode: AutovalidateMode.onUserInteraction,
         ),
         const SizedBox(height: AppTheme.spacingMd),
+        OutlinedButton.icon(
+          icon: const Icon(Icons.calendar_month_rounded),
+          label: const Text('Load Schedule'),
+          onPressed: _loadSchedule,
+        ),
+        const SizedBox(height: AppTheme.spacingMd),
 
         Row(
           children: [
@@ -289,17 +392,48 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm> {
             ButtonSegment(
               value: 'Red',
               label: Text('Red Alliance'),
-              icon: Icon(Icons.shield, color: Colors.red),
+              icon: Icon(Icons.shield, color: AppTheme.allianceRed),
             ),
             ButtonSegment(
               value: 'Blue',
               label: Text('Blue Alliance'),
-              icon: Icon(Icons.shield, color: Colors.blue),
+              icon: Icon(Icons.shield, color: AppTheme.allianceBlue),
             ),
           ],
           selected: {_alliance},
-          onSelectionChanged: (val) => setState(() => _alliance = val.first),
+          onSelectionChanged: (val) {
+            AppHaptics.selection();
+            setState(() => _alliance = val.first);
+          },
           showSelectedIcon: false,
+          style: ButtonStyle(
+            backgroundColor: WidgetStateProperty.resolveWith((states) {
+              if (states.contains(WidgetState.selected)) {
+                final color = _alliance == 'Red'
+                    ? AppTheme.allianceRed
+                    : AppTheme.allianceBlue;
+                return color.withValues(alpha: 0.2);
+              }
+              return null;
+            }),
+            foregroundColor: WidgetStateProperty.resolveWith((states) {
+              if (states.contains(WidgetState.selected)) {
+                return _alliance == 'Red'
+                    ? AppTheme.allianceRed
+                    : AppTheme.allianceBlue;
+              }
+              return null;
+            }),
+            side: WidgetStateProperty.resolveWith((states) {
+              if (states.contains(WidgetState.selected)) {
+                final color = _alliance == 'Red'
+                    ? AppTheme.allianceRed
+                    : AppTheme.allianceBlue;
+                return BorderSide(color: color, width: 2);
+              }
+              return null;
+            }),
+          ),
         ),
       ],
     );
@@ -393,7 +527,7 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         DropdownButtonFormField<String>(
-          value: _baseExpansion,
+          initialValue: _baseExpansion,
           decoration: const InputDecoration(
             labelText: "Base Expansion",
             prefixIcon: Icon(Icons.open_in_full),
@@ -423,6 +557,7 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm> {
 
         TextFormField(
           controller: _commentsCtrl,
+          maxLength: 500,
           decoration: const InputDecoration(
             labelText: "Comments",
             alignLabelWithHint: true,
@@ -430,13 +565,6 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm> {
             border: OutlineInputBorder(),
           ),
           maxLines: 3,
-        ),
-        
-        const SizedBox(height: AppTheme.spacingMd),
-        
-        ImagePickerWidget(
-          initialImages: _images,
-          onImagesChanged: (images) => _images = images,
         ),
       ],
     );
@@ -496,7 +624,7 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm> {
   Widget _buildReview(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final allianceColor = _alliance == 'Red' ? Colors.red : Colors.blue;
+    final allianceColor = AppTheme.allianceColor(_alliance);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -585,6 +713,7 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm> {
   }
 
   Future<void> _submit() async {
+    setState(() => _submitting = true);
     final gameData = {
       'leave': _leave,
       'artifacts_auto': _autoArtifacts,
@@ -593,6 +722,7 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm> {
       'indexing_teleop': _teleIndexing,
       'base_expansion': _baseExpansion,
       'driver_quality': _driverQuality,
+      'robot_died': _robotDied,
     };
 
     final report = MatchReport(
@@ -603,9 +733,7 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm> {
       alliance: _alliance,
       scouterName: _scouterNameCtrl.text,
       gameData: gameData,
-      robotDied: _robotDied,
       comments: _commentsCtrl.text,
-      images: _images,
       createdAt: DateTime.now(),
       isSynced: false,
     );
@@ -630,6 +758,8 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm> {
           context,
         ).showSnackBar(SnackBar(content: Text("Error saving: $e"), backgroundColor: Theme.of(context).colorScheme.error));
       }
+    } finally {
+      if (mounted) setState(() => _submitting = false);
     }
   }
 }

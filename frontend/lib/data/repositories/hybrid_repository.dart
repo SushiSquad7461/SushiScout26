@@ -127,13 +127,6 @@ class HybridRepository implements ScoutingRepository {
       
       // Initial load from local DB
       _refreshMatchStream(eventId);
-      
-      // Listen to local DB changes
-      db.getMatchesForEvent(eventId).then((localMatches) {
-        if (!controller!.isClosed) {
-          controller.add(localMatches.map(_toMatchReport).toList());
-        }
-      });
 
       // Setup real-time Firestore listener for this event
       _setupFirestoreSubscription(eventId);
@@ -265,13 +258,6 @@ class HybridRepository implements ScoutingRepository {
 
       // Initial load from local DB
       _refreshTrashStream(eventId);
-
-      // Listen to local DB changes for immediate emission
-      db.getDeletedMatchesForEvent(eventId).then((deletedMatches) {
-        if (!controller!.isClosed) {
-          controller.add(deletedMatches.map(_toMatchReport).toList());
-        }
-      });
     }
 
     return controller.stream;
@@ -682,6 +668,10 @@ class HybridRepository implements ScoutingRepository {
   // Conversion helpers
   
   MatchReport _toMatchReport(LocalMatchReport local) {
+    final gameData = (jsonDecode(local.gameDataJson) as Map<String, dynamic>)
+      ..['robot_died'] = local.robotDied;
+    // Detect program type from gameData keys if not stored
+    final programType = gameData.containsKey('artifacts_auto') ? 'FTC' : 'FRC';
     return MatchReport(
       id: local.id,
       matchId: local.matchId,
@@ -689,13 +679,13 @@ class HybridRepository implements ScoutingRepository {
       teamNumber: local.teamNumber,
       alliance: local.alliance,
       scouterName: local.scouterName,
-      gameData: jsonDecode(local.gameDataJson),
-      robotDied: local.robotDied,
+      gameData: gameData,
       comments: local.comments,
-      images: [],
       createdAt: local.createdAt,
       isSynced: local.isSynced,
       isDeleted: local.isDeleted,
+      eventId: local.eventId,
+      programType: programType,
     );
   }
 

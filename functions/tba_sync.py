@@ -6,9 +6,17 @@ import requests
 import os
 from datetime import datetime, timedelta
 
-db = firestore.client()
+_db = None
 
 CACHE_TTL_HOURS = 24
+
+
+def _get_db():
+    """Get Firestore client with lazy initialization."""
+    global _db
+    if _db is None:
+        _db = firestore.client()
+    return _db
 
 
 @https_fn.on_call(secrets=["TBA_API_KEY"])
@@ -22,6 +30,7 @@ def fetch_event_schedule(req: https_fn.CallableRequest) -> any:
     if not event_key:
         raise https_fn.HttpsError(code=https_fn.FunctionsErrorCode.INVALID_ARGUMENT, message="Missing eventKey")
 
+    db = _get_db()
     cache_ref = db.collection('tba_cache').document(event_key)
     cached = cache_ref.get()
     
@@ -60,10 +69,11 @@ def fetch_event_schedule(req: https_fn.CallableRequest) -> any:
             "compLevel": m['comp_level'],
             "alliances": m['alliances'],
             "startTime": datetime.fromtimestamp(m['time']) if m['time'] else None,
-            "programType": "FRC"
+            "programType": "FRC",
+            "eventId": event_key
         }
         
-        doc_ref = db.collection(f"events/{event_key}/matches").document(match_id)
+        doc_ref = db.collection("matches").document(match_id)
         batch.set(doc_ref, match_doc, merge=True)
         count += 1
         

@@ -81,10 +81,11 @@ class CounterCard extends StatelessWidget {
                 // Decrement button (56dp - M3 FAB mini size)
                 _CounterButton(
                   icon: Icons.remove,
+                  semanticLabel: 'Decrease $label by $stepSize',
                   onPressed: value > minValue
                       ? () {
                           HapticFeedback.lightImpact();
-                          onChanged(value - stepSize);
+                          onChanged((value - stepSize).clamp(minValue, maxValue));
                         }
                       : null,
                   colorScheme: colorScheme,
@@ -98,14 +99,18 @@ class CounterCard extends StatelessWidget {
                   ),
                   child: SizedBox(
                     width: 80,
-                    child: Text(
-                      value.toString(),
-                      style: theme.textTheme.displayMedium?.copyWith(
-                        color: accentColor ?? colorScheme.onSurface,
-                        fontWeight: FontWeight.bold,
-                        fontFeatures: const [FontFeature.tabularFigures()],
+                    child: Semantics(
+                      liveRegion: true,
+                      label: '$label: $value',
+                      child: Text(
+                        value.toString(),
+                        style: theme.textTheme.displayMedium?.copyWith(
+                          color: accentColor ?? colorScheme.onSurface,
+                          fontWeight: FontWeight.bold,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
+                        textAlign: TextAlign.center,
                       ),
-                      textAlign: TextAlign.center,
                     ),
                   ),
                 ),
@@ -113,10 +118,11 @@ class CounterCard extends StatelessWidget {
                 // Increment button
                 _CounterButton(
                   icon: Icons.add,
+                  semanticLabel: 'Increase $label by $stepSize',
                   onPressed: value < maxValue
                       ? () {
                           HapticFeedback.lightImpact();
-                          onChanged(value + stepSize);
+                          onChanged((value + stepSize).clamp(minValue, maxValue));
                         }
                       : null,
                   colorScheme: colorScheme,
@@ -141,6 +147,7 @@ class CounterCard extends StatelessWidget {
                   const SizedBox(width: AppTheme.spacingSm),
                   _StepControlButton(
                     icon: Icons.remove,
+                    semanticLabel: 'Decrease step size',
                     onPressed: stepSize > 1
                         ? () {
                             HapticFeedback.lightImpact();
@@ -152,16 +159,20 @@ class CounterCard extends StatelessWidget {
                   ),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: AppTheme.spacingMd),
-                    child: Text(
-                      stepSize.toString(),
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: accentColor ?? colorScheme.onSurface,
+                    child: Semantics(
+                      label: 'Step size: $stepSize',
+                      child: Text(
+                        stepSize.toString(),
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: accentColor ?? colorScheme.onSurface,
+                        ),
                       ),
                     ),
                   ),
                   _StepControlButton(
                     icon: Icons.add,
+                    semanticLabel: 'Increase step size',
                     onPressed: stepSize < 10
                         ? () {
                             HapticFeedback.lightImpact();
@@ -187,11 +198,13 @@ class _CounterButton extends StatelessWidget {
   final VoidCallback? onPressed;
   final ColorScheme colorScheme;
   final Color? accentColor;
+  final String semanticLabel;
 
   const _CounterButton({
     required this.icon,
     required this.onPressed,
     required this.colorScheme,
+    required this.semanticLabel,
     this.accentColor,
   });
 
@@ -200,23 +213,28 @@ class _CounterButton extends StatelessWidget {
     final isEnabled = onPressed != null;
     final buttonColor = accentColor ?? colorScheme.primary;
 
-    return Material(
-      color: isEnabled
-          ? buttonColor.withValues(alpha: 0.12)
-          : colorScheme.surfaceContainerHighest,
-      borderRadius: BorderRadius.circular(AppTheme.buttonRadius),
-      child: InkWell(
-        onTap: onPressed,
+    return Semantics(
+      button: true,
+      enabled: isEnabled,
+      label: semanticLabel,
+      child: Material(
+        color: isEnabled
+            ? buttonColor.withValues(alpha: 0.12)
+            : colorScheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(AppTheme.buttonRadius),
-        child: SizedBox(
-          width: 56, // M3 FAB mini size
-          height: 56,
-          child: Icon(
-            icon,
-            size: 28,
-            color: isEnabled
-                ? buttonColor
-                : colorScheme.onSurface.withValues(alpha: 0.38),
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(AppTheme.buttonRadius),
+          child: SizedBox(
+            width: 56, // M3 FAB mini size
+            height: 56,
+            child: Icon(
+              icon,
+              size: 28,
+              color: isEnabled
+                  ? buttonColor
+                  : colorScheme.onSurface.withValues(alpha: 0.38),
+            ),
           ),
         ),
       ),
@@ -230,11 +248,13 @@ class _StepControlButton extends StatelessWidget {
   final VoidCallback? onPressed;
   final ColorScheme colorScheme;
   final Color? accentColor;
+  final String semanticLabel;
 
   const _StepControlButton({
     required this.icon,
     required this.onPressed,
     required this.colorScheme,
+    required this.semanticLabel,
     this.accentColor,
   });
 
@@ -243,23 +263,28 @@ class _StepControlButton extends StatelessWidget {
     final isEnabled = onPressed != null;
     final buttonColor = accentColor ?? colorScheme.primary;
 
-    return Material(
-      color: isEnabled
-          ? buttonColor.withValues(alpha: 0.08)
-          : colorScheme.surfaceContainerHighest,
-      borderRadius: BorderRadius.circular(AppTheme.buttonRadius - 2),
-      child: InkWell(
-        onTap: onPressed,
+    return Semantics(
+      button: true,
+      enabled: isEnabled,
+      label: semanticLabel,
+      child: Material(
+        color: isEnabled
+            ? buttonColor.withValues(alpha: 0.08)
+            : colorScheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(AppTheme.buttonRadius - 2),
-        child: SizedBox(
-          width: 40,
-          height: 40,
-          child: Icon(
-            icon,
-            size: 22,
-            color: isEnabled
-                ? buttonColor
-                : colorScheme.onSurface.withValues(alpha: 0.38),
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(AppTheme.buttonRadius - 2),
+          child: SizedBox(
+            width: 40,
+            height: 40,
+            child: Icon(
+              icon,
+              size: 22,
+              color: isEnabled
+                  ? buttonColor
+                  : colorScheme.onSurface.withValues(alpha: 0.38),
+            ),
           ),
         ),
       ),

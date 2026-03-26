@@ -29,6 +29,9 @@ frontend/.packages
 frontend/.pub/
 frontend/pubspec.lock
 
+# Apps Script (clasp)
+.clasp.json
+
 # IDEs
 .idea/
 .vscode/

@@ -7,7 +7,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/errors/app_error.dart';
 import '../../../core/logger.dart';
 import '../../../core/network/retry.dart';
-import '../../../core/result/result.dart';
 import '../../models/match_report.dart';
 import '../database/app_database.dart';
 import '../../repositories/firestore_repository.dart';
@@ -52,7 +51,7 @@ final isOnlineProvider = Provider<bool>((ref) {
   return connectivityAsync.when(
     data: (result) => result != ConnectivityResult.none,
     loading: () => true, // Assume online while loading
-    error: (_, __) => false,
+    error: (_, _) => false,
   );
 });
 
@@ -176,10 +175,8 @@ class SyncManager {
           teamNumber: match.teamNumber,
           alliance: match.alliance,
           scouterName: match.scouterName,
-          gameData: jsonDecode(match.gameDataJson),
-          robotDied: match.robotDied,
+          gameData: (jsonDecode(match.gameDataJson) as Map<String, dynamic>)..['robot_died'] = match.robotDied,
           comments: match.comments,
-          images: [], // Images aren't stored in local DB yet
           createdAt: match.createdAt,
           isSynced: false,
           isDeleted: match.isDeleted,

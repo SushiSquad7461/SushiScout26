@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/local/preferences.dart';
 import '../../data/models/match_report.dart';
-import '../../data/repositories/scouting_repository.dart';
 import '../theme/app_theme.dart';
 
 import '../../data/repositories/hybrid_repository.dart';
@@ -17,6 +16,7 @@ class TrashScreen extends ConsumerStatefulWidget {
 
 class _TrashScreenState extends ConsumerState<TrashScreen> {
   late Stream<List<MatchReport>> _trashStream;
+  bool _loading = false;
 
   @override
   void initState() {
@@ -26,21 +26,50 @@ class _TrashScreenState extends ConsumerState<TrashScreen> {
   }
 
   Future<void> _restore(MatchReport match) async {
-    final eventCode = ref.read(settingsProvider)[PrefKeys.eventCode] ?? "";
-    final repo = ref.read(hybridRepositoryProvider);
-    await repo.restoreMatch(eventCode, match.id);
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("Restored Match ${match.matchNumber}"),
-          action: SnackBarAction(
-            label: "Undo",
-            onPressed: () async {
-              await repo.trashMatch(eventCode, match.id);
-            },
-          ),
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        icon: Icon(Icons.restore, color: Colors.green, size: 48),
+        title: const Text("Restore Match?"),
+        content: Text(
+          "Match ${match.matchNumber} (Team ${match.teamNumber}) will be moved back to your match list.",
         ),
-      );
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text("Cancel"),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.green),
+            child: const Text("Restore"),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    setState(() => _loading = true);
+    try {
+      final eventCode = ref.read(settingsProvider)[PrefKeys.eventCode] ?? "";
+      final repo = ref.read(hybridRepositoryProvider);
+      await repo.restoreMatch(eventCode, match.id);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Restored Match ${match.matchNumber}"),
+            action: SnackBarAction(
+              label: "Undo",
+              onPressed: () async {
+                await repo.trashMatch(eventCode, match.id);
+              },
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
   }
 
@@ -70,13 +99,18 @@ class _TrashScreenState extends ConsumerState<TrashScreen> {
       ),
     );
 
-    if (confirm == true) {
+    if (confirm != true) return;
+
+    setState(() => _loading = true);
+    try {
       await ref.read(hybridRepositoryProvider).deleteMatch(eventCode, match.id);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("Permanently deleted match.")),
         );
       }
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
   }
 
@@ -155,17 +189,29 @@ class _TrashScreenState extends ConsumerState<TrashScreen> {
             );
           }
 
-          return ListView.builder(
-            itemCount: matches.length,
-            padding: const EdgeInsets.all(AppTheme.spacingMd),
-            itemBuilder: (context, index) {
-              final match = matches[index];
-              return _TrashCard(
-                match: match,
-                onRestore: () => _restore(match),
-                onDelete: () => _deleteForever(match),
-              );
-            },
+          return Stack(
+            children: [
+              ListView.builder(
+                itemCount: matches.length,
+                padding: const EdgeInsets.all(AppTheme.spacingMd),
+                itemBuilder: (context, index) {
+                  final match = matches[index];
+                  return _TrashCard(
+                    match: match,
+                    onRestore: _loading ? null : () => _restore(match),
+                    onDelete: _loading ? null : () => _deleteForever(match),
+                    enabled: !_loading,
+                  );
+                },
+              ),
+              if (_loading)
+                Positioned(
+                  top: AppTheme.spacingSm,
+                  left: 0,
+                  right: 0,
+                  child: const Center(child: LinearProgressIndicator()),
+                ),
+            ],
           );
         },
       ),
@@ -176,20 +222,22 @@ class _TrashScreenState extends ConsumerState<TrashScreen> {
 /// Trash card with swipe-to-restore and delete actions
 class _TrashCard extends StatelessWidget {
   final MatchReport match;
-  final VoidCallback onRestore;
-  final VoidCallback onDelete;
+  final VoidCallback? onRestore;
+  final VoidCallback? onDelete;
+  final bool enabled;
 
   const _TrashCard({
     required this.match,
     required this.onRestore,
     required this.onDelete,
+    this.enabled = true,
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final allianceColor = match.alliance == 'Red' ? Colors.red : Colors.blue;
+    final allianceColor = AppTheme.allianceColor(match.alliance);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: AppTheme.spacingSm),
@@ -217,15 +265,16 @@ class _TrashCard extends StatelessWidget {
             size: 28,
           ),
         ),
-        confirmDismiss: (direction) async {
-          if (direction == DismissDirection.startToEnd) {
-            onRestore();
-            return false; // Don't actually dismiss, show snackbar instead
-          } else {
-            onDelete();
-            return false;
-          }
-        },
+        confirmDismiss: enabled
+            ? (direction) async {
+                if (direction == DismissDirection.startToEnd) {
+                  onRestore?.call();
+                } else {
+                  onDelete?.call();
+                }
+                return false; // Don't actually dismiss; actions handle UI
+              }
+            : (_) async => false,
         child: Card(
           child: Padding(
             padding: const EdgeInsets.all(AppTheme.spacingMd),
