@@ -285,13 +285,23 @@ def update_match_from_sheets(req: https_fn.CallableRequest) -> dict:
             )
         
         logger.info(f"Updating match from Sheets: {event_id}/{report_id}")
-        
+
         db = get_db()
         doc_ref = db.collection('matches').document(report_id)
-        
+
+        # Verify team ownership — existing match must belong to same event
+        existing = doc_ref.get()
+        if existing.exists:
+            existing_data = existing.to_dict()
+            if existing_data.get('eventId') and existing_data['eventId'] != event_id:
+                raise https_fn.HttpsError(
+                    code=https_fn.FunctionsErrorCode.PERMISSION_DENIED,
+                    message="Match does not belong to the specified event"
+                )
+
         # Add eventId to the match data
         match_data['eventId'] = event_id
-        
+
         # Merge update with existing data
         doc_ref.set(match_data, merge=True)
         
@@ -325,7 +335,9 @@ def sync_from_sheets_http(req: Request) -> Response:
     """
     # Check API key
     api_key = req.headers.get('X-API-Key')
-    expected_key = os.environ.get('SYNC_API_KEY', 'sushiscout26-default-key')
+    expected_key = os.environ.get('SYNC_API_KEY')
+    if not expected_key:
+        return jsonify({'error': 'SYNC_API_KEY not configured'}), 500
     
     if api_key != expected_key:
         return jsonify({'error': 'Unauthorized'}), 401
@@ -361,4 +373,3 @@ def sync_from_sheets_http(req: Request) -> Response:
     except Exception as e:
         logger.error(f"HTTP: Failed to update match from Sheets: {str(e)}")
         return jsonify({'error': str(e)}), 500
->>>>>>> master

@@ -22,14 +22,17 @@ class LocalMatchReports extends Table {
   BoolColumn get isSynced => boolean().withDefault(const Constant(false))();
   BoolColumn get isDeleted => boolean().withDefault(const Constant(false))();
   
+  // Team isolation
+  TextColumn get teamId => text().withDefault(const Constant(''))();
+
   // Timestamps
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
   DateTimeColumn get syncedAt => dateTime().nullable()();
-  
+
   @override
   Set<Column> get primaryKey => {id};
-  
+
   @override
   List<String> get customConstraints => [
     'UNIQUE(event_id, match_id, team_number)',
@@ -43,7 +46,8 @@ class LocalEvents extends Table {
   TextColumn get programType => text()(); // 'FRC' or 'FTC'
   TextColumn get tbaKey => text()();
   DateTimeColumn get startDate => dateTime()();
-  
+  TextColumn get teamId => text().withDefault(const Constant(''))();
+
   // Sync status
   BoolColumn get isSynced => boolean().withDefault(const Constant(false))();
   DateTimeColumn get syncedAt => dateTime().nullable()();

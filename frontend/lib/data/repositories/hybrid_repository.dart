@@ -685,6 +685,7 @@ class HybridRepository implements ScoutingRepository {
       isSynced: local.isSynced,
       isDeleted: local.isDeleted,
       eventId: local.eventId,
+      teamId: local.teamId,
       programType: programType,
     );
   }
@@ -703,6 +704,7 @@ class HybridRepository implements ScoutingRepository {
       comments: Value(match.comments),
       isSynced: Value(match.isSynced),
       isDeleted: Value(match.isDeleted),
+      teamId: Value(match.teamId),
       createdAt: Value(match.createdAt),
       updatedAt: Value(DateTime.now()),
     );
@@ -715,6 +717,7 @@ class HybridRepository implements ScoutingRepository {
       programType: local.programType,
       tbaKey: local.tbaKey,
       startDate: local.startDate,
+      teamId: local.teamId,
     );
   }
 
@@ -725,6 +728,7 @@ class HybridRepository implements ScoutingRepository {
       programType: Value(event.programType),
       tbaKey: Value(event.tbaKey),
       startDate: Value(event.startDate),
+      teamId: Value(event.teamId),
     );
   }
 }

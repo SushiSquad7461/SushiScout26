@@ -152,6 +152,16 @@ class $LocalMatchReportsTable extends LocalMatchReports
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _teamIdMeta = const VerificationMeta('teamId');
+  @override
+  late final GeneratedColumn<String> teamId = GeneratedColumn<String>(
+    'team_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -199,6 +209,7 @@ class $LocalMatchReportsTable extends LocalMatchReports
     comments,
     isSynced,
     isDeleted,
+    teamId,
     createdAt,
     updatedAt,
     syncedAt,
@@ -309,6 +320,12 @@ class $LocalMatchReportsTable extends LocalMatchReports
         isDeleted.isAcceptableOrUnknown(data['is_deleted']!, _isDeletedMeta),
       );
     }
+    if (data.containsKey('team_id')) {
+      context.handle(
+        _teamIdMeta,
+        teamId.isAcceptableOrUnknown(data['team_id']!, _teamIdMeta),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -388,6 +405,10 @@ class $LocalMatchReportsTable extends LocalMatchReports
         DriftSqlType.bool,
         data['${effectivePrefix}is_deleted'],
       )!,
+      teamId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}team_id'],
+      )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -423,6 +444,7 @@ class LocalMatchReport extends DataClass
   final String comments;
   final bool isSynced;
   final bool isDeleted;
+  final String teamId;
   final DateTime createdAt;
   final DateTime updatedAt;
   final DateTime? syncedAt;
@@ -439,6 +461,7 @@ class LocalMatchReport extends DataClass
     required this.comments,
     required this.isSynced,
     required this.isDeleted,
+    required this.teamId,
     required this.createdAt,
     required this.updatedAt,
     this.syncedAt,
@@ -458,6 +481,7 @@ class LocalMatchReport extends DataClass
     map['comments'] = Variable<String>(comments);
     map['is_synced'] = Variable<bool>(isSynced);
     map['is_deleted'] = Variable<bool>(isDeleted);
+    map['team_id'] = Variable<String>(teamId);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     if (!nullToAbsent || syncedAt != null) {
@@ -480,6 +504,7 @@ class LocalMatchReport extends DataClass
       comments: Value(comments),
       isSynced: Value(isSynced),
       isDeleted: Value(isDeleted),
+      teamId: Value(teamId),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       syncedAt: syncedAt == null && nullToAbsent
@@ -506,6 +531,7 @@ class LocalMatchReport extends DataClass
       comments: serializer.fromJson<String>(json['comments']),
       isSynced: serializer.fromJson<bool>(json['isSynced']),
       isDeleted: serializer.fromJson<bool>(json['isDeleted']),
+      teamId: serializer.fromJson<String>(json['teamId']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       syncedAt: serializer.fromJson<DateTime?>(json['syncedAt']),
@@ -527,6 +553,7 @@ class LocalMatchReport extends DataClass
       'comments': serializer.toJson<String>(comments),
       'isSynced': serializer.toJson<bool>(isSynced),
       'isDeleted': serializer.toJson<bool>(isDeleted),
+      'teamId': serializer.toJson<String>(teamId),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'syncedAt': serializer.toJson<DateTime?>(syncedAt),
@@ -546,6 +573,7 @@ class LocalMatchReport extends DataClass
     String? comments,
     bool? isSynced,
     bool? isDeleted,
+    String? teamId,
     DateTime? createdAt,
     DateTime? updatedAt,
     Value<DateTime?> syncedAt = const Value.absent(),
@@ -562,6 +590,7 @@ class LocalMatchReport extends DataClass
     comments: comments ?? this.comments,
     isSynced: isSynced ?? this.isSynced,
     isDeleted: isDeleted ?? this.isDeleted,
+    teamId: teamId ?? this.teamId,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     syncedAt: syncedAt.present ? syncedAt.value : this.syncedAt,
@@ -588,6 +617,7 @@ class LocalMatchReport extends DataClass
       comments: data.comments.present ? data.comments.value : this.comments,
       isSynced: data.isSynced.present ? data.isSynced.value : this.isSynced,
       isDeleted: data.isDeleted.present ? data.isDeleted.value : this.isDeleted,
+      teamId: data.teamId.present ? data.teamId.value : this.teamId,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       syncedAt: data.syncedAt.present ? data.syncedAt.value : this.syncedAt,
@@ -609,6 +639,7 @@ class LocalMatchReport extends DataClass
           ..write('comments: $comments, ')
           ..write('isSynced: $isSynced, ')
           ..write('isDeleted: $isDeleted, ')
+          ..write('teamId: $teamId, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('syncedAt: $syncedAt')
@@ -630,6 +661,7 @@ class LocalMatchReport extends DataClass
     comments,
     isSynced,
     isDeleted,
+    teamId,
     createdAt,
     updatedAt,
     syncedAt,
@@ -650,6 +682,7 @@ class LocalMatchReport extends DataClass
           other.comments == this.comments &&
           other.isSynced == this.isSynced &&
           other.isDeleted == this.isDeleted &&
+          other.teamId == this.teamId &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.syncedAt == this.syncedAt);
@@ -668,6 +701,7 @@ class LocalMatchReportsCompanion extends UpdateCompanion<LocalMatchReport> {
   final Value<String> comments;
   final Value<bool> isSynced;
   final Value<bool> isDeleted;
+  final Value<String> teamId;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<DateTime?> syncedAt;
@@ -685,6 +719,7 @@ class LocalMatchReportsCompanion extends UpdateCompanion<LocalMatchReport> {
     this.comments = const Value.absent(),
     this.isSynced = const Value.absent(),
     this.isDeleted = const Value.absent(),
+    this.teamId = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.syncedAt = const Value.absent(),
@@ -703,6 +738,7 @@ class LocalMatchReportsCompanion extends UpdateCompanion<LocalMatchReport> {
     this.comments = const Value.absent(),
     this.isSynced = const Value.absent(),
     this.isDeleted = const Value.absent(),
+    this.teamId = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
     this.syncedAt = const Value.absent(),
@@ -730,6 +766,7 @@ class LocalMatchReportsCompanion extends UpdateCompanion<LocalMatchReport> {
     Expression<String>? comments,
     Expression<bool>? isSynced,
     Expression<bool>? isDeleted,
+    Expression<String>? teamId,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<DateTime>? syncedAt,
@@ -748,6 +785,7 @@ class LocalMatchReportsCompanion extends UpdateCompanion<LocalMatchReport> {
       if (comments != null) 'comments': comments,
       if (isSynced != null) 'is_synced': isSynced,
       if (isDeleted != null) 'is_deleted': isDeleted,
+      if (teamId != null) 'team_id': teamId,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (syncedAt != null) 'synced_at': syncedAt,
@@ -768,6 +806,7 @@ class LocalMatchReportsCompanion extends UpdateCompanion<LocalMatchReport> {
     Value<String>? comments,
     Value<bool>? isSynced,
     Value<bool>? isDeleted,
+    Value<String>? teamId,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<DateTime?>? syncedAt,
@@ -786,6 +825,7 @@ class LocalMatchReportsCompanion extends UpdateCompanion<LocalMatchReport> {
       comments: comments ?? this.comments,
       isSynced: isSynced ?? this.isSynced,
       isDeleted: isDeleted ?? this.isDeleted,
+      teamId: teamId ?? this.teamId,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       syncedAt: syncedAt ?? this.syncedAt,
@@ -832,6 +872,9 @@ class LocalMatchReportsCompanion extends UpdateCompanion<LocalMatchReport> {
     if (isDeleted.present) {
       map['is_deleted'] = Variable<bool>(isDeleted.value);
     }
+    if (teamId.present) {
+      map['team_id'] = Variable<String>(teamId.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -862,6 +905,7 @@ class LocalMatchReportsCompanion extends UpdateCompanion<LocalMatchReport> {
           ..write('comments: $comments, ')
           ..write('isSynced: $isSynced, ')
           ..write('isDeleted: $isDeleted, ')
+          ..write('teamId: $teamId, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('syncedAt: $syncedAt, ')
@@ -926,6 +970,16 @@ class $LocalEventsTable extends LocalEvents
     type: DriftSqlType.dateTime,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _teamIdMeta = const VerificationMeta('teamId');
+  @override
+  late final GeneratedColumn<String> teamId = GeneratedColumn<String>(
+    'team_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
   static const VerificationMeta _isSyncedMeta = const VerificationMeta(
     'isSynced',
   );
@@ -959,6 +1013,7 @@ class $LocalEventsTable extends LocalEvents
     programType,
     tbaKey,
     startDate,
+    teamId,
     isSynced,
     syncedAt,
   ];
@@ -1014,6 +1069,12 @@ class $LocalEventsTable extends LocalEvents
     } else if (isInserting) {
       context.missing(_startDateMeta);
     }
+    if (data.containsKey('team_id')) {
+      context.handle(
+        _teamIdMeta,
+        teamId.isAcceptableOrUnknown(data['team_id']!, _teamIdMeta),
+      );
+    }
     if (data.containsKey('is_synced')) {
       context.handle(
         _isSyncedMeta,
@@ -1055,6 +1116,10 @@ class $LocalEventsTable extends LocalEvents
         DriftSqlType.dateTime,
         data['${effectivePrefix}start_date'],
       )!,
+      teamId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}team_id'],
+      )!,
       isSynced: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}is_synced'],
@@ -1078,6 +1143,7 @@ class LocalEvent extends DataClass implements Insertable<LocalEvent> {
   final String programType;
   final String tbaKey;
   final DateTime startDate;
+  final String teamId;
   final bool isSynced;
   final DateTime? syncedAt;
   const LocalEvent({
@@ -1086,6 +1152,7 @@ class LocalEvent extends DataClass implements Insertable<LocalEvent> {
     required this.programType,
     required this.tbaKey,
     required this.startDate,
+    required this.teamId,
     required this.isSynced,
     this.syncedAt,
   });
@@ -1097,6 +1164,7 @@ class LocalEvent extends DataClass implements Insertable<LocalEvent> {
     map['program_type'] = Variable<String>(programType);
     map['tba_key'] = Variable<String>(tbaKey);
     map['start_date'] = Variable<DateTime>(startDate);
+    map['team_id'] = Variable<String>(teamId);
     map['is_synced'] = Variable<bool>(isSynced);
     if (!nullToAbsent || syncedAt != null) {
       map['synced_at'] = Variable<DateTime>(syncedAt);
@@ -1111,6 +1179,7 @@ class LocalEvent extends DataClass implements Insertable<LocalEvent> {
       programType: Value(programType),
       tbaKey: Value(tbaKey),
       startDate: Value(startDate),
+      teamId: Value(teamId),
       isSynced: Value(isSynced),
       syncedAt: syncedAt == null && nullToAbsent
           ? const Value.absent()
@@ -1129,6 +1198,7 @@ class LocalEvent extends DataClass implements Insertable<LocalEvent> {
       programType: serializer.fromJson<String>(json['programType']),
       tbaKey: serializer.fromJson<String>(json['tbaKey']),
       startDate: serializer.fromJson<DateTime>(json['startDate']),
+      teamId: serializer.fromJson<String>(json['teamId']),
       isSynced: serializer.fromJson<bool>(json['isSynced']),
       syncedAt: serializer.fromJson<DateTime?>(json['syncedAt']),
     );
@@ -1142,6 +1212,7 @@ class LocalEvent extends DataClass implements Insertable<LocalEvent> {
       'programType': serializer.toJson<String>(programType),
       'tbaKey': serializer.toJson<String>(tbaKey),
       'startDate': serializer.toJson<DateTime>(startDate),
+      'teamId': serializer.toJson<String>(teamId),
       'isSynced': serializer.toJson<bool>(isSynced),
       'syncedAt': serializer.toJson<DateTime?>(syncedAt),
     };
@@ -1153,6 +1224,7 @@ class LocalEvent extends DataClass implements Insertable<LocalEvent> {
     String? programType,
     String? tbaKey,
     DateTime? startDate,
+    String? teamId,
     bool? isSynced,
     Value<DateTime?> syncedAt = const Value.absent(),
   }) => LocalEvent(
@@ -1161,6 +1233,7 @@ class LocalEvent extends DataClass implements Insertable<LocalEvent> {
     programType: programType ?? this.programType,
     tbaKey: tbaKey ?? this.tbaKey,
     startDate: startDate ?? this.startDate,
+    teamId: teamId ?? this.teamId,
     isSynced: isSynced ?? this.isSynced,
     syncedAt: syncedAt.present ? syncedAt.value : this.syncedAt,
   );
@@ -1173,6 +1246,7 @@ class LocalEvent extends DataClass implements Insertable<LocalEvent> {
           : this.programType,
       tbaKey: data.tbaKey.present ? data.tbaKey.value : this.tbaKey,
       startDate: data.startDate.present ? data.startDate.value : this.startDate,
+      teamId: data.teamId.present ? data.teamId.value : this.teamId,
       isSynced: data.isSynced.present ? data.isSynced.value : this.isSynced,
       syncedAt: data.syncedAt.present ? data.syncedAt.value : this.syncedAt,
     );
@@ -1186,6 +1260,7 @@ class LocalEvent extends DataClass implements Insertable<LocalEvent> {
           ..write('programType: $programType, ')
           ..write('tbaKey: $tbaKey, ')
           ..write('startDate: $startDate, ')
+          ..write('teamId: $teamId, ')
           ..write('isSynced: $isSynced, ')
           ..write('syncedAt: $syncedAt')
           ..write(')'))
@@ -1193,8 +1268,16 @@ class LocalEvent extends DataClass implements Insertable<LocalEvent> {
   }
 
   @override
-  int get hashCode =>
-      Object.hash(id, name, programType, tbaKey, startDate, isSynced, syncedAt);
+  int get hashCode => Object.hash(
+    id,
+    name,
+    programType,
+    tbaKey,
+    startDate,
+    teamId,
+    isSynced,
+    syncedAt,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -1204,6 +1287,7 @@ class LocalEvent extends DataClass implements Insertable<LocalEvent> {
           other.programType == this.programType &&
           other.tbaKey == this.tbaKey &&
           other.startDate == this.startDate &&
+          other.teamId == this.teamId &&
           other.isSynced == this.isSynced &&
           other.syncedAt == this.syncedAt);
 }
@@ -1214,6 +1298,7 @@ class LocalEventsCompanion extends UpdateCompanion<LocalEvent> {
   final Value<String> programType;
   final Value<String> tbaKey;
   final Value<DateTime> startDate;
+  final Value<String> teamId;
   final Value<bool> isSynced;
   final Value<DateTime?> syncedAt;
   final Value<int> rowid;
@@ -1223,6 +1308,7 @@ class LocalEventsCompanion extends UpdateCompanion<LocalEvent> {
     this.programType = const Value.absent(),
     this.tbaKey = const Value.absent(),
     this.startDate = const Value.absent(),
+    this.teamId = const Value.absent(),
     this.isSynced = const Value.absent(),
     this.syncedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -1233,6 +1319,7 @@ class LocalEventsCompanion extends UpdateCompanion<LocalEvent> {
     required String programType,
     required String tbaKey,
     required DateTime startDate,
+    this.teamId = const Value.absent(),
     this.isSynced = const Value.absent(),
     this.syncedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -1247,6 +1334,7 @@ class LocalEventsCompanion extends UpdateCompanion<LocalEvent> {
     Expression<String>? programType,
     Expression<String>? tbaKey,
     Expression<DateTime>? startDate,
+    Expression<String>? teamId,
     Expression<bool>? isSynced,
     Expression<DateTime>? syncedAt,
     Expression<int>? rowid,
@@ -1257,6 +1345,7 @@ class LocalEventsCompanion extends UpdateCompanion<LocalEvent> {
       if (programType != null) 'program_type': programType,
       if (tbaKey != null) 'tba_key': tbaKey,
       if (startDate != null) 'start_date': startDate,
+      if (teamId != null) 'team_id': teamId,
       if (isSynced != null) 'is_synced': isSynced,
       if (syncedAt != null) 'synced_at': syncedAt,
       if (rowid != null) 'rowid': rowid,
@@ -1269,6 +1358,7 @@ class LocalEventsCompanion extends UpdateCompanion<LocalEvent> {
     Value<String>? programType,
     Value<String>? tbaKey,
     Value<DateTime>? startDate,
+    Value<String>? teamId,
     Value<bool>? isSynced,
     Value<DateTime?>? syncedAt,
     Value<int>? rowid,
@@ -1279,6 +1369,7 @@ class LocalEventsCompanion extends UpdateCompanion<LocalEvent> {
       programType: programType ?? this.programType,
       tbaKey: tbaKey ?? this.tbaKey,
       startDate: startDate ?? this.startDate,
+      teamId: teamId ?? this.teamId,
       isSynced: isSynced ?? this.isSynced,
       syncedAt: syncedAt ?? this.syncedAt,
       rowid: rowid ?? this.rowid,
@@ -1303,6 +1394,9 @@ class LocalEventsCompanion extends UpdateCompanion<LocalEvent> {
     if (startDate.present) {
       map['start_date'] = Variable<DateTime>(startDate.value);
     }
+    if (teamId.present) {
+      map['team_id'] = Variable<String>(teamId.value);
+    }
     if (isSynced.present) {
       map['is_synced'] = Variable<bool>(isSynced.value);
     }
@@ -1323,6 +1417,7 @@ class LocalEventsCompanion extends UpdateCompanion<LocalEvent> {
           ..write('programType: $programType, ')
           ..write('tbaKey: $tbaKey, ')
           ..write('startDate: $startDate, ')
+          ..write('teamId: $teamId, ')
           ..write('isSynced: $isSynced, ')
           ..write('syncedAt: $syncedAt, ')
           ..write('rowid: $rowid')
@@ -2694,6 +2789,7 @@ typedef $$LocalMatchReportsTableCreateCompanionBuilder =
       Value<String> comments,
       Value<bool> isSynced,
       Value<bool> isDeleted,
+      Value<String> teamId,
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<DateTime?> syncedAt,
@@ -2713,6 +2809,7 @@ typedef $$LocalMatchReportsTableUpdateCompanionBuilder =
       Value<String> comments,
       Value<bool> isSynced,
       Value<bool> isDeleted,
+      Value<String> teamId,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<DateTime?> syncedAt,
@@ -2785,6 +2882,11 @@ class $$LocalMatchReportsTableFilterComposer
 
   ColumnFilters<bool> get isDeleted => $composableBuilder(
     column: $table.isDeleted,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get teamId => $composableBuilder(
+    column: $table.teamId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -2873,6 +2975,11 @@ class $$LocalMatchReportsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get teamId => $composableBuilder(
+    column: $table.teamId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -2942,6 +3049,9 @@ class $$LocalMatchReportsTableAnnotationComposer
   GeneratedColumn<bool> get isDeleted =>
       $composableBuilder(column: $table.isDeleted, builder: (column) => column);
 
+  GeneratedColumn<String> get teamId =>
+      $composableBuilder(column: $table.teamId, builder: (column) => column);
+
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
@@ -3004,6 +3114,7 @@ class $$LocalMatchReportsTableTableManager
                 Value<String> comments = const Value.absent(),
                 Value<bool> isSynced = const Value.absent(),
                 Value<bool> isDeleted = const Value.absent(),
+                Value<String> teamId = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<DateTime?> syncedAt = const Value.absent(),
@@ -3021,6 +3132,7 @@ class $$LocalMatchReportsTableTableManager
                 comments: comments,
                 isSynced: isSynced,
                 isDeleted: isDeleted,
+                teamId: teamId,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 syncedAt: syncedAt,
@@ -3040,6 +3152,7 @@ class $$LocalMatchReportsTableTableManager
                 Value<String> comments = const Value.absent(),
                 Value<bool> isSynced = const Value.absent(),
                 Value<bool> isDeleted = const Value.absent(),
+                Value<String> teamId = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<DateTime?> syncedAt = const Value.absent(),
@@ -3057,6 +3170,7 @@ class $$LocalMatchReportsTableTableManager
                 comments: comments,
                 isSynced: isSynced,
                 isDeleted: isDeleted,
+                teamId: teamId,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 syncedAt: syncedAt,
@@ -3098,6 +3212,7 @@ typedef $$LocalEventsTableCreateCompanionBuilder =
       required String programType,
       required String tbaKey,
       required DateTime startDate,
+      Value<String> teamId,
       Value<bool> isSynced,
       Value<DateTime?> syncedAt,
       Value<int> rowid,
@@ -3109,6 +3224,7 @@ typedef $$LocalEventsTableUpdateCompanionBuilder =
       Value<String> programType,
       Value<String> tbaKey,
       Value<DateTime> startDate,
+      Value<String> teamId,
       Value<bool> isSynced,
       Value<DateTime?> syncedAt,
       Value<int> rowid,
@@ -3145,6 +3261,11 @@ class $$LocalEventsTableFilterComposer
 
   ColumnFilters<DateTime> get startDate => $composableBuilder(
     column: $table.startDate,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get teamId => $composableBuilder(
+    column: $table.teamId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -3193,6 +3314,11 @@ class $$LocalEventsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get teamId => $composableBuilder(
+    column: $table.teamId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<bool> get isSynced => $composableBuilder(
     column: $table.isSynced,
     builder: (column) => ColumnOrderings(column),
@@ -3229,6 +3355,9 @@ class $$LocalEventsTableAnnotationComposer
 
   GeneratedColumn<DateTime> get startDate =>
       $composableBuilder(column: $table.startDate, builder: (column) => column);
+
+  GeneratedColumn<String> get teamId =>
+      $composableBuilder(column: $table.teamId, builder: (column) => column);
 
   GeneratedColumn<bool> get isSynced =>
       $composableBuilder(column: $table.isSynced, builder: (column) => column);
@@ -3273,6 +3402,7 @@ class $$LocalEventsTableTableManager
                 Value<String> programType = const Value.absent(),
                 Value<String> tbaKey = const Value.absent(),
                 Value<DateTime> startDate = const Value.absent(),
+                Value<String> teamId = const Value.absent(),
                 Value<bool> isSynced = const Value.absent(),
                 Value<DateTime?> syncedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -3282,6 +3412,7 @@ class $$LocalEventsTableTableManager
                 programType: programType,
                 tbaKey: tbaKey,
                 startDate: startDate,
+                teamId: teamId,
                 isSynced: isSynced,
                 syncedAt: syncedAt,
                 rowid: rowid,
@@ -3293,6 +3424,7 @@ class $$LocalEventsTableTableManager
                 required String programType,
                 required String tbaKey,
                 required DateTime startDate,
+                Value<String> teamId = const Value.absent(),
                 Value<bool> isSynced = const Value.absent(),
                 Value<DateTime?> syncedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -3302,6 +3434,7 @@ class $$LocalEventsTableTableManager
                 programType: programType,
                 tbaKey: tbaKey,
                 startDate: startDate,
+                teamId: teamId,
                 isSynced: isSynced,
                 syncedAt: syncedAt,
                 rowid: rowid,

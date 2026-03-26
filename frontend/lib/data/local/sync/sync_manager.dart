@@ -34,6 +34,9 @@ final isLocalDbAvailableProvider = Provider<bool>((ref) {
   return ref.watch(appDatabaseProvider) != null;
 });
 
+/// Provider for the active team ID — overridden from auth state in main.dart
+final activeTeamIdProvider = Provider<String?>((ref) => null);
+
 /// Provider for Firestore repository
 final firestoreRepositoryProvider = Provider<FirestoreRepository>((ref) {
   // This should be initialized with proper Firebase instance
@@ -180,6 +183,7 @@ class SyncManager {
           createdAt: match.createdAt,
           isSynced: false,
           isDeleted: match.isDeleted,
+          teamId: match.teamId,
         );
 
         await queueCreate(match.eventId, matchReport);

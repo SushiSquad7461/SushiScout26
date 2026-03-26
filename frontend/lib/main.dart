@@ -25,9 +25,10 @@ void main() async {
   final container = ProviderContainer(
     overrides: [
       sharedPreferencesProvider.overrideWithValue(prefs),
-      firestoreRepositoryProvider.overrideWithValue(
-        FirestoreRepository(FirebaseFirestore.instance),
-      ),
+      firestoreRepositoryProvider.overrideWith((ref) {
+        final teamId = ref.watch(activeTeamIdProvider);
+        return FirestoreRepository(FirebaseFirestore.instance, teamId: teamId);
+      }),
     ],
   );
 

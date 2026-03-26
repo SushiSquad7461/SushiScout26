@@ -118,62 +118,68 @@ class _FakeDatabaseConnectionUser_14 extends _i1.SmartFake
     : super(parent, parentInvocation);
 }
 
-class _FakeMigrator_15 extends _i1.SmartFake implements _i4.Migrator {
-  _FakeMigrator_15(Object parent, Invocation parentInvocation)
+class _FakeSyncQueueStats_15 extends _i1.SmartFake
+    implements _i2.SyncQueueStats {
+  _FakeSyncQueueStats_15(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
-class _FakeFuture_16<T> extends _i1.SmartFake implements _i6.Future<T> {
-  _FakeFuture_16(Object parent, Invocation parentInvocation)
+class _FakeMigrator_16 extends _i1.SmartFake implements _i4.Migrator {
+  _FakeMigrator_16(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
-class _FakeInsertStatement_17<T1 extends _i4.Table, D1> extends _i1.SmartFake
+class _FakeFuture_17<T> extends _i1.SmartFake implements _i6.Future<T> {
+  _FakeFuture_17(Object parent, Invocation parentInvocation)
+    : super(parent, parentInvocation);
+}
+
+class _FakeInsertStatement_18<T1 extends _i4.Table, D1> extends _i1.SmartFake
     implements _i4.InsertStatement<T1, D1> {
-  _FakeInsertStatement_17(Object parent, Invocation parentInvocation)
+  _FakeInsertStatement_18(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
-class _FakeUpdateStatement_18<T extends _i4.Table, D> extends _i1.SmartFake
+class _FakeUpdateStatement_19<T extends _i4.Table, D> extends _i1.SmartFake
     implements _i4.UpdateStatement<T, D> {
-  _FakeUpdateStatement_18(Object parent, Invocation parentInvocation)
+  _FakeUpdateStatement_19(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
-class _FakeSimpleSelectStatement_19<T1 extends _i4.HasResultSet, D>
+class _FakeSimpleSelectStatement_20<T1 extends _i4.HasResultSet, D>
     extends _i1.SmartFake
     implements _i4.SimpleSelectStatement<T1, D> {
-  _FakeSimpleSelectStatement_19(Object parent, Invocation parentInvocation)
+  _FakeSimpleSelectStatement_20(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
-class _FakeJoinedSelectStatement_20<FirstT extends _i4.HasResultSet, FirstD>
+class _FakeJoinedSelectStatement_21<FirstT extends _i4.HasResultSet, FirstD>
     extends _i1.SmartFake
     implements _i4.JoinedSelectStatement<FirstT, FirstD> {
-  _FakeJoinedSelectStatement_20(Object parent, Invocation parentInvocation)
+  _FakeJoinedSelectStatement_21(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
-class _FakeBaseSelectStatement_21<Row> extends _i1.SmartFake
+class _FakeBaseSelectStatement_22<Row> extends _i1.SmartFake
     implements _i4.BaseSelectStatement<Row> {
-  _FakeBaseSelectStatement_21(Object parent, Invocation parentInvocation)
+  _FakeBaseSelectStatement_22(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
-class _FakeDeleteStatement_22<T1 extends _i4.Table, D1> extends _i1.SmartFake
+class _FakeDeleteStatement_23<T1 extends _i4.Table, D1> extends _i1.SmartFake
     implements _i4.DeleteStatement<T1, D1> {
-  _FakeDeleteStatement_22(Object parent, Invocation parentInvocation)
+  _FakeDeleteStatement_23(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
-class _FakeSelectable_23<T> extends _i1.SmartFake implements _i4.Selectable<T> {
-  _FakeSelectable_23(Object parent, Invocation parentInvocation)
+class _FakeSelectable_24<T> extends _i1.SmartFake implements _i4.Selectable<T> {
+  _FakeSelectable_24(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
-class _FakeGenerationContext_24 extends _i1.SmartFake
+class _FakeGenerationContext_25 extends _i1.SmartFake
     implements _i4.GenerationContext {
-  _FakeGenerationContext_24(Object parent, Invocation parentInvocation)
+  _FakeGenerationContext_25(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
@@ -362,13 +368,13 @@ class MockFirestoreRepository extends _i1.Mock
   _i6.Future<void> createMatch(
     String? eventId,
     _i8.MatchReport? match, {
-    String? teamId,
+    String? teamIdOverride,
   }) =>
       (super.noSuchMethod(
             Invocation.method(
               #createMatch,
               [eventId, match],
-              {#teamId: teamId},
+              {#teamIdOverride: teamIdOverride},
             ),
             returnValue: _i6.Future<void>.value(),
             returnValueForMissingStub: _i6.Future<void>.value(),
@@ -379,13 +385,13 @@ class MockFirestoreRepository extends _i1.Mock
   _i6.Future<void> updateMatch(
     String? eventId,
     _i8.MatchReport? match, {
-    String? teamId,
+    String? teamIdOverride,
   }) =>
       (super.noSuchMethod(
             Invocation.method(
               #updateMatch,
               [eventId, match],
-              {#teamId: teamId},
+              {#teamIdOverride: teamIdOverride},
             ),
             returnValue: _i6.Future<void>.value(),
             returnValueForMissingStub: _i6.Future<void>.value(),
@@ -650,6 +656,47 @@ class MockAppDatabase extends _i1.Mock implements _i2.AppDatabase {
           as _i6.Future<_i2.LocalMatchReport?>);
 
   @override
+  _i6.Future<List<_i2.LocalMatchReport>> getMatchesByTeamNumber(
+    int? teamNumber,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#getMatchesByTeamNumber, [teamNumber]),
+            returnValue: _i6.Future<List<_i2.LocalMatchReport>>.value(
+              <_i2.LocalMatchReport>[],
+            ),
+          )
+          as _i6.Future<List<_i2.LocalMatchReport>>);
+
+  @override
+  _i6.Future<List<_i2.LocalMatchReport>> getMatchesByTeamNumberForEvent(
+    String? eventId,
+    int? teamNumber,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#getMatchesByTeamNumberForEvent, [
+              eventId,
+              teamNumber,
+            ]),
+            returnValue: _i6.Future<List<_i2.LocalMatchReport>>.value(
+              <_i2.LocalMatchReport>[],
+            ),
+          )
+          as _i6.Future<List<_i2.LocalMatchReport>>);
+
+  @override
+  _i6.Future<List<_i2.LocalMatchReport>> searchMatches(
+    String? eventId,
+    String? query,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#searchMatches, [eventId, query]),
+            returnValue: _i6.Future<List<_i2.LocalMatchReport>>.value(
+              <_i2.LocalMatchReport>[],
+            ),
+          )
+          as _i6.Future<List<_i2.LocalMatchReport>>);
+
+  @override
   _i6.Future<void> upsertMatch(_i2.LocalMatchReportsCompanion? match) =>
       (super.noSuchMethod(
             Invocation.method(#upsertMatch, [match]),
@@ -732,6 +779,15 @@ class MockAppDatabase extends _i1.Mock implements _i2.AppDatabase {
           as _i6.Future<void>);
 
   @override
+  _i6.Future<void> deleteEvent(String? id) =>
+      (super.noSuchMethod(
+            Invocation.method(#deleteEvent, [id]),
+            returnValue: _i6.Future<void>.value(),
+            returnValueForMissingStub: _i6.Future<void>.value(),
+          )
+          as _i6.Future<void>);
+
+  @override
   _i6.Future<int> addToSyncQueue(_i2.SyncQueueCompanion? entry) =>
       (super.noSuchMethod(
             Invocation.method(#addToSyncQueue, [entry]),
@@ -792,13 +848,38 @@ class MockAppDatabase extends _i1.Mock implements _i2.AppDatabase {
           as _i6.Future<void>);
 
   @override
-  _i6.Future<void> clearCompletedSyncOperations() =>
+  _i6.Future<void> clearAllSyncOperations() =>
       (super.noSuchMethod(
-            Invocation.method(#clearCompletedSyncOperations, []),
+            Invocation.method(#clearAllSyncOperations, []),
             returnValue: _i6.Future<void>.value(),
             returnValueForMissingStub: _i6.Future<void>.value(),
           )
           as _i6.Future<void>);
+
+  @override
+  _i6.Future<void> clearFailedSyncOperations({int? maxRetries = 10}) =>
+      (super.noSuchMethod(
+            Invocation.method(#clearFailedSyncOperations, [], {
+              #maxRetries: maxRetries,
+            }),
+            returnValue: _i6.Future<void>.value(),
+            returnValueForMissingStub: _i6.Future<void>.value(),
+          )
+          as _i6.Future<void>);
+
+  @override
+  _i6.Future<List<_i2.SyncQueueData>> getFailedSyncOperations({
+    int? maxRetries = 10,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(#getFailedSyncOperations, [], {
+              #maxRetries: maxRetries,
+            }),
+            returnValue: _i6.Future<List<_i2.SyncQueueData>>.value(
+              <_i2.SyncQueueData>[],
+            ),
+          )
+          as _i6.Future<List<_i2.SyncQueueData>>);
 
   @override
   _i6.Future<int> recordConflict(_i2.SyncConflictsCompanion? conflict) =>
@@ -828,6 +909,35 @@ class MockAppDatabase extends _i1.Mock implements _i2.AppDatabase {
           as _i6.Future<void>);
 
   @override
+  _i6.Future<void> clearResolvedConflicts({
+    Duration? olderThan = const Duration(days: 30),
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(#clearResolvedConflicts, [], {
+              #olderThan: olderThan,
+            }),
+            returnValue: _i6.Future<void>.value(),
+            returnValueForMissingStub: _i6.Future<void>.value(),
+          )
+          as _i6.Future<void>);
+
+  @override
+  _i6.Future<int> getMatchCount() =>
+      (super.noSuchMethod(
+            Invocation.method(#getMatchCount, []),
+            returnValue: _i6.Future<int>.value(0),
+          )
+          as _i6.Future<int>);
+
+  @override
+  _i6.Future<int> getMatchCountForEvent(String? eventId) =>
+      (super.noSuchMethod(
+            Invocation.method(#getMatchCountForEvent, [eventId]),
+            returnValue: _i6.Future<int>.value(0),
+          )
+          as _i6.Future<int>);
+
+  @override
   _i6.Future<int> getUnsyncedCount() =>
       (super.noSuchMethod(
             Invocation.method(#getUnsyncedCount, []),
@@ -839,6 +949,31 @@ class MockAppDatabase extends _i1.Mock implements _i2.AppDatabase {
   _i6.Future<int> getTrashCount(String? eventId) =>
       (super.noSuchMethod(
             Invocation.method(#getTrashCount, [eventId]),
+            returnValue: _i6.Future<int>.value(0),
+          )
+          as _i6.Future<int>);
+
+  @override
+  _i6.Future<_i2.SyncQueueStats> getSyncQueueStats() =>
+      (super.noSuchMethod(
+            Invocation.method(#getSyncQueueStats, []),
+            returnValue: _i6.Future<_i2.SyncQueueStats>.value(
+              _FakeSyncQueueStats_15(
+                this,
+                Invocation.method(#getSyncQueueStats, []),
+              ),
+            ),
+          )
+          as _i6.Future<_i2.SyncQueueStats>);
+
+  @override
+  _i6.Future<int> purgeOldDeletedMatches({
+    Duration? olderThan = const Duration(days: 30),
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(#purgeOldDeletedMatches, [], {
+              #olderThan: olderThan,
+            }),
             returnValue: _i6.Future<int>.value(0),
           )
           as _i6.Future<int>);
@@ -856,7 +991,7 @@ class MockAppDatabase extends _i1.Mock implements _i2.AppDatabase {
   _i4.Migrator createMigrator() =>
       (super.noSuchMethod(
             Invocation.method(#createMigrator, []),
-            returnValue: _FakeMigrator_15(
+            returnValue: _FakeMigrator_16(
               this,
               Invocation.method(#createMigrator, []),
             ),
@@ -905,7 +1040,7 @@ class MockAppDatabase extends _i1.Mock implements _i2.AppDatabase {
                   ),
                   (Ret v) => _i6.Future<Ret>.value(v),
                 ) ??
-                _FakeFuture_16<Ret>(
+                _FakeFuture_17<Ret>(
                   this,
                   Invocation.method(#computeWithDatabase, [], {
                     #computation: computation,
@@ -973,7 +1108,7 @@ class MockAppDatabase extends _i1.Mock implements _i2.AppDatabase {
                   ),
                   (T v) => _i6.Future<T>.value(v),
                 ) ??
-                _FakeFuture_16<T>(this, Invocation.method(#doWhenOpened, [fn])),
+                _FakeFuture_17<T>(this, Invocation.method(#doWhenOpened, [fn])),
           )
           as _i6.Future<T>);
 
@@ -983,7 +1118,7 @@ class MockAppDatabase extends _i1.Mock implements _i2.AppDatabase {
   ) =>
       (super.noSuchMethod(
             Invocation.method(#into, [table]),
-            returnValue: _FakeInsertStatement_17<T, D>(
+            returnValue: _FakeInsertStatement_18<T, D>(
               this,
               Invocation.method(#into, [table]),
             ),
@@ -996,7 +1131,7 @@ class MockAppDatabase extends _i1.Mock implements _i2.AppDatabase {
   ) =>
       (super.noSuchMethod(
             Invocation.method(#update, [table]),
-            returnValue: _FakeUpdateStatement_18<Tbl, R>(
+            returnValue: _FakeUpdateStatement_19<Tbl, R>(
               this,
               Invocation.method(#update, [table]),
             ),
@@ -1010,7 +1145,7 @@ class MockAppDatabase extends _i1.Mock implements _i2.AppDatabase {
   }) =>
       (super.noSuchMethod(
             Invocation.method(#select, [table], {#distinct: distinct}),
-            returnValue: _FakeSimpleSelectStatement_19<T, R>(
+            returnValue: _FakeSimpleSelectStatement_20<T, R>(
               this,
               Invocation.method(#select, [table], {#distinct: distinct}),
             ),
@@ -1024,7 +1159,7 @@ class MockAppDatabase extends _i1.Mock implements _i2.AppDatabase {
   }) =>
       (super.noSuchMethod(
             Invocation.method(#selectOnly, [table], {#distinct: distinct}),
-            returnValue: _FakeJoinedSelectStatement_20<T, R>(
+            returnValue: _FakeJoinedSelectStatement_21<T, R>(
               this,
               Invocation.method(#selectOnly, [table], {#distinct: distinct}),
             ),
@@ -1037,7 +1172,7 @@ class MockAppDatabase extends _i1.Mock implements _i2.AppDatabase {
   ) =>
       (super.noSuchMethod(
             Invocation.method(#selectExpressions, [columns]),
-            returnValue: _FakeBaseSelectStatement_21<_i4.TypedResult>(
+            returnValue: _FakeBaseSelectStatement_22<_i4.TypedResult>(
               this,
               Invocation.method(#selectExpressions, [columns]),
             ),
@@ -1050,7 +1185,7 @@ class MockAppDatabase extends _i1.Mock implements _i2.AppDatabase {
   ) =>
       (super.noSuchMethod(
             Invocation.method(#delete, [table]),
-            returnValue: _FakeDeleteStatement_22<T, D>(
+            returnValue: _FakeDeleteStatement_23<T, D>(
               this,
               Invocation.method(#delete, [table]),
             ),
@@ -1127,7 +1262,7 @@ class MockAppDatabase extends _i1.Mock implements _i2.AppDatabase {
               [query],
               {#variables: variables, #readsFrom: readsFrom},
             ),
-            returnValue: _FakeSelectable_23<_i4.QueryRow>(
+            returnValue: _FakeSelectable_24<_i4.QueryRow>(
               this,
               Invocation.method(
                 #customSelect,
@@ -1150,7 +1285,7 @@ class MockAppDatabase extends _i1.Mock implements _i2.AppDatabase {
               [query],
               {#variables: variables, #readsFrom: readsFrom},
             ),
-            returnValue: _FakeSelectable_23<_i4.QueryRow>(
+            returnValue: _FakeSelectable_24<_i4.QueryRow>(
               this,
               Invocation.method(
                 #customSelectQuery,
@@ -1193,7 +1328,7 @@ class MockAppDatabase extends _i1.Mock implements _i2.AppDatabase {
                   ),
                   (T v) => _i6.Future<T>.value(v),
                 ) ??
-                _FakeFuture_16<T>(
+                _FakeFuture_17<T>(
                   this,
                   Invocation.method(
                     #transaction,
@@ -1216,7 +1351,7 @@ class MockAppDatabase extends _i1.Mock implements _i2.AppDatabase {
                   ),
                   (T v) => _i6.Future<T>.value(v),
                 ) ??
-                _FakeFuture_16<T>(
+                _FakeFuture_17<T>(
                   this,
                   Invocation.method(#exclusively, [action]),
                 ),
@@ -1255,7 +1390,7 @@ class MockAppDatabase extends _i1.Mock implements _i2.AppDatabase {
                   ),
                   (T v) => _i6.Future<T>.value(v),
                 ) ??
-                _FakeFuture_16<T>(
+                _FakeFuture_17<T>(
                   this,
                   Invocation.method(
                     #runWithInterceptor,
@@ -1278,7 +1413,7 @@ class MockAppDatabase extends _i1.Mock implements _i2.AppDatabase {
               [component],
               {#hasMultipleTables: hasMultipleTables, #startIndex: startIndex},
             ),
-            returnValue: _FakeGenerationContext_24(
+            returnValue: _FakeGenerationContext_25(
               this,
               Invocation.method(
                 #$write,
@@ -1304,7 +1439,7 @@ class MockAppDatabase extends _i1.Mock implements _i2.AppDatabase {
               [table, insertable],
               {#startIndex: startIndex},
             ),
-            returnValue: _FakeGenerationContext_24(
+            returnValue: _FakeGenerationContext_25(
               this,
               Invocation.method(
                 #$writeInsertable,

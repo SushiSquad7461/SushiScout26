@@ -1,8 +1,63 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
-      allow read, write: if true;
+
+    // Helper: user is signed in
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Helper: user belongs to the team that owns the document
+    function isTeamMember(teamId) {
+      return isSignedIn()
+        && teamId != ''
+        && exists(/databases/$(database)/documents/teams/$(teamId)/members/$(request.auth.uid));
+    }
+
+    // Events — team members can read their team's events; authenticated users can create
+    match /events/{eventId} {
+      allow read: if isSignedIn()
+        && (resource.data.teamId == '' || isTeamMember(resource.data.teamId));
+      allow create: if isSignedIn();
+      allow update, delete: if isSignedIn()
+        && isTeamMember(resource.data.teamId);
+    }
+
+    // Matches — scoped to the team that owns them
+    match /matches/{reportId} {
+      allow read: if isSignedIn()
+        && (resource.data.teamId == '' || isTeamMember(resource.data.teamId));
+      allow create: if isSignedIn();
+      allow update, delete: if isSignedIn()
+        && (resource.data.teamId == '' || isTeamMember(resource.data.teamId));
+    }
+
+    // User profiles — users can read/write their own profile
+    match /users/{userId} {
+      allow read, write: if isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Teams — members can read; only the team doc controls membership
+    match /teams/{teamId} {
+      allow read: if isSignedIn() && isTeamMember(teamId);
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && isTeamMember(teamId);
+
+      match /members/{memberId} {
+        allow read: if isSignedIn() && isTeamMember(teamId);
+        allow write: if isSignedIn() && isTeamMember(teamId);
+      }
+    }
+
+    // Sync tracking — server-side only (Cloud Functions), deny client access
+    match /sync_tracking/{doc} {
+      allow read, write: if false;
+    }
+
+    // TBA cache — read-only for authenticated users, write by Cloud Functions
+    match /tba_cache/{doc} {
+      allow read: if isSignedIn();
+      allow write: if false;
     }
   }
 }
