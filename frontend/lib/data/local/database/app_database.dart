@@ -21,7 +21,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.connection);
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -29,9 +29,10 @@ class AppDatabase extends _$AppDatabase {
       await m.createAll();
     },
     onUpgrade: (m, from, to) async {
-      // Handle migrations here when schema changes
       if (from < 2) {
-        // Migration logic for version 2
+        // Add teamId column to LocalMatchReports and LocalEvents
+        await m.addColumn(localMatchReports, localMatchReports.teamId);
+        await m.addColumn(localEvents, localEvents.teamId);
       }
     },
   );

@@ -17,20 +17,25 @@ class AuthWrapper extends ConsumerWidget {
       case AuthStatus.initial:
       case AuthStatus.loading:
         return const _LoadingScreen();
-      
+
       case AuthStatus.unauthenticated:
+        return const LoginScreen();
+
       case AuthStatus.error:
+        // If no user session at all, show login
         if (authState.userId == null) {
           return const LoginScreen();
         }
-        if (authState.needsTeam) {
+        // If user exists but has no team, show team selection (with error)
+        if (authState.currentTeamId == null) {
           return const TeamSelectScreen();
         }
+        // User has team — show dashboard (error banner shown there)
         return const DashboardScreen();
-      
+
       case AuthStatus.needsTeamSelection:
         return const TeamSelectScreen();
-      
+
       case AuthStatus.authenticated:
         return const DashboardScreen();
     }

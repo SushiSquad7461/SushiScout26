@@ -18,6 +18,8 @@ import '../widgets/match_search_delegate.dart';
 
 import '../../data/services/export_service.dart';
 import '../../core/validation/form_validators.dart';
+import '../providers/auth_provider.dart';
+import 'dart:async';
 
 class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
@@ -264,6 +266,28 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     case 'settings':
                       _openSettings(context);
                       break;
+                    case 'sign_out':
+                      final confirmed = await showDialog<bool>(
+                        context: context,
+                        builder: (context) => AlertDialog(
+                          title: const Text('Sign Out?'),
+                          content: const Text('You will need to sign in again to access your team data.'),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.of(context).pop(false),
+                              child: const Text('Cancel'),
+                            ),
+                            FilledButton(
+                              onPressed: () => Navigator.of(context).pop(true),
+                              child: const Text('Sign Out'),
+                            ),
+                          ],
+                        ),
+                      );
+                      if (confirmed == true) {
+                        ref.read(authProvider.notifier).signOut();
+                      }
+                      break;
                     case 'clear_local':
                       final confirmed = await showDialog<bool>(
                         context: context,
@@ -338,6 +362,16 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     child: ListTile(
                       leading: Icon(Icons.delete_forever_outlined, color: Theme.of(context).colorScheme.error),
                       title: Text("Clear Local Data", style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                      contentPadding: EdgeInsets.zero,
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ),
+                  const PopupMenuDivider(),
+                  const PopupMenuItem(
+                    value: 'sign_out',
+                    child: ListTile(
+                      leading: Icon(Icons.logout),
+                      title: Text("Sign Out"),
                       contentPadding: EdgeInsets.zero,
                       visualDensity: VisualDensity.compact,
                     ),
@@ -494,49 +528,62 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       floatingActionButton: ScaleAnimation(
         child: FloatingActionButton.extended(
           onPressed: () async {
-            AppHaptics.medium();
-            final eventCode =
-                ref.read(settingsProvider)[PrefKeys.eventCode] ?? "Unknown";
-            final programType =
-                ref.read(settingsProvider)[PrefKeys.programType] ?? "FRC";
-            final event = await ref.read(hybridRepositoryProvider).getEvent(eventCode);
+            try {
+              AppHaptics.medium();
+              final eventCode =
+                  ref.read(settingsProvider)[PrefKeys.eventCode] ?? "Unknown";
+              final programType =
+                  ref.read(settingsProvider)[PrefKeys.programType] ?? "FRC";
 
-            if (!mounted) return;
+              // Timeout prevents hanging when Firestore is slow/offline
+              final event = await ref.read(hybridRepositoryProvider)
+                  .getEvent(eventCode)
+                  .timeout(const Duration(seconds: 5), onTimeout: () => null);
 
-            if (event == null) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    "Event '$eventCode' not found. Defaulting to $programType.",
+              if (!mounted) return;
+
+              if (event == null) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      "Event '$eventCode' not found. Defaulting to $programType.",
+                    ),
                   ),
-                ),
-              );
-              final dummyEvent = Event(
-                id: eventCode,
-                name: "Dummy/Offline Event",
-                programType: programType,
-                tbaKey: eventCode,
-                startDate: DateTime.now(),
-              );
+                );
+                final dummyEvent = Event(
+                  id: eventCode,
+                  name: "Dummy/Offline Event",
+                  programType: programType,
+                  tbaKey: eventCode,
+                  startDate: DateTime.now(),
+                );
+
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => ScoutingFormFactory.create(dummyEvent),
+                  ),
+                );
+                return;
+              }
+
+              // Firestore-wins: sync local preference to match event
+              if (event.programType != programType) {
+                ref.read(settingsProvider.notifier).setProgramType(event.programType);
+              }
 
               Navigator.of(context).push(
                 MaterialPageRoute(
-                  builder: (context) => ScoutingFormFactory.create(dummyEvent),
+                  builder: (context) => ScoutingFormFactory.create(event),
                 ),
               );
-              return;
+            } catch (e, stackTrace) {
+              debugPrint('Scout Match error: $e\n$stackTrace');
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text("Failed to open scouting form: $e")),
+                );
+              }
             }
-
-            // Firestore-wins: sync local preference to match event
-            if (event.programType != programType) {
-              ref.read(settingsProvider.notifier).setProgramType(event.programType);
-            }
-
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (context) => ScoutingFormFactory.create(event),
-              ),
-            );
           },
           icon: const Icon(Icons.add_rounded),
           label: const Text("Scout Match"),

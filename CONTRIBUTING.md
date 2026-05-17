@@ -1,73 +1,110 @@
 # Contributing to SushiScout 26
 
+## Getting Started
+
+### Prerequisites
+
+- [Flutter SDK](https://docs.flutter.dev/get-started/install) (3.10+)
+- [Python 3.11+](https://www.python.org/downloads/)
+- [Firebase CLI](https://firebase.google.com/docs/cli)
+- [Git](https://git-scm.com/)
+
+### Setup
+
+```bash
+# Clone the repo
+git clone https://github.com/SushiSquad7461/SushiScout26.git
+cd SushiScout26
+
+# Frontend
+cd frontend
+flutter pub get
+dart run build_runner build --delete-conflicting-outputs  # Generate Drift/Riverpod code
+
+# Cloud Functions
+cd ../functions
+python -m venv venv
+source venv/Scripts/activate   # Windows
+# source venv/bin/activate     # macOS/Linux
+pip install -r requirements.txt
+```
+
+## Development Workflow
+
+1. Create a feature branch from `master`
+2. Make your changes with clear, atomic commits
+3. Run tests and `flutter analyze`
+4. Submit a PR against `master`
+
+## Running the App
+
+```bash
+cd frontend
+flutter run -d windows --hot    # Windows
+flutter run -d macos --hot      # macOS
+flutter run -d chrome            # Web
+flutter run                      # Connected mobile device
+```
+
+## Testing
+
+### Frontend (Flutter)
+
+```bash
+cd frontend
+flutter test                                          # All tests
+flutter test test/widgets/counter_card_test.dart       # Single test file
+flutter test --coverage                                # With coverage
+flutter analyze                                        # Static analysis
+```
+
+### Cloud Functions (Python)
+
+```bash
+cd functions
+source venv/Scripts/activate    # Activate venv first
+python -m pytest tests/ -v      # Run tests
+```
+
+## Code Generation
+
+Drift (SQLite) and Riverpod use code generation. After modifying table definitions or annotated providers:
+
+```bash
+cd frontend
+dart run build_runner build --delete-conflicting-outputs
+```
+
+**Never hand-edit** `*.g.dart` or `*.mocks.dart` files — they are regenerated automatically.
+
 ## Commit Message Convention
 
-We follow the [Conventional Commits](https://www.conventionalcommits.org/) specification.
+We follow [Conventional Commits](https://www.conventionalcommits.org/).
 
 ### Format
 
 ```
 <type>(<scope>): <subject>
-
-<body>
-
-<footer>
 ```
 
 ### Types
 
-- **feat**: New feature
-- **fix**: Bug fix  
-- **docs**: Documentation changes
-- **style**: Code style (formatting, missing semi-colons, etc)
-- **refactor**: Code refactoring without changing functionality
-- **perf**: Performance improvements
-- **test**: Adding or updating tests
-- **chore**: Build process or auxiliary tool changes
-- **ci**: CI/CD changes
-- **revert**: Revert previous commit
+| Type | Description |
+|------|-------------|
+| `feat` | New feature |
+| `fix` | Bug fix |
+| `docs` | Documentation changes |
+| `style` | Code style (formatting, no logic changes) |
+| `refactor` | Code refactoring without changing functionality |
+| `perf` | Performance improvements |
+| `test` | Adding or updating tests |
+| `chore` | Build process or auxiliary tool changes |
+| `ci` | CI/CD changes |
+| `revert` | Revert previous commit |
 
 ### Scopes
 
-- **frontend**: Flutter application changes
-- **backend**: FastAPI/Python changes
-- **db**: Database schema or queries
-- **api**: API endpoint changes
-- **ui**: UI components and screens
-- **theme**: Theme, colors, and styling
-- **sync**: Data synchronization logic
-- **test**: Test infrastructure
-- **config**: Configuration files
-- **deps**: Dependency updates
-
-### Examples
-
-```
-feat(frontend): add offline sync queue
-
-Implement local SQLite database with Drift to store
-matches when offline. Sync queue processes pending
-changes when connectivity is restored.
-
-Closes #42
-```
-
-```
-fix(backend): resolve race condition in sheets sync
-
-Add proper locking to prevent concurrent updates
-to Google Sheets from multiple scouters.
-```
-
-```
-test(frontend): add widget tests for counter card
-
-Add comprehensive widget tests covering:
-- Initial value display
-- Increment/decrement functionality
-- Long press to clear
-- Boundary conditions
-```
+`frontend`, `backend`, `db`, `api`, `ui`, `theme`, `sync`, `test`, `config`, `deps`, `auth`
 
 ### Subject Rules
 
@@ -76,90 +113,91 @@ Add comprehensive widget tests covering:
 3. No period at the end
 4. Maximum 50 characters
 
-### Body Rules
+### Examples
 
-1. Use imperative mood
-2. Wrap at 72 characters
-3. Explain WHAT and WHY, not HOW
-4. Separate from subject with blank line
-
-### Footer Rules
-
-1. Reference issues: `Closes #123`, `Fixes #456`
-2. Breaking changes: `BREAKING CHANGE: description`
-3. Co-authors: `Co-authored-by: Name <email>`
+```
+feat(frontend): add offline sync queue
+fix(backend): resolve race condition in sheets sync
+test(frontend): add widget tests for counter card
+fix(auth): add team ownership check to security rules
+```
 
 ## Branch Naming
 
-- `feat/description` - New features
-- `fix/description` - Bug fixes
-- `docs/description` - Documentation
-- `refactor/description` - Refactoring
-- `test/description` - Tests
-- `chore/description` - Maintenance
-
-## Development Workflow
-
-1. Create a feature branch from `master`
-2. Make your changes with clear, atomic commits
-3. Ensure tests pass
-4. Update documentation if needed
-5. Submit PR (when we have a remote)
-
-## Testing
-
-### Frontend (Flutter)
-
-```bash
-cd frontend
-flutter test
-flutter test integration_test/
-```
-
-### Backend (Python)
-
-```bash
-cd backend
-pytest
-pytest --cov=app tests/
-```
+- `feature/<description>` — New features
+- `fix/<description>` — Bug fixes
+- `docs/<description>` — Documentation
+- `refactor/<description>` — Refactoring
+- `test/<description>` — Tests
+- `chore/<description>` — Maintenance
 
 ## Code Style
 
-### Flutter
+### Flutter/Dart
 
 - Follow [Effective Dart](https://dart.dev/guides/language/effective-dart)
-- Use `flutter format` before committing
+- Run `dart format .` before committing
 - Run `flutter analyze` to check for issues
+- Use Riverpod for state management (not setState for shared state)
 
 ### Python
 
 - Follow [PEP 8](https://pep8.org/)
-- Use Black formatter: `black app/ tests/`
-- Use isort for imports: `isort app/ tests/`
+- Use type hints for function signatures
+- Keep Cloud Functions focused — one responsibility per function
 
 ## Project Structure
 
 ```
 sushiscout26/
-├── frontend/          # Flutter application
+├── frontend/                # Flutter application
 │   ├── lib/
-│   │   ├── core/      # Errors, results, utilities
-│   │   ├── data/      # Repositories, models, local DB
-│   │   ├── presentation/  # UI layer
+│   │   ├── core/            # Auth, errors, results, utilities
+│   │   ├── data/
+│   │   │   ├── local/       # Drift DB, sync manager, preferences
+│   │   │   ├── models/      # Event, MatchReport, Team, UserProfile
+│   │   │   ├── repositories/ # Hybrid, Firestore, Auth, Team repos
+│   │   │   └── services/    # Schedule service
+│   │   ├── presentation/
+│   │   │   ├── providers/   # Riverpod providers (auth, settings)
+│   │   │   ├── screens/     # Dashboard, auth, scouting forms
+│   │   │   ├── widgets/     # Reusable components
+│   │   │   ├── factories/   # Form factory (FRC vs FTC)
+│   │   │   └── theme/       # App theme
 │   │   └── main.dart
 │   └── test/
-├── backend/           # FastAPI application
-│   ├── app/
-│   │   ├── core/      # Exceptions, config
-│   │   ├── models/    # SQLAlchemy models
-│   │   ├── schemas/   # Pydantic schemas
-│   │   ├── routers/   # API endpoints
-│   │   └── services/  # Business logic
+├── functions/               # Firebase Cloud Functions (Python)
+│   ├── main.py              # Firestore triggers, callable functions
+│   ├── tba_sync.py          # FRC schedule fetching (TBA API)
+│   ├── ftc_api.py           # FTC schedule fetching (FIRST Events API)
+│   ├── services/
+│   │   ├── sheets_service.py  # Google Sheets API wrapper
+│   │   └── sync_tracker.py    # Firestore↔Sheets row mapping
 │   └── tests/
-└── functions/         # Firebase Cloud Functions
+├── firestore.rules          # Firestore security rules
+├── firestore.indexes.json   # Composite index definitions
+├── CLAUDE.md                # AI assistant context
+└── CONTRIBUTING.md           # This file
 ```
+
+## Firebase
+
+### Deploying
+
+```bash
+firebase deploy --only functions          # Cloud Functions
+firebase deploy --only firestore:rules    # Security rules
+firebase deploy --only firestore:indexes  # Composite indexes
+```
+
+### Environment Secrets
+
+Cloud Functions use these secrets (configured via Firebase):
+- `GOOGLE_SHEETS_CREDENTIALS` — Service account for Sheets API
+- `MASTER_SPREADSHEET_ID` — Target spreadsheet
+- `SYNC_API_KEY` — HTTP endpoint authentication
+- `TBA_API_KEY` — The Blue Alliance API key
 
 ## Questions?
 
-Open an issue for discussion before major changes.
+Open an issue for discussion before making major changes.

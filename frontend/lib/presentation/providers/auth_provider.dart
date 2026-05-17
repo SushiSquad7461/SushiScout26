@@ -12,10 +12,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 final authServiceProvider = Provider<AuthService>((ref) {
   GoogleSignIn? googleSignIn;
   
-  if (defaultTargetPlatform == TargetPlatform.windows ||
-      defaultTargetPlatform == TargetPlatform.linux) {
-    googleSignIn = null;
-  } else if (kIsWeb) {
+  if (kIsWeb) {
+    // Web must be checked first — on a Windows machine, defaultTargetPlatform
+    // is TargetPlatform.windows even when running in Chrome.
     googleSignIn = GoogleSignIn(
       clientId: '80003441956-f6ses5oufoeiatcvvrmrn3malkmts4be.apps.googleusercontent.com',
       scopes: [
@@ -23,6 +22,9 @@ final authServiceProvider = Provider<AuthService>((ref) {
         'https://www.googleapis.com/auth/userinfo.profile',
       ],
     );
+  } else if (defaultTargetPlatform == TargetPlatform.windows ||
+      defaultTargetPlatform == TargetPlatform.linux) {
+    googleSignIn = null;
   } else {
     googleSignIn = GoogleSignIn(
       scopes: [

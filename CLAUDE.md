@@ -8,7 +8,7 @@ SushiScout 26 is an FRC/FTC robotics scouting app. Scouts use the Flutter app to
 
 ## Architecture
 
-**Frontend** (`frontend/`): Flutter app using Riverpod for state management. Targets Windows, macOS, Linux, Android, iOS (no web).
+**Frontend** (`frontend/`): Flutter app using Riverpod for state management. Targets Windows, macOS, Linux, Android, iOS, and web. Firebase Auth for team-scoped access.
 
 **Backend** (`functions/`): Python 3.11 Firebase Cloud Functions. Syncs Firestore match data bidirectionally with Google Sheets.
 
@@ -29,6 +29,14 @@ SushiScout 26 is an FRC/FTC robotics scouting app. Scouts use the Flutter app to
 - `matches` — top-level collection of match reports with eventId field (recently refactored from subcollection)
 - `sync_tracking` — maps report IDs to Google Sheets row numbers for sync idempotency
 - `tba_cache` — cached Blue Alliance API responses (24h TTL)
+
+### Auth & Team Isolation
+
+- Firebase Auth with Google Sign-In (mobile/web) and email/password (desktop)
+- Team membership stored in `teams/{teamId}/members/{userId}` subcollection — Firestore rules check this
+- `activeTeamIdProvider` → `currentTeamIdProvider` → `FirestoreRepository(teamId:)` — all queries filter by team
+- `createTeam`/`joinTeam`/`leaveTeam` must always write/delete the `members` subcollection doc
+- `switchTeam` must persist `currentTeamId` to Firestore user doc (not just local state)
 
 ### Cloud Functions
 
@@ -79,10 +87,20 @@ Subject: imperative mood, no capitalization, no trailing period, max 50 chars.
 
 ## Key Technical Details
 
-- Drift database requires code generation — run `dart run build_runner build` after changing `tables.dart` or `app_database.dart`
+- Drift database requires code generation — run `dart run build_runner build --delete-conflicting-outputs` after changing `tables.dart` or `app_database.dart`
 - Firebase secrets used: `GOOGLE_SHEETS_CREDENTIALS`, `MASTER_SPREADSHEET_ID`, `SYNC_API_KEY`, `TBA_API_KEY`
 - Firestore persistence is enabled with unlimited cache for offline-first reliability
 - The `gameData` field on MatchReport is a flexible `Map<String, dynamic>` that varies by program type (FRC vs FTC)
 - Drift SQLite has 4 tables: LocalMatchReports, LocalEvents, SyncQueue, SyncConflicts
 - SyncManager runs periodic sync every 5 minutes with exponential backoff retry (max 5 attempts)
 - `core/result/result.dart` provides a sealed `Result<T, E>` type used throughout data layer
+- After merging branches, check for duplicate dependencies in `pubspec.yaml` and leftover conflict markers (`>>>>>>>`)
+- Generated files (`*.g.dart`, `*.mocks.dart`) must never be hand-edited — run codegen or mockito instead
+- Riverpod providers that need to react to state changes must use `overrideWith((ref) =>)`, not `overrideWithValue()`
+- Firestore composite queries (teamId + eventId + isDeleted + createdAt) may require composite indexes — deploy with `firebase deploy --only firestore:indexes`
+
+## Known Test Issues
+
+- `scripts_test.dart` (3 failures) — missing `scripts/` directory, pre-existing
+- `web_removal_test.dart` (12 failures) — uses relative paths that don't resolve from `frontend/`
+- `login_screen_test.dart` (1 failure) — platform detection: test runs on Windows (desktop) but expects mobile
