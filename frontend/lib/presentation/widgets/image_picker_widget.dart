@@ -41,6 +41,9 @@ class _ImagePickerWidgetState extends State<ImagePickerWidget> {
       
       await photo.saveTo(path);
 
+      // Guard against the widget being unmounted while the image was being
+      // picked/saved — setState after dispose throws.
+      if (!mounted) return;
       setState(() {
         _images.add(path);
       });
