@@ -182,7 +182,8 @@ class AuthNotifier extends Notifier<AuthState> {
       await authRepo.signOut();
       state = const AuthState(status: AuthStatus.unauthenticated);
     } catch (e) {
-      state = AuthState(
+      // Preserve identity — the user is still signed in if signOut threw.
+      state = state.copyWith(
         status: AuthStatus.error,
         errorMessage: 'Sign out failed: ${e.toString()}',
       );
@@ -272,13 +273,14 @@ class AuthNotifier extends Notifier<AuthState> {
     try {
       final userId = state.userId;
       if (userId == null) return;
-      
+
       final teamRepo = ref.read(teamRepositoryProvider);
       await teamRepo.leaveTeam(teamId: teamId, userId: userId);
-      
+
       await _loadUserProfile();
     } catch (e) {
-      state = AuthState(
+      // Preserve identity — leave failed so the user is still in their teams.
+      state = state.copyWith(
         status: AuthStatus.error,
         errorMessage: e.toString(),
       );
@@ -302,7 +304,9 @@ class AuthNotifier extends Notifier<AuthState> {
         isMasterTeamMember: team?.isMasterTeam ?? false,
       );
     } catch (e) {
-      state = AuthState(
+      // Preserve identity — switch failed so the user is still on the
+      // previous team.
+      state = state.copyWith(
         status: AuthStatus.error,
         errorMessage: e.toString(),
       );
