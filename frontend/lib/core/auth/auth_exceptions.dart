@@ -33,7 +33,7 @@ class AuthExceptionCannotLeaveTeam extends AuthException {
 }
 
 class AuthExceptionNetworkError extends AuthException {
-  const AuthExceptionNetworkError([String message = 'Network error']) : super(message);
+  const AuthExceptionNetworkError([super.message = 'Network error']);
 }
 
 class AuthExceptionWeakPassword extends AuthException {

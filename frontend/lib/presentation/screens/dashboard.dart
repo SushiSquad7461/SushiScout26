@@ -59,7 +59,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         ref.read(settingsProvider)[PrefKeys.eventCode] ?? "Unknown";
     final matches = await ref.read(hybridRepositoryProvider).getMatches(eventCode);
 
-    if (!mounted) return;
+    if (!context.mounted) return;
 
     if (matches.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -109,7 +109,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         ref.read(settingsProvider)[PrefKeys.eventCode] ?? "Unknown";
     final matches = await ref.read(hybridRepositoryProvider).getMatches(eventCode);
 
-    if (!mounted) return;
+    if (!context.mounted) return;
 
     if (matches.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -134,7 +134,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     try {
       await _shareFile(csvContent);
     } catch (e) {
-      if (mounted) {
+      if (context.mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text("Export failed: $e")));
@@ -540,7 +540,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   .getEvent(eventCode)
                   .timeout(const Duration(seconds: 5), onTimeout: () => null);
 
-              if (!mounted) return;
+              if (!context.mounted) return;
 
               if (event == null) {
                 ScaffoldMessenger.of(context).showSnackBar(
@@ -578,7 +578,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               );
             } catch (e, stackTrace) {
               debugPrint('Scout Match error: $e\n$stackTrace');
-              if (mounted) {
+              if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(content: Text("Failed to open scouting form: $e")),
                 );

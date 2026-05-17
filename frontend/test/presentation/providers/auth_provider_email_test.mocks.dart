@@ -195,4 +195,13 @@ class MockAuthRepository extends _i1.Mock implements _i6.AuthRepository {
             returnValueForMissingStub: _i5.Future<_i3.UserProfile?>.value(),
           )
           as _i5.Future<_i3.UserProfile?>);
+
+  @override
+  _i5.Future<void> updateCurrentTeamId(String? teamId) =>
+      (super.noSuchMethod(
+            Invocation.method(#updateCurrentTeamId, [teamId]),
+            returnValue: _i5.Future<void>.value(),
+            returnValueForMissingStub: _i5.Future<void>.value(),
+          )
+          as _i5.Future<void>);
 }

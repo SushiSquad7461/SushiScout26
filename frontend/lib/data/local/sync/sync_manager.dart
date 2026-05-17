@@ -66,7 +66,7 @@ final isOnlineProvider = Provider<bool>((ref) {
 /// - Conflict detection and resolution
 /// - Sync queue management
 class SyncManager {
-  AppDatabase? _db;
+  final AppDatabase? _db;
   final FirestoreRepository _firestore;
   final Logger _logger = const Logger('SYNC');
   
@@ -90,7 +90,7 @@ class SyncManager {
     if (_db == null) {
       throw StateError('Local database not available on this platform');
     }
-    return _db!;
+    return _db;
   }
   
   SyncManager(this._db, this._firestore);

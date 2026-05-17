@@ -46,7 +46,7 @@ class HybridRepository implements ScoutingRepository {
     if (_db == null) {
       throw StateError('Local database not available on this platform');
     }
-    return _db!;
+    return _db;
   }
   
   HybridRepository(this._db, this._firestore, this._syncManager);

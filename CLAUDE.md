@@ -99,8 +99,8 @@ Subject: imperative mood, no capitalization, no trailing period, max 50 chars.
 - Riverpod providers that need to react to state changes must use `overrideWith((ref) =>)`, not `overrideWithValue()`
 - Firestore composite queries (teamId + eventId + isDeleted + createdAt) may require composite indexes — deploy with `firebase deploy --only firestore:indexes`
 
-## Known Test Issues
+## Testing
 
-- `scripts_test.dart` (3 failures) — missing `scripts/` directory, pre-existing
-- `web_removal_test.dart` (12 failures) — uses relative paths that don't resolve from `frontend/`
-- `login_screen_test.dart` (1 failure) — platform detection: test runs on Windows (desktop) but expects mobile
+- Run `flutter test` from `frontend/` for the full Dart suite (currently 139 tests).
+- Run `python -m pytest tests/` from `functions/` for the Python suite (currently 24 tests).
+- Generated files (`*.g.dart`, `*.mocks.dart`, `*.freezed.dart`) are excluded from `flutter analyze` via `analysis_options.yaml`.

@@ -29,7 +29,7 @@ class AuthService {
     }
     
     try {
-      final GoogleSignInAccount? googleUser = await _googleSignIn!.signIn();
+      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
 
       if (googleUser == null) {
         throw const AuthException('Sign in cancelled');

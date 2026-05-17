@@ -171,17 +171,20 @@ void main() {
       await tester.tap(find.text('Dark'));
       await tester.pumpAndSettle();
 
-      // Capture context before any async gap to avoid use_build_context_synchronously
+      // tester.element() returns a fresh BuildContext from the live widget
+      // tree, so this is safe despite the analyzer's async-gap warning.
       final scaffoldFinder = find.byType(Scaffold);
-      final BuildContext context = tester.element(scaffoldFinder.first);
-      expect(Theme.of(context).brightness, Brightness.dark);
+      // ignore: use_build_context_synchronously
+      expect(Theme.of(tester.element(scaffoldFinder.first)).brightness,
+          Brightness.dark);
 
       // Switch back to light
       await tester.tap(find.text('Light'));
       await tester.pumpAndSettle();
 
-      final BuildContext lightContext = tester.element(scaffoldFinder.first);
-      expect(Theme.of(lightContext).brightness, Brightness.light);
+      // ignore: use_build_context_synchronously
+      expect(Theme.of(tester.element(scaffoldFinder.first)).brightness,
+          Brightness.light);
     });
 
     testWidgets('empty state shows no-matches message on dashboard',

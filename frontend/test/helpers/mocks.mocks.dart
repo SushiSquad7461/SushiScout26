@@ -365,6 +365,16 @@ class MockFirestoreRepository extends _i1.Mock
           as _i6.Future<List<_i8.MatchReport>>);
 
   @override
+  _i6.Future<List<_i8.MatchReport>> getDeletedMatches(String? eventId) =>
+      (super.noSuchMethod(
+            Invocation.method(#getDeletedMatches, [eventId]),
+            returnValue: _i6.Future<List<_i8.MatchReport>>.value(
+              <_i8.MatchReport>[],
+            ),
+          )
+          as _i6.Future<List<_i8.MatchReport>>);
+
+  @override
   _i6.Future<void> createMatch(
     String? eventId,
     _i8.MatchReport? match, {
