@@ -79,6 +79,7 @@ class SyncManager {
   Timer? _syncTimer;
   StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
   bool _isSyncing = false;
+  bool _initialized = false;
   final _syncController = StreamController<SyncStatus>.broadcast();
   final _pendingCountController = StreamController<int>.broadcast();
   
@@ -96,12 +97,18 @@ class SyncManager {
   
   SyncManager(this._db, this._firestore);
 
-  /// Initialize sync manager
+  /// Initialize sync manager. Safe to call multiple times — only the first
+  /// call sets up the periodic Timer and connectivity subscription.
   void initialize() {
+    if (_initialized) {
+      _logger.d('SyncManager already initialized, skipping');
+      return;
+    }
     _logger.i('Initializing sync manager');
-    
+
     if (_db == null) {
       _logger.i('Local DB not available, sync manager will use Firebase only');
+      _initialized = true;
       return;
     }
 
@@ -136,6 +143,8 @@ class SyncManager {
         syncPendingChanges();
       }
     });
+
+    _initialized = true;
   }
 
   /// Queue existing unsynced matches from local DB that aren't in sync queue
@@ -216,6 +225,7 @@ class SyncManager {
     _connectivitySub?.cancel();
     _syncController.close();
     _pendingCountController.close();
+    _initialized = false;
   }
 
   /// Update the pending count stream
