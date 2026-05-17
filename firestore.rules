@@ -69,5 +69,11 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow write: if false;
     }
+
+    // FTC cache — read-only for authenticated users, write by Cloud Functions
+    match /ftc_cache/{doc} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
   }
 }
