@@ -101,6 +101,6 @@ Subject: imperative mood, no capitalization, no trailing period, max 50 chars.
 
 ## Testing
 
-- Run `flutter test` from `frontend/` for the full Dart suite (currently 139 tests).
+- Run `flutter test` from `frontend/` for the full Dart suite (currently 284 tests).
 - Run `python -m pytest tests/` from `functions/` for the Python suite (currently 24 tests).
 - Generated files (`*.g.dart`, `*.mocks.dart`, `*.freezed.dart`) are excluded from `flutter analyze` via `analysis_options.yaml`.
