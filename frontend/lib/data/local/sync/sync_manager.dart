@@ -13,11 +13,16 @@ import '../../repositories/firestore_repository.dart';
 
 final _logger = Logger('SyncManager');
 
-/// Provider for sync manager
+/// Provider for sync manager. When firestoreRepositoryProvider rebuilds
+/// (e.g., on team switch), Riverpod tears down the old SyncManager — we
+/// register an onDispose so its Timer and connectivity subscription are
+/// cancelled instead of leaking.
 final syncManagerProvider = Provider<SyncManager>((ref) {
   final db = ref.watch(appDatabaseProvider);
   final firestore = ref.watch(firestoreRepositoryProvider);
-  return SyncManager(db, firestore);
+  final manager = SyncManager(db, firestore);
+  ref.onDispose(manager.dispose);
+  return manager;
 });
 
 /// Provider for app database - returns null on web where local DB is not supported

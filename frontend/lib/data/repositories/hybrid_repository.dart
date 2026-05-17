@@ -12,12 +12,16 @@ import '../repositories/firestore_repository.dart';
 import '../local/database/app_database.dart';
 import '../local/sync/sync_manager.dart';
 
-/// Provider for the hybrid repository
+/// Provider for the hybrid repository. When a dependency rebuilds (e.g.,
+/// team switch), Riverpod tears down the old instance — register dispose()
+/// so its stream controllers and Firestore subscriptions are cleaned up.
 final hybridRepositoryProvider = Provider<HybridRepository>((ref) {
   final db = ref.watch(appDatabaseProvider);
   final firestore = ref.watch(firestoreRepositoryProvider);
   final syncManager = ref.watch(syncManagerProvider);
-  return HybridRepository(db, firestore, syncManager);
+  final repo = HybridRepository(db, firestore, syncManager);
+  ref.onDispose(repo.dispose);
+  return repo;
 });
 
 /// A hybrid repository that combines local SQLite and Firestore
