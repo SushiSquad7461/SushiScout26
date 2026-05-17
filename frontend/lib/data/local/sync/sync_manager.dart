@@ -479,8 +479,10 @@ class SyncManager {
         'operationId': op.id,
       });
       
-      // Mark local entity as synced
-      if (op.entityType == 'match') {
+      // Mark local entity as synced. Skip for hard delete — the local row
+      // was already permanently removed by HybridRepository.deleteMatch before
+      // queuing this op, so the update is a no-op that just wastes a query.
+      if (op.entityType == 'match' && op.operation != 'delete') {
         await db.markMatchSynced(op.entityId);
         _logger.d('Local match marked as synced', data: {
           'matchId': op.entityId,
