@@ -285,7 +285,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         ),
                       );
                       if (confirmed == true) {
-                        ref.read(authProvider.notifier).signOut();
+                        await ref.read(authProvider.notifier).signOut();
                       }
                       break;
                     case 'clear_local':
