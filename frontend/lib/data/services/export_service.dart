@@ -84,28 +84,43 @@ class ExportService {
   // CSV
   // ---------------------------------------------------------------------------
 
+  /// Detects whether a match was scouted for FTC based on game data keys.
+  /// Exposed for tests.
+  static bool isFtc(MatchReport m) => _isFtc(m);
+
+  /// Returns the column headers used for the given program type.
+  /// Exposed for tests.
+  static List<String> headers({required bool ftc}) => _headers(ftc);
+
+  /// Builds the full CSV string for the given matches (pure, no IO).
+  ///
+  /// Throws [ArgumentError] if [matches] is empty.
+  static String buildCsvString(List<MatchReport> matches) {
+    if (matches.isEmpty) {
+      throw ArgumentError('Cannot export an empty match list to CSV.');
+    }
+    final ftc = _isFtc(matches.first);
+    final headers = _headers(ftc);
+
+    final buffer = StringBuffer();
+    buffer.writeln(headers.map(_escapeCsvField).join(','));
+    for (final m in matches) {
+      buffer.writeln(_rowStrings(m, ftc).map(_escapeCsvField).join(','));
+    }
+    return buffer.toString();
+  }
+
   /// Exports match reports to a CSV file and opens the share dialog.
   ///
   /// Throws [ArgumentError] if [matches] is empty.
   /// Throws [Exception] on file-system or sharing errors.
   static Future<void> exportToCsv(List<MatchReport> matches) async {
-    if (matches.isEmpty) {
-      throw ArgumentError('Cannot export an empty match list to CSV.');
-    }
-
     try {
-      final ftc = _isFtc(matches.first);
-      final headers = _headers(ftc);
-
-      final buffer = StringBuffer();
-      buffer.writeln(headers.map(_escapeCsvField).join(','));
-      for (final m in matches) {
-        buffer.writeln(_rowStrings(m, ftc).map(_escapeCsvField).join(','));
-      }
+      final content = buildCsvString(matches);
 
       final directory = await getTemporaryDirectory();
       final file = File('${directory.path}/sushiscout_export.csv');
-      await file.writeAsString(buffer.toString());
+      await file.writeAsString(content);
 
       await SharePlus.instance
           .share(ShareParams(files: [XFile(file.path)]));
