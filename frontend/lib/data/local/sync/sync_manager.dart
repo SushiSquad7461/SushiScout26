@@ -25,13 +25,16 @@ final syncManagerProvider = Provider<SyncManager>((ref) {
   return manager;
 });
 
-/// Provider for app database - returns null on web where local DB is not supported
+/// Provider for app database - returns null on web where local DB is not supported.
+/// Closes the SQLite connection on provider dispose (hot reload / app teardown).
 final appDatabaseProvider = Provider<AppDatabase?>((ref) {
   if (kIsWeb) {
     _logger.i('Local database not supported on web, using Firebase only');
     return null;
   }
-  return AppDatabase();
+  final db = AppDatabase();
+  ref.onDispose(db.close);
+  return db;
 });
 
 /// Provider for whether local database is available
