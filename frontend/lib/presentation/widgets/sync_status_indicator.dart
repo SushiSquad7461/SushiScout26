@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,16 +9,22 @@ import '../../data/local/sync/sync_manager.dart' as manager;
 final syncStatusProvider = NotifierProvider<SyncStatusNotifier, SyncStatus>(SyncStatusNotifier.new);
 
 class SyncStatusNotifier extends Notifier<SyncStatus> {
+  StreamSubscription<manager.SyncStatus>? _sub;
+
   @override
   SyncStatus build() {
     // On web, Firebase handles sync automatically - always idle/success
     if (kIsWeb) {
       return const SyncStatus.success();
     }
-    
-    // Listen to SyncManager stream and update state
+
+    // Listen to SyncManager stream and update state. Capture the
+    // subscription so it doesn't outlive the provider — without this,
+    // rebuilds piled on listeners and a disposed notifier kept getting
+    // state= writes through the old closure.
     final syncManager = ref.watch(manager.syncManagerProvider);
-    syncManager.syncStream.listen((status) {
+    _sub?.cancel();
+    _sub = syncManager.syncStream.listen((status) {
       if (status is manager.SyncInProgress) {
         state = const SyncStatus.syncing();
       } else if (status is manager.SyncCompleted) {
@@ -26,6 +33,12 @@ class SyncStatusNotifier extends Notifier<SyncStatus> {
         state = SyncStatus.error(status.error.message);
       }
     });
+
+    ref.onDispose(() {
+      _sub?.cancel();
+      _sub = null;
+    });
+
     return const SyncStatus.idle();
   }
 
