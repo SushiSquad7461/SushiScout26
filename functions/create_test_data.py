@@ -1,32 +1,50 @@
-"""Script to clear sync tracking and create fresh test data."""
+"""Script to clear sync tracking and create fresh test data.
+
+Writes to the top-level `matches` collection (with eventId field), which is
+what the app reads from after the subcollection→top-level refactor.
+
+Credentials path is read from the GOOGLE_APPLICATION_CREDENTIALS env var
+when set; otherwise falls back to the default ADC location.
+"""
+
+import datetime
+import os
 
 import firebase_admin
 from firebase_admin import credentials, firestore
-import datetime
 
-# Use service account credentials
-cred = credentials.Certificate("C:/Users/Originalhawk/Downloads/sushiscout26-a8f5d-4b3d92bb5946.json")
-firebase_admin.initialize_app(cred)
+EVENT_ID = "2026TEST"
+
+cred_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+if cred_path:
+    firebase_admin.initialize_app(credentials.Certificate(cred_path))
+else:
+    # Application Default Credentials (e.g., from `gcloud auth
+    # application-default login`).
+    firebase_admin.initialize_app()
 
 db = firestore.client()
 
-# Clear sync tracking for 2026TEST
-print("Clearing sync tracking for 2026TEST...")
+# Clear sync tracking for EVENT_ID
+print(f"Clearing sync tracking for {EVENT_ID}...")
 sync_ref = db.collection("sync_tracking")
 docs = sync_ref.stream()
 count = 0
 for doc in docs:
-    if "2026TEST" in doc.id:
+    if EVENT_ID in doc.id:
         doc.reference.delete()
         count += 1
 print(f"Deleted {count} sync records")
 
-# Delete old matches
-print("\nDeleting old matches from 2026TEST...")
-old_matches = db.collection("events").document("2026TEST").collection("matches").stream()
-for doc in old_matches:
+# Delete existing top-level matches for this event
+print(f"\nDeleting existing matches for event {EVENT_ID}...")
+existing = db.collection("matches").where("eventId", "==", EVENT_ID).stream()
+deleted = 0
+for doc in existing:
     doc.reference.delete()
+    deleted += 1
     print(f"Deleted: {doc.id}")
+print(f"Deleted {deleted} match documents")
 
 # Test match data with all scouting wizard fields
 matches = [
@@ -132,12 +150,18 @@ matches = [
     }
 ]
 
-# Create new documents
+# Create new documents in the top-level matches collection with eventId field
 print("\nCreating new match reports...")
 for match in matches:
-    doc_ref = db.collection("events").document("2026TEST").collection("matches").document(match["id"])
+    doc_ref = db.collection("matches").document(match["id"])
     match_data = {k: v for k, v in match.items() if k != "id"}
+    # Required fields for the app's _matchesQuery and Firestore rules.
+    match_data["eventId"] = EVENT_ID
+    match_data["isDeleted"] = False
+    match_data["isSynced"] = True
+    match_data.setdefault("teamId", "")
+    match_data.setdefault("programType", "FRC")
     doc_ref.set(match_data)
     print(f"Created: {match['id']} - Team {match['teamNumber']} - {match['alliance']}")
 
-print(f"\nDone! Created {len(matches)} match reports in event 2026TEST")
+print(f"\nDone! Created {len(matches)} match reports in event {EVENT_ID}")
