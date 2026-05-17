@@ -77,6 +77,7 @@ class SyncManager {
   );
   
   Timer? _syncTimer;
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
   bool _isSyncing = false;
   final _syncController = StreamController<SyncStatus>.broadcast();
   final _pendingCountController = StreamController<int>.broadcast();
@@ -107,7 +108,7 @@ class SyncManager {
     // Reset retry counts for stuck operations on startup
     db.getPendingSyncOperations().then((ops) {
       for (final op in ops) {
-        if (op.retryCount >= 5) {
+        if (op.retryCount >= _retryConfig.maxAttempts) {
           db.updateSyncOperationRetry(op.id, retryCount: 0, errorMessage: 'Resetting stuck operation');
         }
       }
@@ -125,8 +126,10 @@ class SyncManager {
       (_) => syncPendingChanges(),
     );
 
-    // Listen to connectivity changes
-    Connectivity().onConnectivityChanged.listen((results) {
+    // Listen to connectivity changes — store subscription so dispose() can
+    // cancel it. Without this, the closure keeps the disposed SyncManager
+    // alive and may write to closed StreamControllers.
+    _connectivitySub = Connectivity().onConnectivityChanged.listen((results) {
       final result = results.first;
       if (result != ConnectivityResult.none) {
         _logger.i('Connectivity restored, triggering sync');
@@ -210,6 +213,7 @@ class SyncManager {
   /// Dispose sync manager
   void dispose() {
     _syncTimer?.cancel();
+    _connectivitySub?.cancel();
     _syncController.close();
     _pendingCountController.close();
   }
@@ -331,80 +335,80 @@ class SyncManager {
 
     _isSyncing = true;
     _syncController.add(const SyncStatus.inProgress());
-    
-    final pendingOps = await db.getPendingSyncOperations();
-    
-    if (pendingOps.isEmpty) {
-      _logger.i('No pending sync operations');
-      _isSyncing = false;
-      _syncController.add(const SyncStatus.completed(success: 0, failed: 0));
-      return const SyncResult.success(count: 0);
-    }
 
-    _logger.i('Starting sync', data: {'pendingCount': pendingOps.length});
-    
     int successCount = 0;
     int failCount = 0;
     final errors = <AppError>[];
 
-    for (final op in pendingOps) {
-      debugPrint('Processing sync op: ${op.operation} for ${op.entityId} (Event: ${op.eventId})');
-      try {
-        await _processSyncOperation(op);
-        successCount++;
-      } on AppError catch (e) {
-        _logger.w('Sync operation failed', error: e, data: {
-          'operationId': op.id,
-          'entityId': op.entityId,
-        });
-        
-        failCount++;
-        errors.add(e);
-        
-        // Update retry count
-        await db.updateSyncOperationRetry(
-          op.id,
-          retryCount: op.retryCount + 1,
-          errorMessage: e.message,
-        );
-        
-        // Check if we should stop syncing
-        if (failCount >= 5) {
-          _logger.w('Too many failures, stopping sync batch');
-          break;
-        }
-      } catch (e, stackTrace) {
-        _logger.e('Unexpected sync error', error: e, stackTrace: stackTrace);
-        failCount++;
-        
-        await db.updateSyncOperationRetry(
-          op.id,
-          retryCount: op.retryCount + 1,
-          errorMessage: e.toString(),
-        );
+    try {
+      final pendingOps = await db.getPendingSyncOperations();
+
+      if (pendingOps.isEmpty) {
+        _logger.i('No pending sync operations');
+        _syncController.add(const SyncStatus.completed(success: 0, failed: 0));
+        return const SyncResult.success(count: 0);
       }
-    }
 
-    _isSyncing = false;
-    _syncController.add(SyncStatus.completed(
-      success: successCount,
-      failed: failCount,
-    ));
-    
-    await _updatePendingCount();
+      _logger.i('Starting sync', data: {'pendingCount': pendingOps.length});
 
-    if (failCount == 0) {
-      _logger.i('Sync completed successfully', data: {'synced': successCount});
-      return SyncResult.success(count: successCount);
-    } else if (successCount > 0) {
-      _logger.w('Sync completed with partial success', data: {
-        'success': successCount,
-        'failed': failCount,
-      });
-      return SyncResult.partial(success: successCount, failed: failCount, errors: errors);
-    } else {
-      _logger.e('Sync failed completely', data: {'failed': failCount});
-      return SyncResult.failure(errors: errors);
+      for (final op in pendingOps) {
+        debugPrint('Processing sync op: ${op.operation} for ${op.entityId} (Event: ${op.eventId})');
+        try {
+          await _processSyncOperation(op);
+          successCount++;
+        } on AppError catch (e) {
+          _logger.w('Sync operation failed', error: e, data: {
+            'operationId': op.id,
+            'entityId': op.entityId,
+          });
+
+          failCount++;
+          errors.add(e);
+
+          await db.updateSyncOperationRetry(
+            op.id,
+            retryCount: op.retryCount + 1,
+            errorMessage: e.message,
+          );
+
+          if (failCount >= _retryConfig.maxAttempts) {
+            _logger.w('Too many failures, stopping sync batch');
+            break;
+          }
+        } catch (e, stackTrace) {
+          _logger.e('Unexpected sync error', error: e, stackTrace: stackTrace);
+          failCount++;
+
+          await db.updateSyncOperationRetry(
+            op.id,
+            retryCount: op.retryCount + 1,
+            errorMessage: e.toString(),
+          );
+        }
+      }
+
+      _syncController.add(SyncStatus.completed(
+        success: successCount,
+        failed: failCount,
+      ));
+
+      await _updatePendingCount();
+
+      if (failCount == 0) {
+        _logger.i('Sync completed successfully', data: {'synced': successCount});
+        return SyncResult.success(count: successCount);
+      } else if (successCount > 0) {
+        _logger.w('Sync completed with partial success', data: {
+          'success': successCount,
+          'failed': failCount,
+        });
+        return SyncResult.partial(success: successCount, failed: failCount, errors: errors);
+      } else {
+        _logger.e('Sync failed completely', data: {'failed': failCount});
+        return SyncResult.failure(errors: errors);
+      }
+    } finally {
+      _isSyncing = false;
     }
   }
 

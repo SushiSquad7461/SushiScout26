@@ -39,6 +39,7 @@ class HybridRepository implements ScoutingRepository {
   final _matchStreamControllers = <String, StreamController<List<MatchReport>>>{};
   final _trashStreamControllers = <String, StreamController<List<MatchReport>>>{};
   final _firestoreSubscriptions = <String, StreamSubscription<List<MatchReport>>>{};
+  StreamSubscription<SyncStatus>? _syncStatusSub;
 
   bool get isLocalDbAvailable => _db != null;
   
@@ -56,9 +57,13 @@ class HybridRepository implements ScoutingRepository {
   void _initializeStreams() {
     // On web, we don't have a sync manager with streams, so skip
     if (_isWeb) return;
-    
-    // Listen to sync status changes to refresh streams
-    _syncManager.syncStream.listen((status) {
+
+    // Only subscribe once. _watchMatchesNative calls this each time, so without
+    // the guard each watched event piled up another syncStream listener and
+    // every sync triggered N parallel refreshes.
+    if (_syncStatusSub != null) return;
+
+    _syncStatusSub = _syncManager.syncStream.listen((status) {
       if (status is SyncCompleted && status.success > 0) {
         _refreshAllStreams();
       }
@@ -656,6 +661,8 @@ class HybridRepository implements ScoutingRepository {
 
   /// Dispose repository resources
   void dispose() {
+    _syncStatusSub?.cancel();
+    _syncStatusSub = null;
     _matchStreamControllers.forEach((_, controller) => controller.close());
     _trashStreamControllers.forEach((_, controller) => controller.close());
     _firestoreSubscriptions.forEach((_, subscription) => subscription.cancel());
