@@ -52,7 +52,7 @@ def fetch_event_schedule(req: https_fn.CallableRequest) -> any:
     headers = {"X-TBA-Auth-Key": tba_api_key}
     
     matches_url = f"https://www.thebluealliance.com/api/v3/event/{event_key}/matches"
-    resp = requests.get(matches_url, headers=headers)
+    resp = requests.get(matches_url, headers=headers, timeout=30)
     
     if resp.status_code != 200:
         raise https_fn.HttpsError(code=https_fn.FunctionsErrorCode.UNAVAILABLE, message=f"TBA API Error: {resp.status_code}")

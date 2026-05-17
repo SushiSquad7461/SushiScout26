@@ -76,7 +76,12 @@ def fetch_ftc_schedule(req: https_fn.CallableRequest) -> dict:
 
     season = _get_ftc_season()
     url = f"https://ftc-api.firstinspires.org/v2.0/{season}/schedule/{event_code}"
-    resp = requests.get(url, auth=(username, api_key), params={"tournamentLevel": "qual"})
+    resp = requests.get(
+        url,
+        auth=(username, api_key),
+        params={"tournamentLevel": "qual"},
+        timeout=30,
+    )
 
     if resp.status_code != 200:
         raise https_fn.HttpsError(
