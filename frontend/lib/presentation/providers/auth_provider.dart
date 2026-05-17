@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/foundation.dart'
     show defaultTargetPlatform, kIsWeb, TargetPlatform;
@@ -46,15 +47,23 @@ final teamRepositoryProvider = Provider<TeamRepository>((ref) {
 });
 
 class AuthNotifier extends Notifier<AuthState> {
+  StreamSubscription<User?>? _authSub;
+
   @override
   AuthState build() {
     _initAuthListener();
+    ref.onDispose(() {
+      _authSub?.cancel();
+      _authSub = null;
+    });
     return const AuthState(status: AuthStatus.loading);
   }
 
   void _initAuthListener() {
     final authRepo = ref.read(authRepositoryProvider);
-    authRepo.authStateChanges.listen((User? user) async {
+    // Cancel previous subscription if build runs again (provider invalidation).
+    _authSub?.cancel();
+    _authSub = authRepo.authStateChanges.listen((User? user) async {
       if (user == null) {
         state = const AuthState(status: AuthStatus.unauthenticated);
       } else {
