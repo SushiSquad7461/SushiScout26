@@ -27,7 +27,6 @@ frontend/build/
 frontend/.dart_tool/
 frontend/.packages
 frontend/.pub/
-frontend/pubspec.lock
 
 # Apps Script (clasp)
 .clasp.json
