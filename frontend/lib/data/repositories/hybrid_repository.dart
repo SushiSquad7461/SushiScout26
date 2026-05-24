@@ -153,8 +153,18 @@ class HybridRepository implements ScoutingRepository {
         await Future.microtask(() async {
           _logger.d('Received ${remoteMatches.length} matches from Firestore stream');
           try {
+            final pendingIds = await _pendingMatchIdsForEvent(eventId);
+            var skipped = 0;
             await db.batch((batch) {
               for (final match in remoteMatches) {
+                // Skip matches with pending local sync ops — Firestore's
+                // snapshot is stale until the queued write reaches it, and
+                // insertOrReplace would otherwise clobber the user's edit
+                // (e.g. visually un-trash a just-trashed match).
+                if (pendingIds.contains(match.id)) {
+                  skipped++;
+                  continue;
+                }
                 batch.insert(
                   db.localMatchReports,
                   _toLocalMatchReport(match, eventId),
@@ -162,8 +172,15 @@ class HybridRepository implements ScoutingRepository {
                 );
               }
             });
-            
+            if (skipped > 0) {
+              _logger.d('Skipped $skipped remote matches with pending local sync ops');
+            }
+
             _refreshMatchStream(eventId);
+            // Another device may have restored a match — refresh trash too.
+            if (_trashStreamControllers.containsKey(eventId)) {
+              _refreshTrashStream(eventId);
+            }
           } catch (e) {
             _logger.e('Error syncing remote matches to local DB', error: e);
           }
@@ -175,6 +192,56 @@ class HybridRepository implements ScoutingRepository {
     );
 
     _firestoreSubscriptions[eventId] = subscription;
+  }
+
+  /// Returns the set of match IDs that have queued sync operations for this
+  /// event. We filter incoming Firestore snapshots against this set so a
+  /// stale remote read can't overwrite an unsynced local edit.
+  Future<Set<String>> _pendingMatchIdsForEvent(String eventId) async {
+    final pendingOps = await db.getPendingSyncOperations();
+    return pendingOps
+        .where((op) => op.entityType == 'match' && op.eventId == eventId)
+        .map((op) => op.entityId)
+        .toSet();
+  }
+
+  /// Set up a Firestore subscription for the trash view. Without this,
+  /// native clients only see trash entries that exist on this device — a
+  /// trash/restore from another device never propagates until app restart.
+  void _setupFirestoreTrashSubscription(String eventId) {
+    final key = 'trash_$eventId';
+    if (_firestoreSubscriptions.containsKey(key)) return;
+
+    final subscription = _firestore.watchTrash(eventId).listen(
+      (remoteDeleted) async {
+        await Future.microtask(() async {
+          try {
+            final pendingIds = await _pendingMatchIdsForEvent(eventId);
+            await db.batch((batch) {
+              for (final match in remoteDeleted) {
+                if (pendingIds.contains(match.id)) continue;
+                batch.insert(
+                  db.localMatchReports,
+                  _toLocalMatchReport(match, eventId),
+                  mode: InsertMode.insertOrReplace,
+                );
+              }
+            });
+            _refreshTrashStream(eventId);
+            if (_matchStreamControllers.containsKey(eventId)) {
+              _refreshMatchStream(eventId);
+            }
+          } catch (e) {
+            _logger.e('Error syncing remote trash to local DB', error: e);
+          }
+        });
+      },
+      onError: (e) {
+        _logger.w('Firestore trash stream error', error: e);
+      },
+    );
+
+    _firestoreSubscriptions[key] = subscription;
   }
 
   Future<void> _refreshMatchStreamWeb(String eventId) async {
@@ -259,7 +326,7 @@ class HybridRepository implements ScoutingRepository {
 
   Stream<List<MatchReport>> _watchTrashNative(String eventId) {
     _initializeStreams();
-    
+
     var controller = _trashStreamControllers[eventId];
     if (controller == null || controller.isClosed) {
       controller = StreamController<List<MatchReport>>.broadcast();
@@ -267,6 +334,10 @@ class HybridRepository implements ScoutingRepository {
 
       // Initial load from local DB
       _refreshTrashStream(eventId);
+
+      // Listen for remote trash changes so trashes/restores from other
+      // devices show up without an app restart.
+      _setupFirestoreTrashSubscription(eventId);
     }
 
     return controller.stream;
@@ -344,11 +415,20 @@ class HybridRepository implements ScoutingRepository {
 
       _logger.d('Found ${firestoreMatches.length} matches in Firestore, updating local DB');
 
+      // Don't overwrite local rows that have pending sync ops — see
+      // _setupFirestoreSubscription for why.
+      final pendingIds = await _pendingMatchIdsForEvent(eventId);
+      var skipped = 0;
       for (final match in firestoreMatches) {
+        if (pendingIds.contains(match.id)) {
+          skipped++;
+          continue;
+        }
         await db.upsertMatch(_toLocalMatchReport(match, eventId));
       }
 
-      _logger.d('Refreshed ${firestoreMatches.length} matches from Firestore');
+      _logger.d('Refreshed ${firestoreMatches.length - skipped} matches from Firestore'
+          '${skipped > 0 ? ' (skipped $skipped pending)' : ''}');
     } catch (e) {
       // Firestore failures shouldn't block local reads
       _logger.w('Firestore refresh failed', error: e);
