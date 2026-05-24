@@ -20,7 +20,7 @@
       ]
     },
     {
-      "collectionGroup": "matches",
+      "collectionGroup": "schedules",
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "eventId", "order": "ASCENDING" },

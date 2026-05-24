@@ -75,5 +75,15 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow write: if false;
     }
+
+    // Schedule data populated from TBA/FTC APIs — public match schedule,
+    // no team scope. Any signed-in user can read; only Cloud Functions
+    // write. Previously this lived in /matches and broke both Sheets sync
+    // (triggered on_match_written with garbage rows) and client reads
+    // (matches read rule required teamId).
+    match /schedules/{doc} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
   }
 }

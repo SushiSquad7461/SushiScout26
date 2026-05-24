@@ -160,7 +160,17 @@ def on_match_written(event: firestore_fn.Event):
     if not event_id:
         logger.warn(f"Match {report_id} has no eventId, skipping sync")
         return
-    
+
+    # Schedule docs from TBA/FTC sync now live in /schedules, but legacy
+    # deploys may have left schedule entries (identified by compLevel and
+    # no scouterName) in /matches. Don't push them to Sheets.
+    payload = data_after or data_before or {}
+    if payload.get('compLevel') and not payload.get('scouterName'):
+        logger.info(
+            f"Skipping schedule-shaped doc {report_id} in matches collection"
+        )
+        return
+
     if data_before and not data_after:
         logger.info(f"Processing hard-deleted match report: {report_id} for event {event_id}")
         try:

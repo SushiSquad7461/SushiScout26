@@ -106,16 +106,13 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm>
     List<Map<String, dynamic>> scheduleMatches;
     try {
       final snapshot = await FirebaseFirestore.instance
-          .collection('matches')
+          .collection('schedules')
           .where('eventId', isEqualTo: eventCode)
           .where('programType', isEqualTo: programType)
           .orderBy('matchNumber')
           .get();
 
-      scheduleMatches = snapshot.docs
-          .map((doc) => doc.data())
-          .where((d) => d['compLevel'] != null)
-          .toList();
+      scheduleMatches = snapshot.docs.map((doc) => doc.data()).toList();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

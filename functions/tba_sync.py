@@ -73,7 +73,12 @@ def fetch_event_schedule(req: https_fn.CallableRequest) -> any:
             "eventId": event_key
         }
         
-        doc_ref = db.collection("matches").document(match_id)
+        # Schedule data lives in its own collection. Writing it to the
+        # "matches" collection collided with scouting reports: every write
+        # triggered on_match_written and pushed garbage rows to Sheets,
+        # and clients couldn't read it back because the team-isolation
+        # rule on /matches requires a teamId.
+        doc_ref = db.collection("schedules").document(match_id)
         batch.set(doc_ref, match_doc, merge=True)
         count += 1
         

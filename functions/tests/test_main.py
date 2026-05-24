@@ -180,6 +180,43 @@ class TestOnMatchWrittenSoftDelete(unittest.TestCase):
         mock_sync.assert_not_called()
         mock_delete.assert_not_called()
 
+    @patch.object(main, '_delete_sheet_row_for_report')
+    @patch.object(main, 'sync_report_to_sheets')
+    def test_schedule_shaped_doc_in_matches_is_skipped(self, mock_sync, mock_delete):
+        # Legacy schedule rows (TBA/FTC sync used to write to /matches) have
+        # compLevel set and no scouterName. They must not flow to Sheets.
+        evt = self._build_event(
+            before=None,
+            after={
+                'eventId': 'e1',
+                'compLevel': 'qm',
+                'matchNumber': 1,
+                'programType': 'FRC',
+            },
+        )
+        main.on_match_written.__wrapped__(evt)
+        mock_sync.assert_not_called()
+        mock_delete.assert_not_called()
+
+    @patch.object(main, '_delete_sheet_row_for_report')
+    @patch.object(main, 'sync_report_to_sheets')
+    @patch('services.sync_tracker.SyncTracker')
+    def test_real_report_with_complevel_still_syncs(self, mock_tracker, mock_sync, mock_delete):
+        # A genuine scouting report has scouterName set; compLevel alone
+        # shouldn't disqualify it.
+        mock_tracker.get_sync_record.return_value = None
+        evt = self._build_event(
+            before=None,
+            after={
+                'eventId': 'e1',
+                'compLevel': 'qm',
+                'scouterName': 'Alice',
+                'matchNumber': 1,
+            },
+        )
+        main.on_match_written.__wrapped__(evt)
+        mock_sync.assert_called_once()
+
 
 if __name__ == '__main__':
     unittest.main()

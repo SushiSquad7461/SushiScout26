@@ -110,7 +110,8 @@ def fetch_ftc_schedule(req: https_fn.CallableRequest) -> dict:
             "eventId": event_code,
         }
 
-        doc_ref = db.collection("matches").document(match_id)
+        # See tba_sync.py for why this is a separate collection.
+        doc_ref = db.collection("schedules").document(match_id)
         batch.set(doc_ref, match_doc, merge=True)
         count += 1
 
