@@ -1,0 +1,185 @@
+"""Tests for main.py — team isolation helpers and soft-delete propagation."""
+
+import os
+import unittest
+from unittest.mock import Mock, patch, MagicMock
+
+# Patch initialize_app before importing main, since it runs at import time
+# and would otherwise try to contact real Firebase services.
+with patch('firebase_admin.initialize_app'):
+    import main  # noqa: E402
+
+
+class TestIsTeamMember(unittest.TestCase):
+    """Verify _is_team_member checks the teams/{tid}/members/{uid} doc."""
+
+    def setUp(self):
+        main._db = None  # reset singleton
+
+    @patch('main.get_db')
+    def test_empty_uid_returns_false(self, mock_get_db):
+        self.assertFalse(main._is_team_member('', 'team1'))
+        mock_get_db.assert_not_called()
+
+    @patch('main.get_db')
+    def test_empty_team_returns_false(self, mock_get_db):
+        self.assertFalse(main._is_team_member('uid1', ''))
+        mock_get_db.assert_not_called()
+
+    @patch('main.get_db')
+    def test_returns_true_when_member_doc_exists(self, mock_get_db):
+        member_doc = Mock(exists=True)
+        chain = mock_get_db.return_value.collection.return_value.document.return_value \
+            .collection.return_value.document.return_value
+        chain.get.return_value = member_doc
+
+        self.assertTrue(main._is_team_member('uid1', 'team1'))
+
+    @patch('main.get_db')
+    def test_returns_false_when_member_doc_missing(self, mock_get_db):
+        member_doc = Mock(exists=False)
+        chain = mock_get_db.return_value.collection.return_value.document.return_value \
+            .collection.return_value.document.return_value
+        chain.get.return_value = member_doc
+
+        self.assertFalse(main._is_team_member('uid1', 'team1'))
+
+
+class TestDeleteSheetRowForReport(unittest.TestCase):
+    """Verify the shared delete helper used by hard+soft delete paths."""
+
+    @patch('services.sheets_service.get_sheets_service')
+    @patch('services.sync_tracker.SyncTracker')
+    @patch.dict(os.environ, {'MASTER_SPREADSHEET_ID': 'sheet1'})
+    def test_deletes_row_and_record_when_tracked(self, mock_tracker, mock_get_svc):
+        mock_tracker.get_sync_record.return_value = {
+            'rowNumber': 5,
+            'sheetName': 'event1',
+        }
+        svc = mock_get_svc.return_value
+        svc.delete_row.return_value = True
+
+        main._delete_sheet_row_for_report('event1', 'rep1')
+
+        svc.delete_row.assert_called_once_with('sheet1', 'event1', 5)
+        mock_tracker.delete_sync_record.assert_called_once_with('event1', 'rep1')
+
+    @patch('services.sheets_service.get_sheets_service')
+    @patch('services.sync_tracker.SyncTracker')
+    @patch.dict(os.environ, {'MASTER_SPREADSHEET_ID': 'sheet1'})
+    def test_falls_back_to_find_by_id_when_row_delete_fails(self, mock_tracker, mock_get_svc):
+        mock_tracker.get_sync_record.return_value = {
+            'rowNumber': 5,
+            'sheetName': 'event1',
+        }
+        svc = mock_get_svc.return_value
+        svc.delete_row.side_effect = [False, True]
+        svc.find_row_by_report_id.return_value = 7
+
+        main._delete_sheet_row_for_report('event1', 'rep1')
+
+        svc.find_row_by_report_id.assert_called_once_with('sheet1', 'event1', 'rep1')
+        self.assertEqual(svc.delete_row.call_count, 2)
+        svc.delete_row.assert_called_with('sheet1', 'event1', 7)
+
+    @patch('services.sheets_service.get_sheets_service')
+    @patch('services.sync_tracker.SyncTracker')
+    @patch.dict(os.environ, {'MASTER_SPREADSHEET_ID': 'sheet1'})
+    def test_no_sync_record_still_clears_tracker(self, mock_tracker, mock_get_svc):
+        mock_tracker.get_sync_record.return_value = None
+        svc = mock_get_svc.return_value
+
+        main._delete_sheet_row_for_report('event1', 'rep1')
+
+        svc.delete_row.assert_not_called()
+        mock_tracker.delete_sync_record.assert_called_once_with('event1', 'rep1')
+
+    @patch('services.sheets_service.get_sheets_service')
+    @patch.dict(os.environ, {'MASTER_SPREADSHEET_ID': ''})
+    def test_no_spreadsheet_id_is_a_noop(self, mock_get_svc):
+        main._delete_sheet_row_for_report('event1', 'rep1')
+        mock_get_svc.return_value.delete_row.assert_not_called()
+
+
+class TestOnMatchWrittenSoftDelete(unittest.TestCase):
+    """The trigger must route soft-delete transitions to the delete path
+    instead of pushing the row to Sheets again."""
+
+    def _build_event(self, before, after):
+        evt = Mock()
+        evt.params = {'reportId': 'rep1'}
+        evt.data = Mock()
+        evt.data.before = Mock()
+        evt.data.before.to_dict.return_value = before
+        evt.data.before.__bool__ = lambda self: before is not None
+        evt.data.after = Mock()
+        evt.data.after.to_dict.return_value = after
+        evt.data.after.__bool__ = lambda self: after is not None
+        if before is None:
+            evt.data.before = None
+        if after is None:
+            evt.data.after = None
+        return evt
+
+    @patch.object(main, '_delete_sheet_row_for_report')
+    @patch.object(main, 'sync_report_to_sheets')
+    def test_soft_delete_transition_calls_delete_helper(self, mock_sync, mock_delete):
+        evt = self._build_event(
+            before={'eventId': 'e1', 'isDeleted': False},
+            after={'eventId': 'e1', 'isDeleted': True},
+        )
+        main.on_match_written.__wrapped__(evt)
+        mock_delete.assert_called_once_with('e1', 'rep1')
+        mock_sync.assert_not_called()
+
+    @patch.object(main, '_delete_sheet_row_for_report')
+    @patch.object(main, 'sync_report_to_sheets')
+    def test_update_to_already_trashed_match_is_ignored(self, mock_sync, mock_delete):
+        evt = self._build_event(
+            before={'eventId': 'e1', 'isDeleted': True},
+            after={'eventId': 'e1', 'isDeleted': True, 'comments': 'edited'},
+        )
+        main.on_match_written.__wrapped__(evt)
+        mock_delete.assert_not_called()
+        mock_sync.assert_not_called()
+
+    @patch.object(main, '_delete_sheet_row_for_report')
+    @patch.object(main, 'sync_report_to_sheets')
+    def test_restore_transition_appends_via_sync_report(self, mock_sync, mock_delete):
+        evt = self._build_event(
+            before={'eventId': 'e1', 'isDeleted': True},
+            after={'eventId': 'e1', 'isDeleted': False},
+        )
+        main.on_match_written.__wrapped__(evt)
+        mock_delete.assert_not_called()
+        mock_sync.assert_called_once()
+        args, kwargs = mock_sync.call_args
+        self.assertEqual(args[0], 'e1')
+        self.assertEqual(args[1], 'rep1')
+
+    @patch.object(main, '_delete_sheet_row_for_report')
+    @patch.object(main, 'sync_report_to_sheets')
+    def test_hard_delete_calls_delete_helper(self, mock_sync, mock_delete):
+        evt = self._build_event(
+            before={'eventId': 'e1', 'isDeleted': False},
+            after=None,
+        )
+        main.on_match_written.__wrapped__(evt)
+        mock_delete.assert_called_once_with('e1', 'rep1')
+        mock_sync.assert_not_called()
+
+    @patch.object(main, '_delete_sheet_row_for_report')
+    @patch.object(main, 'sync_report_to_sheets')
+    @patch('services.sync_tracker.SyncTracker')
+    def test_new_already_deleted_doc_is_skipped(self, mock_tracker, mock_sync, mock_delete):
+        evt = self._build_event(
+            before=None,
+            after={'eventId': 'e1', 'isDeleted': True},
+        )
+        main.on_match_written.__wrapped__(evt)
+        mock_sync.assert_not_called()
+        mock_delete.assert_not_called()
+
+
+if __name__ == '__main__':
+    unittest.main()
