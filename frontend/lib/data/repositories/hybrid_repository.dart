@@ -373,7 +373,7 @@ class HybridRepository implements ScoutingRepository {
     try {
       final deleted = await db.getDeletedMatchesForEvent(eventId);
       if (!controller.isClosed) {
-        controller.add(deleted.map(_toMatchReport).toList());
+        controller.add(_filterToActiveTeam(deleted).map(_toMatchReport).toList());
       }
     } catch (e) {
       _logger.e('Error refreshing trash stream', error: e);
@@ -386,21 +386,21 @@ class HybridRepository implements ScoutingRepository {
   @override
   Future<List<MatchReport>> getMatches(String eventId) async {
     _logger.d('Getting matches for event: $eventId');
-    
+
     // On web, use Firestore directly
     if (_isWeb) {
       return _firestore.getMatches(eventId);
     }
-    
+
     // Native: read from local DB first
     final localMatches = await db.getMatchesForEvent(eventId);
-    
+
     // Background refresh from Firestore (if online)
     _refreshFromFirestore(eventId).catchError((e) {
       _logger.w('Background refresh failed', error: e);
     });
-    
-    return localMatches.map(_toMatchReport).toList();
+
+    return _filterToActiveTeam(localMatches).map(_toMatchReport).toList();
   }
 
   /// Background refresh from Firestore
@@ -781,6 +781,12 @@ class HybridRepository implements ScoutingRepository {
   }
 
   LocalMatchReportsCompanion _toLocalMatchReport(MatchReport match, String eventId) {
+    // Stamp the active team's ID on local rows even if the caller (e.g. the
+    // scouting form) didn't set one. Otherwise local-only writes land with
+    // teamId='' and leak across team switches; see _filterToActiveTeam.
+    final stamped = match.teamId.isNotEmpty
+        ? match.teamId
+        : (_firestore.teamId ?? '');
     return LocalMatchReportsCompanion(
       id: Value(match.id),
       eventId: Value(eventId),
@@ -794,10 +800,22 @@ class HybridRepository implements ScoutingRepository {
       comments: Value(match.comments),
       isSynced: Value(match.isSynced),
       isDeleted: Value(match.isDeleted),
-      teamId: Value(match.teamId),
+      teamId: Value(stamped),
       createdAt: Value(match.createdAt),
       updatedAt: Value(DateTime.now()),
     );
+  }
+
+  /// Drop matches that belong to other teams. The local SQLite cache is
+  /// shared across team switches, so a stale row for Team A can otherwise
+  /// surface while the user is signed in to Team B. We accept rows with an
+  /// empty teamId for backwards compatibility with pre-team-stamping data.
+  List<LocalMatchReport> _filterToActiveTeam(List<LocalMatchReport> rows) {
+    final activeTeamId = _firestore.teamId;
+    if (activeTeamId == null || activeTeamId.isEmpty) return rows;
+    return rows
+        .where((r) => r.teamId.isEmpty || r.teamId == activeTeamId)
+        .toList();
   }
 
   Event _toEvent(LocalEvent local) {
