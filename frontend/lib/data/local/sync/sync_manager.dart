@@ -167,8 +167,10 @@ class SyncManager {
           .map((op) => op.entityId)
           .toSet();
 
+      final activeTeamId = _firestore.teamId;
       int queuedCount = 0;
       int skippedCount = 0;
+      int skippedCrossTeam = 0;
       for (final match in unsyncedMatches) {
         // Skip if already in sync queue
         if (queuedMatchIds.contains(match.id)) {
@@ -182,6 +184,20 @@ class SyncManager {
             'reason': 'EventId is required for sync',
           });
           skippedCount++;
+          continue;
+        }
+
+        // Skip matches that belong to a different team than the active one.
+        // The local SQLite cache is shared across team switches, so without
+        // this gate a team switch would mass-requeue the previous team's
+        // matches under the new team's FirestoreRepository — silently
+        // re-stamping their ownership. Empty teamId is allowed for
+        // backwards-compatibility with pre-team-stamping data.
+        if (activeTeamId != null &&
+            activeTeamId.isNotEmpty &&
+            match.teamId.isNotEmpty &&
+            match.teamId != activeTeamId) {
+          skippedCrossTeam++;
           continue;
         }
 
@@ -212,6 +228,13 @@ class SyncManager {
 
       if (skippedCount > 0) {
         _logger.w('Skipped $skippedCount matches with empty eventId - these cannot be synced');
+      }
+
+      if (skippedCrossTeam > 0) {
+        _logger.i(
+          'Deferred $skippedCrossTeam unsynced matches owned by another team '
+          '— will sync when that team is active again',
+        );
       }
 
       if (queuedCount > 0) {
@@ -447,9 +470,17 @@ class SyncManager {
               'eventId': op.eventId,
               'matchId': op.entityId,
             });
+            final createMatch =
+                MatchReport.fromJson(jsonDecode(op.dataJson));
+            // Honor the match's own teamId. Without teamIdOverride, the
+            // active team's FirestoreRepository would force its teamId
+            // onto the match — so a team switch with pending offline
+            // creates would silently re-stamp them under the new team.
             await _firestore.createMatch(
               op.eventId!,
-              MatchReport.fromJson(jsonDecode(op.dataJson)),
+              createMatch,
+              teamIdOverride:
+                  createMatch.teamId.isNotEmpty ? createMatch.teamId : null,
             );
             _logger.d('Match created successfully in Firestore');
             break;
@@ -458,9 +489,13 @@ class SyncManager {
               'eventId': op.eventId,
               'matchId': op.entityId,
             });
+            final updateMatch =
+                MatchReport.fromJson(jsonDecode(op.dataJson));
             await _firestore.updateMatch(
               op.eventId!,
-              MatchReport.fromJson(jsonDecode(op.dataJson)),
+              updateMatch,
+              teamIdOverride:
+                  updateMatch.teamId.isNotEmpty ? updateMatch.teamId : null,
             );
             _logger.d('Match updated successfully in Firestore');
             break;
