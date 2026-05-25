@@ -355,21 +355,37 @@ class SheetsService:
         ).execute()
     
     def find_row_by_report_id(self, spreadsheet_id: str, sheet_name: str, report_id: str) -> Optional[int]:
-        """Find row number by report ID (stored in Match ID column)."""
-        range_name = f"'{sheet_name}'!A:B"
-        
+        """Find row number by Firestore report_id.
+
+        Sheets stores the matchId (e.g. "2026waore_qm1") in column B and
+        the teamNumber in column D, but the Firestore document id is the
+        concatenation: f"{matchId}_{teamNumber}" (e.g.
+        "2026waore_qm1_254"). The old implementation searched column B
+        for the full report_id and therefore always returned None on real
+        data — the fallback delete path was effectively dead.
+
+        Reconstruct each row's implicit report_id from (matchId, teamNumber)
+        and match against the input. Fall back to direct column-B compare
+        for any legacy rows that stored the report_id verbatim.
+        """
+        range_name = f"'{sheet_name}'!A:D"
+
         result = self.service.spreadsheets().values().get(
             spreadsheetId=spreadsheet_id,
             range=range_name
         ).execute()
-        
+
         values = result.get('values', [])
-        
-        # Search for report_id in Match ID column (column B, index 1)
+
         for i, row in enumerate(values):
-            if len(row) > 1 and row[1] == report_id:
+            if len(row) < 2:
+                continue
+            match_id = row[1]
+            if match_id == report_id:
                 return i + 1
-        
+            if len(row) > 3 and f"{match_id}_{row[3]}" == report_id:
+                return i + 1
+
         return None
     
     def delete_row(self, spreadsheet_id: str, sheet_name: str, row_number: int) -> bool:

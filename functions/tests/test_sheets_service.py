@@ -289,7 +289,12 @@ class TestSheetsService(unittest.TestCase):
             mock_service.spreadsheets().batchUpdate.assert_called_once()
 
     def test_find_row_by_report_id(self):
-        """Test finding a row by report ID in Match ID column."""
+        """Reconstructs report_id from (matchId, teamNumber) columns.
+
+        Real sheet rows store matchId in column B and teamNumber in
+        column D — the Firestore report_id is the concatenation of the
+        two, never written as-is into any single column.
+        """
         with patch('services.sheets_service.build') as mock_build, \
              patch('services.sheets_service.service_account.Credentials'):
             mock_service = Mock()
@@ -298,18 +303,44 @@ class TestSheetsService(unittest.TestCase):
             mock_values = Mock()
             mock_values.execute.return_value = {
                 'values': [
-                    ['Timestamp', 'Match ID'],
-                    ['2026-02-17 10:00:00', 'qm1_254'],
-                    ['2026-02-17 10:15:00', 'qm2_118'],
-                    ['2026-02-17 10:30:00', 'qm3_254'],
+                    ['Timestamp', 'Match ID', 'Match #', 'Team #'],
+                    ['2026-02-17 10:00:00', '2026waore_qm1', '1', '254'],
+                    ['2026-02-17 10:15:00', '2026waore_qm2', '2', '118'],
+                    ['2026-02-17 10:30:00', '2026waore_qm3', '3', '254'],
                 ]
             }
             mock_service.spreadsheets().values().get.return_value = mock_values
 
             service = SheetsService(self.mock_credentials)
-            result = service.find_row_by_report_id('spreadsheet_id', '2026test', 'qm2_118')
+            result = service.find_row_by_report_id(
+                'spreadsheet_id', '2026waore', '2026waore_qm2_118'
+            )
 
             self.assertEqual(result, 3)  # Row 3 (1-indexed, header is row 1)
+
+    def test_find_row_by_report_id_legacy_matchid_column(self):
+        """Falls back to a direct column-B match for any legacy rows
+        that stored the report_id verbatim in the Match ID column."""
+        with patch('services.sheets_service.build') as mock_build, \
+             patch('services.sheets_service.service_account.Credentials'):
+            mock_service = Mock()
+            mock_build.return_value = mock_service
+
+            mock_values = Mock()
+            mock_values.execute.return_value = {
+                'values': [
+                    ['Timestamp', 'Match ID', 'Match #', 'Team #'],
+                    ['2026-02-17 10:00:00', 'legacy_qm1_254', '1', '254'],
+                ]
+            }
+            mock_service.spreadsheets().values().get.return_value = mock_values
+
+            service = SheetsService(self.mock_credentials)
+            result = service.find_row_by_report_id(
+                'spreadsheet_id', '2026waore', 'legacy_qm1_254'
+            )
+
+            self.assertEqual(result, 2)
 
     def test_find_row_by_report_id_not_found(self):
         """Test finding a row that doesn't exist."""
@@ -321,14 +352,16 @@ class TestSheetsService(unittest.TestCase):
             mock_values = Mock()
             mock_values.execute.return_value = {
                 'values': [
-                    ['Timestamp', 'Match ID'],
-                    ['2026-02-17 10:00:00', 'qm1_254'],
+                    ['Timestamp', 'Match ID', 'Match #', 'Team #'],
+                    ['2026-02-17 10:00:00', '2026waore_qm1', '1', '254'],
                 ]
             }
             mock_service.spreadsheets().values().get.return_value = mock_values
 
             service = SheetsService(self.mock_credentials)
-            result = service.find_row_by_report_id('spreadsheet_id', '2026test', 'nonexistent')
+            result = service.find_row_by_report_id(
+                'spreadsheet_id', '2026waore', 'nonexistent'
+            )
 
             self.assertIsNone(result)
 
