@@ -101,6 +101,43 @@ class TestDeleteSheetRowForReport(unittest.TestCase):
         mock_get_svc.return_value.delete_row.assert_not_called()
 
 
+class TestResolveEventProgramType(unittest.TestCase):
+    """The event doc is authoritative for programType — match-doc field is
+    only used as a fallback so legacy / external writes can't lock an FTC
+    event's sheet to FRC columns."""
+
+    def setUp(self):
+        main._db = None
+
+    @patch('main.get_db')
+    def test_uses_event_doc_when_present(self, mock_get_db):
+        event_doc = Mock(exists=True)
+        event_doc.to_dict.return_value = {'programType': 'FTC'}
+        mock_get_db.return_value.collection.return_value.document.return_value.get.return_value = event_doc
+
+        self.assertEqual(
+            main._resolve_event_program_type('e1', {'programType': 'FRC'}),
+            'FTC',
+        )
+
+    @patch('main.get_db')
+    def test_falls_back_to_report_when_event_missing(self, mock_get_db):
+        event_doc = Mock(exists=False)
+        mock_get_db.return_value.collection.return_value.document.return_value.get.return_value = event_doc
+
+        self.assertEqual(
+            main._resolve_event_program_type('e1', {'programType': 'FTC'}),
+            'FTC',
+        )
+
+    @patch('main.get_db')
+    def test_defaults_to_frc_when_nothing_known(self, mock_get_db):
+        event_doc = Mock(exists=False)
+        mock_get_db.return_value.collection.return_value.document.return_value.get.return_value = event_doc
+
+        self.assertEqual(main._resolve_event_program_type('e1', None), 'FRC')
+
+
 class TestOnMatchWrittenSoftDelete(unittest.TestCase):
     """The trigger must route soft-delete transitions to the delete path
     instead of pushing the row to Sheets again."""

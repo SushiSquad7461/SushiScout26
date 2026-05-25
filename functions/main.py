@@ -45,6 +45,25 @@ def _is_team_member(uid: str, team_id: str) -> bool:
     return member_ref.get().exists
 
 
+def _resolve_event_program_type(event_id: str, report_data: dict | None = None) -> str:
+    """Resolve programType for an event. The event doc is authoritative
+    so the sheet schema doesn't get locked to FRC just because a match
+    was written without programType."""
+    try:
+        event_doc = get_db().collection('events').document(event_id).get()
+        if event_doc.exists:
+            event_data = event_doc.to_dict() or {}
+            program_type = event_data.get('programType')
+            if program_type:
+                return program_type
+    except Exception as e:
+        logger.warn(f"Failed to read event {event_id} for programType: {e}")
+
+    if report_data:
+        return report_data.get('programType') or 'FRC'
+    return 'FRC'
+
+
 def _delete_sheet_row_for_report(event_id: str, report_id: str) -> None:
     """Remove a report's row from Sheets and clear its sync record.
     Used for hard deletes and for soft-delete transitions."""
@@ -91,10 +110,13 @@ def sync_report_to_sheets(event_id: str, report_id: str, report_data: dict, is_u
         if not spreadsheet_id:
             logger.error("MASTER_SPREADSHEET_ID not configured")
             return
-        
-        # Get program type from report data, default to FRC
-        program_type = report_data.get('programType', 'FRC')
-        
+
+        # The event doc is authoritative for programType — the match doc's
+        # field may be missing (legacy writes, reverse-sync from Sheets,
+        # external admin writes) which used to silently force the sheet to
+        # FRC columns on first sync of an FTC event.
+        program_type = _resolve_event_program_type(event_id, report_data)
+
         sheet_name = event_id
         sheets_service.get_or_create_sheet(spreadsheet_id, sheet_name, program_type)
         
