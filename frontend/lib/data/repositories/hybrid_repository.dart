@@ -137,10 +137,15 @@ class HybridRepository implements ScoutingRepository {
       // Initial load from local DB
       _refreshMatchStream(eventId);
 
-      // Setup real-time Firestore listener for this event
+      // Setup real-time Firestore listener for this event. We also wire up
+      // the trash subscription so that a remote trash (the match disappears
+      // from watchMatches snapshots) actually propagates to the local row's
+      // isDeleted flag — otherwise the trashed match would stay visible
+      // until app restart on devices that never open the trash screen.
       _setupFirestoreSubscription(eventId);
+      _setupFirestoreTrashSubscription(eventId);
     }
-    
+
     return controller.stream;
   }
 
@@ -336,8 +341,11 @@ class HybridRepository implements ScoutingRepository {
       _refreshTrashStream(eventId);
 
       // Listen for remote trash changes so trashes/restores from other
-      // devices show up without an app restart.
+      // devices show up without an app restart. Also keep the matches
+      // subscription running so a remote restore (match leaves trash) gets
+      // reflected in this device's local row.
       _setupFirestoreTrashSubscription(eventId);
+      _setupFirestoreSubscription(eventId);
     }
 
     return controller.stream;
