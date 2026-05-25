@@ -17,11 +17,22 @@ final _logger = Logger('SyncManager');
 /// (e.g., on team switch), Riverpod tears down the old SyncManager — we
 /// register an onDispose so its Timer and connectivity subscription are
 /// cancelled instead of leaking.
+///
+/// initialize() must run on every new instance, not just the first one at
+/// app startup. Before this was inside the provider, main.dart called
+/// initialize() once on the pre-auth SyncManager — and when sign-in flipped
+/// activeTeamIdProvider from null to a team id, this provider rebuilt and
+/// the new (team-scoped) SyncManager was left without a periodic Timer,
+/// connectivity listener, or queue-existing routine, so any sync op that
+/// missed the immediate path stayed stuck forever.
 final syncManagerProvider = Provider<SyncManager>((ref) {
   final db = ref.watch(appDatabaseProvider);
   final firestore = ref.watch(firestoreRepositoryProvider);
   final manager = SyncManager(db, firestore);
   ref.onDispose(manager.dispose);
+  if (!kIsWeb) {
+    manager.initialize();
+  }
   return manager;
 });
 

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -33,12 +32,6 @@ void main() async {
       }),
     ],
   );
-
-  // Only initialize sync manager on native platforms (not web)
-  // On web, we use Firebase directly with its built-in offline persistence
-  if (!kIsWeb) {
-    container.read(syncManagerProvider).initialize();
-  }
 
   runApp(
     UncontrolledProviderScope(
