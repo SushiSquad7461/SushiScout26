@@ -71,13 +71,25 @@ class FirestoreRepository implements ScoutingRepository {
         .set(_stampSource(prepared.toFirestore()), SetOptions(merge: true));
   }
 
-  /// Stamp every app-originated write so the on_match_written echo guard
-  /// can distinguish "app -> sheets" from "sheets -> sheets". Without this,
-  /// a doc previously touched by Sheets keeps lastSyncSource='sheets' under
-  /// merge:true forever — and a second Sheets edit re-trips the guard and
-  /// echoes back to Sheets.
+  /// Stamp every app-originated write with:
+  ///   - lastSyncSource='app' so the on_match_written echo guard can tell
+  ///     "app -> sheets" from "sheets -> sheets" (otherwise a doc once
+  ///     touched by Sheets keeps lastSyncSource='sheets' under merge:true
+  ///     forever and the second Sheets edit echoes back).
+  ///   - teamId, when not already in the payload, so trash/restore writes
+  ///     that race against a hard-delete (the doc no longer exists, so
+  ///     set+merge becomes a CREATE with only {isDeleted: ...}) still
+  ///     satisfy the matches/{id} create rule's isValidTeamId() check.
+  ///     createMatch/updateMatch already include teamId via
+  ///     _prepareForFirestore, so we don't override there.
   Map<String, dynamic> _stampSource(Map<String, dynamic> data) {
-    return {...data, 'lastSyncSource': 'app'};
+    final stamped = <String, dynamic>{...data, 'lastSyncSource': 'app'};
+    if (!stamped.containsKey('teamId') &&
+        teamId != null &&
+        teamId!.isNotEmpty) {
+      stamped['teamId'] = teamId;
+    }
+    return stamped;
   }
 
   /// Prepares a match for Firestore by merging robot_died into gameData
