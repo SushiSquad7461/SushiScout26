@@ -129,10 +129,14 @@ class FirestoreRepository implements ScoutingRepository {
   @override
   Future<void> trashMatch(String eventId, String matchId) async {
     _logger.d('Trashing match: $matchId');
+    // set+merge so this doesn't throw NOT_FOUND when the matching create
+    // op hasn't synced yet (offline queue) or when another client just
+    // hard-deleted the doc. The on_match_written trigger keys off
+    // isDeleted, so a self-healing re-creation here is acceptable.
     await _firestore
         .collection('matches')
         .doc(matchId)
-        .update({'isDeleted': true});
+        .set({'isDeleted': true}, SetOptions(merge: true));
   }
 
   @override
@@ -140,7 +144,7 @@ class FirestoreRepository implements ScoutingRepository {
     await _firestore
         .collection('matches')
         .doc(matchId)
-        .update({'isDeleted': false});
+        .set({'isDeleted': false}, SetOptions(merge: true));
   }
 
   @override
