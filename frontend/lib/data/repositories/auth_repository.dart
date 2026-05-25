@@ -55,8 +55,12 @@ class AuthRepository {
   Future<void> updateCurrentTeamId(String teamId) async {
     final user = _authService.currentUser;
     if (user == null) return;
-    await _firestore.collection('users').doc(user.uid).update({
-      'currentTeamId': teamId,
-    });
+    // Use set+merge instead of update so the call still works when the
+    // user doc hasn't been bootstrapped yet (legacy accounts that bypassed
+    // _ensureUserDocument). update() requires the doc to exist.
+    await _firestore.collection('users').doc(user.uid).set(
+      {'currentTeamId': teamId},
+      SetOptions(merge: true),
+    );
   }
 }

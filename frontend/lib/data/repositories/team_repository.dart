@@ -47,11 +47,13 @@ class TeamRepository {
         'joinedAt': Timestamp.fromDate(DateTime.now()),
       });
 
+      // set+merge instead of update so first-time team creation works
+      // even if the user doc hasn't been bootstrapped yet.
       final userRef = _firestore.collection('users').doc(createdBy);
-      transaction.update(userRef, {
+      transaction.set(userRef, {
         'currentTeamId': teamRef.id,
         'teamMemberships': {teamRef.id: 'admin'},
-      });
+      }, SetOptions(merge: true));
     });
 
     return team;
@@ -84,13 +86,14 @@ class TeamRepository {
 
     await _firestore.runTransaction((transaction) async {
       final userRef = _firestore.collection('users').doc(userId);
-      transaction.update(userRef, {
+      // set+merge so we don't fail if the user doc is missing.
+      transaction.set(userRef, {
         'currentTeamId': team.id,
         'teamMemberships': {
           ...?userData?['teamMemberships'],
           team.id: 'member',
         },
-      });
+      }, SetOptions(merge: true));
 
       final teamRef = _firestore.collection('teams').doc(team.id);
       transaction.update(teamRef, {
@@ -194,19 +197,18 @@ class TeamRepository {
     String? defaultEventCode,
   }) async {
     final ref = _firestore.collection('teamSettings').doc(teamId);
-    final doc = await ref.get();
-    
-    final data = {
-      'googleSheetId': googleSheetId,
-      'defaultEventCode': defaultEventCode,
+
+    // Only include fields the caller actually provided. Previously this
+    // wrote `null` for any unspecified field, silently overwriting the
+    // existing value — e.g. updating only googleSheetId would clear
+    // defaultEventCode.
+    final data = <String, Object?>{
       'updatedAt': Timestamp.fromDate(DateTime.now()),
     };
-    
-    if (doc.exists) {
-      await ref.update(data);
-    } else {
-      await ref.set(data);
-    }
+    if (googleSheetId != null) data['googleSheetId'] = googleSheetId;
+    if (defaultEventCode != null) data['defaultEventCode'] = defaultEventCode;
+
+    await ref.set(data, SetOptions(merge: true));
   }
 
   Future<void> regenerateInviteCode({
