@@ -191,10 +191,17 @@ class AppDatabase extends _$AppDatabase {
     return into(syncQueue).insert(entry);
   }
 
-  /// Get all pending sync operations (retry count below threshold)
+  /// Get all pending sync operations.
+  ///
+  /// No retry-count filter — the old `< 10` filter hid stuck ops from
+  /// SyncManager.initialize()'s reset routine (which only resets ops it
+  /// actually fetches), so anything that hit 10 retries got stranded
+  /// forever. The retry config inside _processSyncOperation already paces
+  /// failing ops (exponential backoff, max ~5 min between attempts), and
+  /// initialize() resets retryCount >= maxAttempts on every rebuild, so
+  /// transient failures self-heal across team switches / app restarts.
   Future<List<SyncQueueData>> getPendingSyncOperations() {
     return (select(syncQueue)
-      ..where((s) => s.retryCount.isSmallerThanValue(10))
       ..orderBy([
         (s) => OrderingTerm.asc(s.priority),
         (s) => OrderingTerm.asc(s.createdAt),
