@@ -222,11 +222,14 @@ def on_match_written(event: firestore_fn.Event):
         # Echo guard: if this update came from the Sheets → Firestore path
         # (update_match_from_sheets / sync_from_sheets_http stamp
         # lastSyncSource='sheets'), don't push the same data back to Sheets.
-        # Trigger only on the transition into 'sheets' so a subsequent
-        # app-side edit (which clears or doesn't set the field) still syncs.
+        # App-originated writes stamp lastSyncSource='app' explicitly, so
+        # the after-value alone tells us the origin — we don't need to
+        # compare against before. (The earlier "transition-only" guard
+        # echoed on the SECOND consecutive sheets edit because before was
+        # also 'sheets'.) was_deleted == is_deleted ensures soft deletes
+        # initiated from Sheets still propagate to the trash path below.
         if (
             data_after.get('lastSyncSource') == 'sheets'
-            and data_before.get('lastSyncSource') != 'sheets'
             and was_deleted == is_deleted
         ):
             logger.info(

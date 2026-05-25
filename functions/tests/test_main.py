@@ -257,9 +257,9 @@ class TestOnMatchWrittenSoftDelete(unittest.TestCase):
     @patch.object(main, 'sync_report_to_sheets')
     def test_app_edit_after_sheets_edit_still_syncs(self, mock_sync, mock_delete):
         # Once the doc has been touched by Sheets, the very next app-side
-        # update (which doesn't set lastSyncSource) must still flow back
-        # to Sheets — the echo guard only fires on the transition INTO
-        # 'sheets', not on every subsequent edit.
+        # update must still flow back to Sheets. App writes now stamp
+        # lastSyncSource='app' explicitly so the guard distinguishes the
+        # origin from the after-value alone.
         evt = self._build_event(
             before={
                 'eventId': 'e1',
@@ -267,10 +267,40 @@ class TestOnMatchWrittenSoftDelete(unittest.TestCase):
                 'autoFuel': 2,
                 'lastSyncSource': 'sheets',
             },
-            after={'eventId': 'e1', 'isDeleted': False, 'autoFuel': 3},
+            after={
+                'eventId': 'e1',
+                'isDeleted': False,
+                'autoFuel': 3,
+                'lastSyncSource': 'app',
+            },
         )
         main.on_match_written.__wrapped__(evt)
         mock_sync.assert_called_once()
+
+    @patch.object(main, '_delete_sheet_row_for_report')
+    @patch.object(main, 'sync_report_to_sheets')
+    def test_repeated_sheets_edit_does_not_echo(self, mock_sync, mock_delete):
+        # The previous guard required `before != 'sheets'`, so a SECOND
+        # consecutive Sheets edit (before='sheets', after='sheets')
+        # slipped through and got echoed back. The simplified guard
+        # treats any after=='sheets' as a Sheets-origin write.
+        evt = self._build_event(
+            before={
+                'eventId': 'e1',
+                'isDeleted': False,
+                'autoFuel': 2,
+                'lastSyncSource': 'sheets',
+            },
+            after={
+                'eventId': 'e1',
+                'isDeleted': False,
+                'autoFuel': 3,
+                'lastSyncSource': 'sheets',
+            },
+        )
+        main.on_match_written.__wrapped__(evt)
+        mock_sync.assert_not_called()
+        mock_delete.assert_not_called()
 
     @patch.object(main, '_delete_sheet_row_for_report')
     @patch.object(main, 'sync_report_to_sheets')

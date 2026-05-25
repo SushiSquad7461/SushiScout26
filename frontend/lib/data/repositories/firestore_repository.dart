@@ -68,7 +68,16 @@ class FirestoreRepository implements ScoutingRepository {
     await _firestore
         .collection('matches')
         .doc(match.id)
-        .set(prepared.toFirestore(), SetOptions(merge: true));
+        .set(_stampSource(prepared.toFirestore()), SetOptions(merge: true));
+  }
+
+  /// Stamp every app-originated write so the on_match_written echo guard
+  /// can distinguish "app -> sheets" from "sheets -> sheets". Without this,
+  /// a doc previously touched by Sheets keeps lastSyncSource='sheets' under
+  /// merge:true forever — and a second Sheets edit re-trips the guard and
+  /// echoes back to Sheets.
+  Map<String, dynamic> _stampSource(Map<String, dynamic> data) {
+    return {...data, 'lastSyncSource': 'app'};
   }
 
   /// Prepares a match for Firestore by merging robot_died into gameData
@@ -123,7 +132,7 @@ class FirestoreRepository implements ScoutingRepository {
     await _firestore
         .collection('matches')
         .doc(match.id)
-        .set(prepared.toFirestore(), SetOptions(merge: true));
+        .set(_stampSource(prepared.toFirestore()), SetOptions(merge: true));
   }
 
   @override
@@ -136,7 +145,7 @@ class FirestoreRepository implements ScoutingRepository {
     await _firestore
         .collection('matches')
         .doc(matchId)
-        .set({'isDeleted': true}, SetOptions(merge: true));
+        .set(_stampSource({'isDeleted': true}), SetOptions(merge: true));
   }
 
   @override
@@ -144,7 +153,7 @@ class FirestoreRepository implements ScoutingRepository {
     await _firestore
         .collection('matches')
         .doc(matchId)
-        .set({'isDeleted': false}, SetOptions(merge: true));
+        .set(_stampSource({'isDeleted': false}), SetOptions(merge: true));
   }
 
   @override
