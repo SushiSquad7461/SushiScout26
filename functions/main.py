@@ -219,6 +219,21 @@ def on_match_written(event: firestore_fn.Event):
         was_deleted = bool(data_before.get('isDeleted'))
         is_deleted = bool(data_after.get('isDeleted'))
 
+        # Echo guard: if this update came from the Sheets → Firestore path
+        # (update_match_from_sheets / sync_from_sheets_http stamp
+        # lastSyncSource='sheets'), don't push the same data back to Sheets.
+        # Trigger only on the transition into 'sheets' so a subsequent
+        # app-side edit (which clears or doesn't set the field) still syncs.
+        if (
+            data_after.get('lastSyncSource') == 'sheets'
+            and data_before.get('lastSyncSource') != 'sheets'
+            and was_deleted == is_deleted
+        ):
+            logger.info(
+                f"Skipping echo sync for {report_id}: write originated in Sheets"
+            )
+            return
+
         if is_deleted and not was_deleted:
             # Soft delete (trash): remove the row from Sheets so trashed
             # matches don't keep showing up in analysis views.
@@ -305,10 +320,18 @@ def backfill_event_to_sheets(req: https_fn.CallableRequest) -> dict:
         for report_doc in reports:
             report_id = report_doc.id
             report_data = report_doc.to_dict()
-            
+
             if report_data.get('isDeleted'):
                 continue
-            
+
+            # Skip legacy schedule-shaped docs the same way on_match_written
+            # does. TBA/FTC sync used to write schedule entries into /matches
+            # (now moved to /schedules); old data may still be there and
+            # would otherwise show up as garbage rows in the sheet.
+            if report_data.get('compLevel') and not report_data.get('scouterName'):
+                logger.info(f"Skipping schedule-shaped doc {report_id} during backfill")
+                continue
+
             try:
                 existing = SyncTracker.get_sync_record(event_id, report_id)
                 if existing and existing.get('status') == 'success':
@@ -422,17 +445,23 @@ def update_match_from_sheets(req: https_fn.CallableRequest) -> dict:
         if existing_team_id:
             match_data['teamId'] = existing_team_id
 
+        # Tag the source so on_match_written can skip the echo write back
+        # to Sheets. Without this, every Sheets-side edit fires a redundant
+        # Sheets API update and risks silently rewriting the user's cell
+        # with transform_match_report's reformatted values.
+        match_data['lastSyncSource'] = 'sheets'
+
         # Merge update with existing data
         doc_ref.set(match_data, merge=True)
-        
+
         logger.info(f"Successfully updated {report_id} in Firestore from Sheets")
-        
+
         return {
             'success': True,
             'eventId': event_id,
             'reportId': report_id
         }
-        
+
     except https_fn.HttpsError:
         raise
     except Exception as e:
@@ -491,6 +520,10 @@ def sync_from_sheets_http(req: Request) -> Response:
         match_data['eventId'] = event_id
         if existing_data.get('teamId'):
             match_data['teamId'] = existing_data['teamId']
+
+        # Tag the source so on_match_written can skip the echo write back
+        # to Sheets — see update_match_from_sheets for the rationale.
+        match_data['lastSyncSource'] = 'sheets'
 
         doc_ref.set(match_data, merge=True)
         

@@ -237,6 +237,60 @@ class TestOnMatchWrittenSoftDelete(unittest.TestCase):
 
     @patch.object(main, '_delete_sheet_row_for_report')
     @patch.object(main, 'sync_report_to_sheets')
+    def test_sheets_origin_update_is_skipped(self, mock_sync, mock_delete):
+        # Sheets→Firestore writes stamp lastSyncSource='sheets'. The
+        # trigger must not echo that data back to Sheets.
+        evt = self._build_event(
+            before={'eventId': 'e1', 'isDeleted': False, 'autoFuel': 1},
+            after={
+                'eventId': 'e1',
+                'isDeleted': False,
+                'autoFuel': 2,
+                'lastSyncSource': 'sheets',
+            },
+        )
+        main.on_match_written.__wrapped__(evt)
+        mock_sync.assert_not_called()
+        mock_delete.assert_not_called()
+
+    @patch.object(main, '_delete_sheet_row_for_report')
+    @patch.object(main, 'sync_report_to_sheets')
+    def test_app_edit_after_sheets_edit_still_syncs(self, mock_sync, mock_delete):
+        # Once the doc has been touched by Sheets, the very next app-side
+        # update (which doesn't set lastSyncSource) must still flow back
+        # to Sheets — the echo guard only fires on the transition INTO
+        # 'sheets', not on every subsequent edit.
+        evt = self._build_event(
+            before={
+                'eventId': 'e1',
+                'isDeleted': False,
+                'autoFuel': 2,
+                'lastSyncSource': 'sheets',
+            },
+            after={'eventId': 'e1', 'isDeleted': False, 'autoFuel': 3},
+        )
+        main.on_match_written.__wrapped__(evt)
+        mock_sync.assert_called_once()
+
+    @patch.object(main, '_delete_sheet_row_for_report')
+    @patch.object(main, 'sync_report_to_sheets')
+    def test_sheets_origin_soft_delete_still_propagates(self, mock_sync, mock_delete):
+        # A Sheets edit that flips isDeleted must NOT be silently swallowed
+        # by the echo guard — the trigger still needs to remove the row.
+        evt = self._build_event(
+            before={'eventId': 'e1', 'isDeleted': False},
+            after={
+                'eventId': 'e1',
+                'isDeleted': True,
+                'lastSyncSource': 'sheets',
+            },
+        )
+        main.on_match_written.__wrapped__(evt)
+        mock_delete.assert_called_once_with('e1', 'rep1')
+        mock_sync.assert_not_called()
+
+    @patch.object(main, '_delete_sheet_row_for_report')
+    @patch.object(main, 'sync_report_to_sheets')
     @patch('services.sync_tracker.SyncTracker')
     def test_real_report_with_complevel_still_syncs(self, mock_tracker, mock_sync, mock_delete):
         # A genuine scouting report has scouterName set; compLevel alone
