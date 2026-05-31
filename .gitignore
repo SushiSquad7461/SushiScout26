@@ -39,3 +39,9 @@ frontend/.pub/
 
 # MacOS
 .DS_Store
+
+# Claude Code / AI assistant — personal & ephemeral state (shared config lives in .claude/settings.json)
+.claude/settings.local.json
+.claude/ralph-loop*.md
+.superpowers/
+.opencode/

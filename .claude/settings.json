@@ -1,0 +1,29 @@
+{
+  "enabledPlugins": {
+    "firebase@claude-plugins-official": true
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=$(echo \"$TOOL_INPUT\" | grep -oE '([A-Za-z]:[^\"]*|/[^\"]*)\\.dart' | head -1); if [ -n \"$f\" ] && [[ \"$f\" != *.g.dart ]] && [[ \"$f\" != *.mocks.dart ]]; then cd \"$CLAUDE_PROJECT_DIR/frontend\" && dart format \"$f\" 2>&1 | tail -1 && flutter analyze --no-fatal-infos 2>&1 | tail -3; fi"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if echo \"$TOOL_INPUT\" | grep -qE '\\.(g|mocks)\\.dart'; then echo 'BLOCK: This is a generated file. Run dart run build_runner build instead of editing directly.' && exit 2; fi"
+          }
+        ]
+      }
+    ]
+  }
+}
