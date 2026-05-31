@@ -104,3 +104,36 @@ Subject: imperative mood, no capitalization, no trailing period, max 50 chars.
 - Run `flutter test` from `frontend/` for the full Dart suite (currently 285 tests).
 - Run `python -m pytest tests/` from `functions/` for the Python suite (currently 24 tests).
 - Generated files (`*.g.dart`, `*.mocks.dart`, `*.freezed.dart`) are excluded from `flutter analyze` via `analysis_options.yaml`.
+
+## Working on this repo with AI (Claude Code)
+
+This repo ships shared Claude Code config in `.claude/` so collaborators get a
+consistent AI setup on clone:
+- **Hooks** (`settings.json`): auto `dart format` + `flutter analyze` on `.dart`
+  edits, and a guard that blocks edits to generated `*.g.dart` / `*.mocks.dart`.
+- **Agents** (`.claude/agents/`): `security-reviewer`, `sync-logic-reviewer`,
+  `drift-migration-reviewer` — invoke after touching the matching code.
+- **Skills** (`.claude/skills/`): `/run-tests`, `/drift-codegen`,
+  `/deploy-functions`, `/firestore-rules-check`.
+
+Personal/ephemeral state (`settings.local.json`, ralph logs, `.superpowers/`,
+`.opencode/`) is gitignored — set your own `settings.local.json` permissions.
+
+### Recommended plugins (installed per-user, not via clone)
+
+Plugins live in `~/.claude/`, so they are not pulled in by cloning. Add the
+marketplaces, then install:
+
+```bash
+claude plugin marketplace add anthropics/claude-plugins-official
+claude plugin marketplace add mksglu/context-mode
+
+# Core for this repo
+claude plugin install firebase@claude-plugins-official        # enabled via settings.json
+claude plugin install superpowers@claude-plugins-official     # TDD/debugging/review disciplines
+claude plugin install context-mode@context-mode               # keeps large tool output out of context
+claude plugin install context7@claude-plugins-official        # live library docs (Flutter/Firebase/Riverpod)
+claude plugin install commit-commands@claude-plugins-official # /commit, /commit-push-pr
+claude plugin install code-review@claude-plugins-official     # /code-review
+```
+
