@@ -25,7 +25,12 @@ service cloud.firestore {
       allow read, delete: if isTeamMember(resource.data.teamId);
       allow update:       if isTeamMember(resource.data.teamId)
                             && request.resource.data.teamId == resource.data.teamId;
-      allow create:       if isTeamMember(request.resource.data.teamId);
+      // Defense-in-depth: the composite eventId (used as the Sheets tab name)
+      // must be prefixed by the creating team's id, so a member can't create
+      // a match doc that leaks into another team's Sheet tab.
+      allow create:       if isTeamMember(request.resource.data.teamId)
+                            && request.resource.data.eventId is string
+                            && request.resource.data.eventId.matches('^' + request.resource.data.teamId + '_.*');
     }
 
     match /users/{userId} {

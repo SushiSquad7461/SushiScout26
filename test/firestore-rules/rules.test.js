@@ -75,6 +75,16 @@ test('member cannot create a match stamped for another team', async () => {
   );
 });
 
+test('member cannot create a match with own teamId but another team\'s eventId', async () => {
+  await assertFails(
+    setDoc(doc(alice(), 'matches/m4'), {
+      eventId: 'teamB_2026casf',
+      teamId: 'teamA',
+      isDeleted: false,
+    })
+  );
+});
+
 // --- The two privilege-escalation vectors this fix closes ---
 
 test('client cannot write its own teamMemberships (claim-source escalation)', async () => {

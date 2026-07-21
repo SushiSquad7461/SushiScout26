@@ -34,8 +34,8 @@ def _is_team_member(auth_token: dict | None, team_id: str) -> bool:
     """True if the caller's token carries `team_id` in its `teams` custom
     claim. Cloud Functions use the Admin SDK which bypasses Firestore
     rules, so callables must check membership themselves — but the claim
-    (mirrored by on_user_membership_changed) makes it a free token read
-    instead of a Firestore lookup."""
+    (set by the membership callables: create_team/join_team/leave_team)
+    makes it a free token read instead of a Firestore lookup."""
     if not auth_token or not team_id:
         return False
     return team_id in (auth_token.get('teams') or {})

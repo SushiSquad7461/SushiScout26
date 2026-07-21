@@ -105,6 +105,12 @@ class _FakeFuture_12<T1> extends _i1.SmartFake implements _i7.Future<T1> {
     : super(parent, parentInvocation);
 }
 
+class _FakePipelineSource_13 extends _i1.SmartFake
+    implements _i6.PipelineSource {
+  _FakePipelineSource_13(Object parent, Invocation parentInvocation)
+    : super(parent, parentInvocation);
+}
+
 /// A class which mocks [FirebaseAuth].
 ///
 /// See the documentation for Mockito's code generation for more information.
@@ -626,6 +632,15 @@ class MockFirebaseAuth extends _i1.Mock implements _i4.FirebaseAuth {
           as _i7.Future<void>);
 
   @override
+  _i7.Future<void> revokeAccessToken(String? accessToken) =>
+      (super.noSuchMethod(
+            Invocation.method(#revokeAccessToken, [accessToken]),
+            returnValue: _i7.Future<void>.value(),
+            returnValueForMissingStub: _i7.Future<void>.value(),
+          )
+          as _i7.Future<void>);
+
+  @override
   _i7.Future<void> signOut() =>
       (super.noSuchMethod(
             Invocation.method(#signOut, []),
@@ -1016,6 +1031,21 @@ class MockFirebaseFirestore extends _i1.Mock implements _i6.FirebaseFirestore {
             returnValueForMissingStub: _i7.Future<void>.value(),
           )
           as _i7.Future<void>);
+
+  @override
+  _i6.PipelineSource pipeline() =>
+      (super.noSuchMethod(
+            Invocation.method(#pipeline, []),
+            returnValue: _FakePipelineSource_13(
+              this,
+              Invocation.method(#pipeline, []),
+            ),
+            returnValueForMissingStub: _FakePipelineSource_13(
+              this,
+              Invocation.method(#pipeline, []),
+            ),
+          )
+          as _i6.PipelineSource);
 
   @override
   _i7.Future<void> setIndexConfigurationFromJSON(String? json) =>

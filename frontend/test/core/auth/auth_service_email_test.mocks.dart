@@ -125,27 +125,33 @@ class _FakeFuture_16<T1> extends _i1.SmartFake implements _i7.Future<T1> {
     : super(parent, parentInvocation);
 }
 
-class _FakeSnapshotMetadata_17 extends _i1.SmartFake
+class _FakePipelineSource_17 extends _i1.SmartFake
+    implements _i6.PipelineSource {
+  _FakePipelineSource_17(Object parent, Invocation parentInvocation)
+    : super(parent, parentInvocation);
+}
+
+class _FakeSnapshotMetadata_18 extends _i1.SmartFake
     implements _i6.SnapshotMetadata {
-  _FakeSnapshotMetadata_17(Object parent, Invocation parentInvocation)
+  _FakeSnapshotMetadata_18(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
-class _FakeFirebaseFirestore_18 extends _i1.SmartFake
+class _FakeFirebaseFirestore_19 extends _i1.SmartFake
     implements _i6.FirebaseFirestore {
-  _FakeFirebaseFirestore_18(Object parent, Invocation parentInvocation)
+  _FakeFirebaseFirestore_19(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
-class _FakeDocumentSnapshot_19<T extends Object?> extends _i1.SmartFake
+class _FakeDocumentSnapshot_20<T extends Object?> extends _i1.SmartFake
     implements _i6.DocumentSnapshot<T> {
-  _FakeDocumentSnapshot_19(Object parent, Invocation parentInvocation)
+  _FakeDocumentSnapshot_20(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
-class _FakeAggregateQuery_20 extends _i1.SmartFake
+class _FakeAggregateQuery_21 extends _i1.SmartFake
     implements _i6.AggregateQuery {
-  _FakeAggregateQuery_20(Object parent, Invocation parentInvocation)
+  _FakeAggregateQuery_21(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
@@ -664,6 +670,15 @@ class MockFirebaseAuth extends _i1.Mock implements _i4.FirebaseAuth {
             Invocation.method(#revokeTokenWithAuthorizationCode, [
               authorizationCode,
             ]),
+            returnValue: _i7.Future<void>.value(),
+            returnValueForMissingStub: _i7.Future<void>.value(),
+          )
+          as _i7.Future<void>);
+
+  @override
+  _i7.Future<void> revokeAccessToken(String? accessToken) =>
+      (super.noSuchMethod(
+            Invocation.method(#revokeAccessToken, [accessToken]),
             returnValue: _i7.Future<void>.value(),
             returnValueForMissingStub: _i7.Future<void>.value(),
           )
@@ -1449,6 +1464,21 @@ class MockFirebaseFirestore extends _i1.Mock implements _i6.FirebaseFirestore {
           as _i7.Future<void>);
 
   @override
+  _i6.PipelineSource pipeline() =>
+      (super.noSuchMethod(
+            Invocation.method(#pipeline, []),
+            returnValue: _FakePipelineSource_17(
+              this,
+              Invocation.method(#pipeline, []),
+            ),
+            returnValueForMissingStub: _FakePipelineSource_17(
+              this,
+              Invocation.method(#pipeline, []),
+            ),
+          )
+          as _i6.PipelineSource);
+
+  @override
   _i7.Future<void> setIndexConfigurationFromJSON(String? json) =>
       (super.noSuchMethod(
             Invocation.method(#setIndexConfigurationFromJSON, [json]),
@@ -1495,11 +1525,11 @@ class MockDocumentSnapshot extends _i1.Mock
   _i6.SnapshotMetadata get metadata =>
       (super.noSuchMethod(
             Invocation.getter(#metadata),
-            returnValue: _FakeSnapshotMetadata_17(
+            returnValue: _FakeSnapshotMetadata_18(
               this,
               Invocation.getter(#metadata),
             ),
-            returnValueForMissingStub: _FakeSnapshotMetadata_17(
+            returnValueForMissingStub: _FakeSnapshotMetadata_18(
               this,
               Invocation.getter(#metadata),
             ),
@@ -1538,11 +1568,11 @@ class MockDocumentReference extends _i1.Mock
   _i6.FirebaseFirestore get firestore =>
       (super.noSuchMethod(
             Invocation.getter(#firestore),
-            returnValue: _FakeFirebaseFirestore_18(
+            returnValue: _FakeFirebaseFirestore_19(
               this,
               Invocation.getter(#firestore),
             ),
-            returnValueForMissingStub: _FakeFirebaseFirestore_18(
+            returnValueForMissingStub: _FakeFirebaseFirestore_19(
               this,
               Invocation.getter(#firestore),
             ),
@@ -1633,14 +1663,14 @@ class MockDocumentReference extends _i1.Mock
             Invocation.method(#get, [options]),
             returnValue:
                 _i7.Future<_i6.DocumentSnapshot<Map<String, dynamic>>>.value(
-                  _FakeDocumentSnapshot_19<Map<String, dynamic>>(
+                  _FakeDocumentSnapshot_20<Map<String, dynamic>>(
                     this,
                     Invocation.method(#get, [options]),
                   ),
                 ),
             returnValueForMissingStub:
                 _i7.Future<_i6.DocumentSnapshot<Map<String, dynamic>>>.value(
-                  _FakeDocumentSnapshot_19<Map<String, dynamic>>(
+                  _FakeDocumentSnapshot_20<Map<String, dynamic>>(
                     this,
                     Invocation.method(#get, [options]),
                   ),
@@ -1736,11 +1766,11 @@ class MockCollectionReference extends _i1.Mock
   _i6.FirebaseFirestore get firestore =>
       (super.noSuchMethod(
             Invocation.getter(#firestore),
-            returnValue: _FakeFirebaseFirestore_18(
+            returnValue: _FakeFirebaseFirestore_19(
               this,
               Invocation.getter(#firestore),
             ),
-            returnValueForMissingStub: _FakeFirebaseFirestore_18(
+            returnValueForMissingStub: _FakeFirebaseFirestore_19(
               this,
               Invocation.getter(#firestore),
             ),
@@ -2118,11 +2148,11 @@ class MockCollectionReference extends _i1.Mock
   _i6.AggregateQuery count() =>
       (super.noSuchMethod(
             Invocation.method(#count, []),
-            returnValue: _FakeAggregateQuery_20(
+            returnValue: _FakeAggregateQuery_21(
               this,
               Invocation.method(#count, []),
             ),
-            returnValueForMissingStub: _FakeAggregateQuery_20(
+            returnValueForMissingStub: _FakeAggregateQuery_21(
               this,
               Invocation.method(#count, []),
             ),
@@ -2195,7 +2225,7 @@ class MockCollectionReference extends _i1.Mock
               aggregateField29,
               aggregateField30,
             ]),
-            returnValue: _FakeAggregateQuery_20(
+            returnValue: _FakeAggregateQuery_21(
               this,
               Invocation.method(#aggregate, [
                 aggregateField1,
@@ -2230,7 +2260,7 @@ class MockCollectionReference extends _i1.Mock
                 aggregateField30,
               ]),
             ),
-            returnValueForMissingStub: _FakeAggregateQuery_20(
+            returnValueForMissingStub: _FakeAggregateQuery_21(
               this,
               Invocation.method(#aggregate, [
                 aggregateField1,

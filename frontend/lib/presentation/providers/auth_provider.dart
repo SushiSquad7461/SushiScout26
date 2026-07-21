@@ -292,6 +292,20 @@ class AuthNotifier extends Notifier<AuthState> {
       final teamRepo = ref.read(teamRepositoryProvider);
       await teamRepo.leaveTeam(teamId: teamId, userId: userId);
 
+      // Force-refresh the token so the reduced claim (team removed
+      // server-side) takes effect immediately, closing the isolation seam
+      // where a stale token would still grant access to the left team's
+      // data until the natural ~1h refresh. Unlike join, we're waiting for
+      // a claim to disappear, so a single forced refresh (not
+      // waitForTeamClaim's polling-for-presence) is what fits here.
+      try {
+        await ref.read(authServiceProvider).forceRefreshClaims();
+      } catch (_) {
+        // A failed refresh should not crash the leave — the profile reload
+        // below still reflects the server-side membership change, and the
+        // token will naturally refresh later.
+      }
+
       await _loadUserProfile();
     } catch (e) {
       // Preserve identity — leave failed so the user is still in their teams.

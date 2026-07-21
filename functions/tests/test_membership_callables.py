@@ -126,5 +126,14 @@ class TestSetTeamClaims(unittest.TestCase):
         )
 
 
+class TestGenerateInviteCode(unittest.TestCase):
+    def test_returns_eight_char_code_from_expected_charset(self):
+        charset = set('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789')
+        for _ in range(50):
+            code = main._generate_invite_code()
+            self.assertEqual(len(code), 8)
+            self.assertTrue(set(code).issubset(charset))
+
+
 if __name__ == '__main__':
     unittest.main()
