@@ -146,3 +146,24 @@ test('member can update a teamA match while keeping teamId unchanged', async () 
     setDoc(doc(alice(), 'matches/m1'), { isDeleted: true }, { merge: true })
   );
 });
+
+// --- Regression: get-or-create flow reads the event BEFORE it exists ---
+// A null `resource` made the read rule throw (Null value error) and denied
+// the first match submitted for any new event.
+
+test('member can read a NON-EXISTENT event doc for their own team (get-or-create)', async () => {
+  await assertSucceeds(getDoc(doc(alice(), 'events/teamA_2026casf')));
+});
+
+test('member canNOT read a NON-EXISTENT event doc belonging to another team', async () => {
+  await assertFails(getDoc(doc(alice(), 'events/teamB_2026casf')));
+});
+
+test('member can read an EXISTING own-team event doc', async () => {
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), 'events/teamA_2026casf'), {
+      teamId: 'teamA', programType: 'FRC', tbaKey: '2026casf',
+    });
+  });
+  await assertSucceeds(getDoc(doc(alice(), 'events/teamA_2026casf')));
+});

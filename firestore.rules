@@ -15,7 +15,17 @@ service cloud.firestore {
     }
 
     match /events/{eventId} {
-      allow read, delete: if isTeamMember(resource.data.teamId);
+      // The app's get-or-create flow READS the event before creating it. When
+      // the doc doesn't exist `resource` is null, and dereferencing
+      // resource.data would be a "Null value error" (=> denied), which broke
+      // the very first match submitted for a new event. For that not-yet-
+      // created case, authorize on the team prefix baked into the document id
+      // ("<teamId>_<eventCode>") so the read stays team-scoped rather than
+      // letting anyone probe arbitrary ids.
+      allow read:         if resource == null
+                            ? isTeamMember(eventId.split('_')[0])
+                            : isTeamMember(resource.data.teamId);
+      allow delete:       if resource != null && isTeamMember(resource.data.teamId);
       allow update:       if isTeamMember(resource.data.teamId)
                             && request.resource.data.teamId == resource.data.teamId;
       allow create:       if isTeamMember(request.resource.data.teamId);
