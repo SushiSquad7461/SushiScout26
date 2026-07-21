@@ -6,6 +6,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 SushiScout 26 is an FRC/FTC robotics scouting app. Scouts use the Flutter app to record match data at competitions, which syncs to Firestore and Google Sheets for analysis.
 
+## Active roadmap
+
+There is an in-progress simplification effort. **Before starting any refactor or
+"why is this so complex" work, read
+[`docs/superpowers/specs/2026-07-21-simplification-roadmap.md`](docs/superpowers/specs/2026-07-21-simplification-roadmap.md)** —
+it holds the audit evidence, the requirements already decided with the user, FRC prior-art
+research, and the scope of the remaining steps. Step 1 (team isolation) is shipped;
+Step 2 (Sheets one-way), Step 3 (collapse to a single offline store), and Step 4
+(schema-driven forms) are not started. Each still needs its own brainstorm → spec → plan.
+
 ## Architecture
 
 **Frontend** (`frontend/`): Flutter app using Riverpod for state management. Targets Windows, macOS, Linux, Android, iOS, and web. Firebase Auth for team-scoped access.
