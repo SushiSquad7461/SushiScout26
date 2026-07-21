@@ -45,8 +45,14 @@ Deleted outright:
 - The `sync_tracking` Firestore collection (data wiped)
 
 From `frontend/lib/data/repositories/firestore_repository.dart`:
-- `_stampSource` (currently ~85–88) and its four call sites. It exists only to feed the
-  echo guard.
+- The `lastSyncSource: 'app'` stamp inside `_stampSource` (currently ~85–92).
+
+  **Correction to the brainstorm:** `_stampSource` does *two* jobs, and only one of them
+  is echo-guard machinery. It also backfills `teamId` when absent, so that a trash/restore
+  write racing a hard-delete (where `set+merge` degrades into a CREATE carrying only
+  `{isDeleted: ...}`) still satisfies the `matches/{id}` create rule's `isValidTeamId()`
+  check. Deleting the whole helper would reintroduce that bug. Keep the teamId half and
+  rename the helper to `_withTeamId`; delete only the `lastSyncSource` line.
 
 ### 3.2 The write path
 
@@ -55,8 +61,12 @@ From `frontend/lib/data/repositories/firestore_repository.dart`:
 1. Read the match's `teamId` — falling back to the event doc's `teamId` when the match
    field is missing, the same way `_resolve_event_program_type` already treats the event
    doc as authoritative for legacy and externally-written docs. Then read
-   `teams/{teamId}.googleSheetId`. Absent or empty → log at debug level and return.
+   `teamSettings/{teamId}.googleSheetId`. Absent or empty → log at debug level and return.
    Not an error, not retried.
+
+   **Correction to the brainstorm:** the field lives on the separate `teamSettings/{teamId}`
+   document (`TeamSettings` in `data/models/team.dart`), not on `teams/{teamId}`. Everything
+   the brainstorm said about `teams/{teamId}` applies to `teamSettings/{teamId}` instead.
 2. Tab name is the **bare event code**, not the composite `{teamId}_{eventCode}`.
    The workbook is already team-scoped, so the composite name Step 1 introduced
    (roadmap §5) is redundant. Derive it by stripping the `{teamId}_` prefix from the
@@ -92,15 +102,19 @@ New callable `set_team_sheet(teamId, sheetIdOrUrl)`:
    On failure, return `failed-precondition` with a message naming the service-account
    email, so the UI can say *"share this sheet with `<sa>@<project>.iam.gserviceaccount.com`
    as Editor"*.
-4. Only after the probe passes, write `teams/{teamId}.googleSheetId`.
+4. Only after the probe passes, write `teamSettings/{teamId}.googleSheetId`.
 
 This is the one place Step 2 adds code rather than removing it. It earns its place twice
 over: it is the same server-authoritative pattern Step 1 established for anything
 security-relevant, and validating at configure time converts a competition-day mystery
 ("why is nothing exporting?") into an inline, actionable error.
 
-Rules change in `firestore.rules`: `teams/{teamId}` update stays member-writable
-(invite-code regen) but gains a guard denying any client change to `googleSheetId`.
+Rules changes in `firestore.rules`:
+- `teamSettings/{teamId}` is currently `allow read, write: if isTeamMember(teamId)`. Split
+  it: reads stay member-gated, writes stay member-gated *except* that no client write may
+  create or change `googleSheetId`.
+- Delete the now-dead `match /sync_tracking/{doc} { allow read, write: if false; }` rule
+  along with the collection.
 
 No `isTeamAdmin()` rules helper is added. The admin check lives in the callable, which uses
 the Admin SDK and bypasses rules anyway; the UI gate reads the claim client-side. A rules
@@ -118,8 +132,10 @@ helper here would have no caller — add one when something actually needs it.
   - A **Backfill this event** button calling the existing `backfill_event_to_sheets`.
     This is what stops a team that configures its sheet mid-competition from ending up with
     a silently half-empty workbook.
-- `team_repository` gains `setTeamSheet()` calling the callable. `updateTeam` stops
-  accepting `googleSheetId`, since clients can no longer write it.
+- `team_repository` gains `setTeamSheet()` calling the callable. `updateTeamSettings()`
+  drops its `googleSheetId` parameter, since clients can no longer write that field.
+- A new `isTeamAdminProvider` derives admin-ness from the existing
+  `AuthState.teamMemberships` map (`teamId → role`), so no extra fetch is needed.
 
 ## 6. Testing
 
@@ -136,16 +152,17 @@ first-run-only. Every area below therefore includes its unconfigured / empty cas
   with the SA email in the message; accepts both a full URL and a bare ID.
 - Deleted-endpoint tests in `test_main.py` removed alongside their subjects.
 
-**Firestore rules** (`test/firestore-rules/`):
-- A member cannot write `googleSheetId`.
+**Firestore rules** (`test/firestore-rules/rules.test.js`):
+- A member cannot write `googleSheetId` on `teamSettings/{teamId}`.
 - An admin cannot write it either — the callable is the only path.
-- A member can still regen the invite code.
-- Non-members remain denied on the team doc.
+- A member can still write `defaultEventCode` on the same doc.
+- Non-members remain denied on `teamSettings/{teamId}` entirely.
 
 **Dart** (`frontend/test/`):
 - `settings_sheet` renders the export section for an admin and hides it for a member.
 - `firestore_repository` no longer writes `lastSyncSource` on create, update, soft-delete,
-  or restore.
+  or restore — while still backfilling `teamId` on trash/restore (the `_withTeamId`
+  behavior preserved in §3.1).
 
 ## 7. Rollout
 
