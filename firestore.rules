@@ -15,18 +15,24 @@ service cloud.firestore {
     }
 
     match /events/{eventId} {
-      allow read, update, delete: if isTeamMember(resource.data.teamId);
-      allow create:               if isTeamMember(request.resource.data.teamId);
+      allow read, delete: if isTeamMember(resource.data.teamId);
+      allow update:       if isTeamMember(resource.data.teamId)
+                            && request.resource.data.teamId == resource.data.teamId;
+      allow create:       if isTeamMember(request.resource.data.teamId);
     }
 
     match /matches/{reportId} {
-      allow read, update, delete: if isTeamMember(resource.data.teamId);
-      allow create:               if isTeamMember(request.resource.data.teamId);
+      allow read, delete: if isTeamMember(resource.data.teamId);
+      allow update:       if isTeamMember(resource.data.teamId)
+                            && request.resource.data.teamId == resource.data.teamId;
+      allow create:       if isTeamMember(request.resource.data.teamId);
     }
 
     match /users/{userId} {
       allow read:   if isSignedIn() && request.auth.uid == userId;
-      allow create: if isSignedIn() && request.auth.uid == userId;
+      allow create: if isSignedIn() && request.auth.uid == userId
+                      && (!('teamMemberships' in request.resource.data)
+                          || request.resource.data.teamMemberships == {});
       // teamMemberships is the claim source — a client may update its own
       // profile / currentTeamId but NEVER teamMemberships (server-only, set
       // by the membership callables). This is the core of the isolation fix.

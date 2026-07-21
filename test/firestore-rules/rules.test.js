@@ -99,3 +99,40 @@ test('client cannot self-insert a team member doc (self-join escalation)', async
     setDoc(doc(alice(), 'teams/teamB/members/alice'), { role: 'admin', userId: 'alice' })
   );
 });
+
+// --- New: lock teamMemberships on CREATE too, and pin teamId on UPDATE ---
+
+test('client cannot create own user doc with non-empty teamMemberships', async () => {
+  await assertFails(
+    setDoc(doc(alice(), 'users/alice'), {
+      displayName: 'Alice',
+      teamMemberships: { teamA: 'admin' },
+    })
+  );
+});
+
+test('client can create own user doc with teamMemberships omitted', async () => {
+  await assertSucceeds(
+    setDoc(doc(alice(), 'users/alice'), { displayName: 'Alice' })
+  );
+});
+
+test('client can create own user doc with teamMemberships explicitly empty', async () => {
+  await assertSucceeds(
+    setDoc(doc(alice(), 'users/alice'), { displayName: 'Alice', teamMemberships: {} })
+  );
+});
+
+test('member cannot update a match to reparent it to another team', async () => {
+  await seedMatch('teamA');
+  await assertFails(
+    setDoc(doc(alice(), 'matches/m1'), { teamId: 'teamB' }, { merge: true })
+  );
+});
+
+test('member can update a teamA match while keeping teamId unchanged', async () => {
+  await seedMatch('teamA');
+  await assertSucceeds(
+    setDoc(doc(alice(), 'matches/m1'), { isDeleted: true }, { merge: true })
+  );
+});
