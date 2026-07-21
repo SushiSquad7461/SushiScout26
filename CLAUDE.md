@@ -33,13 +33,17 @@ SushiScout 26 is an FRC/FTC robotics scouting app. Scouts use the Flutter app to
 ### Auth & Team Isolation
 
 - Firebase Auth with Google Sign-In (mobile/web) and email/password (desktop)
-- Team membership stored in `teams/{teamId}/members/{userId}` subcollection — Firestore rules check this
+- **Membership is server-authoritative.** Rules trust ONLY the `{teams: {teamId: role}}` custom auth claim, which is minted exclusively by the `create_team`/`join_team`/`leave_team` callables (Admin SDK). Clients CANNOT write `users/{uid}.teamMemberships` or `teams/{tid}/members/**` — rules deny both. Never "simplify" this back to a client write or a trigger mirroring a client-writable field: that is a privilege-escalation hole (any user could self-assert membership in any team).
+- `team_repository`'s createTeam/joinTeamByCode/leaveTeam call those callables; reads stay client-side
+- After create/join/leave, the client must force `getIdToken(true)` (`AuthService.forceRefreshClaims`) or the new claim isn't in the token yet
 - `activeTeamIdProvider` → `currentTeamIdProvider` → `FirestoreRepository(teamId:)` — all queries filter by team
-- `createTeam`/`joinTeam`/`leaveTeam` must always write/delete the `members` subcollection doc
-- `switchTeam` must persist `currentTeamId` to Firestore user doc (not just local state)
+- `switchTeam` needs no token refresh (the claim lists all teams; active team is separate state)
+- Event ids are composite `{teamId}_{eventCode}` (`currentEventIdProvider`); the RAW code (`currentEventCodeProvider` / `Event.tbaKey`) is only for the public `schedules`/TBA lookups
+- Onboarding existing users to this model needs a one-time **claims backfill** — a data wipe alone leaves memberships in Firestore with no claim, and users get `permission-denied`
 
 ### Cloud Functions
 
+- `create_team` / `join_team` / `leave_team` — callables that own ALL membership mutation: validate server-side (invite code, already-member, last-admin), write membership with the Admin SDK, then set the `{teams: ...}` custom claim. See Auth & Team Isolation above.
 - `on_match_written` — Firestore trigger on `matches/{reportId}` that syncs creates/updates/deletes to Google Sheets
 - `backfill_event_to_sheets` — callable function to bulk-sync an event's matches
 - `update_match_from_sheets` / `sync_from_sheets_http` — reverse sync from Sheets back to Firestore
@@ -63,7 +67,7 @@ dart run build_runner build      # Regenerate Drift/Riverpod code (*.g.dart file
 ### Cloud Functions (Python)
 ```bash
 cd functions
-python -m venv venv && source venv/Scripts/activate  # Windows venv
+python3.11 -m venv venv && source venv/bin/activate   # MUST be 3.11 — see note below
 pip install -r requirements.txt
 python -m pytest tests/          # Run function tests
 firebase deploy --only functions # Deploy functions
@@ -98,11 +102,16 @@ Subject: imperative mood, no capitalization, no trailing period, max 50 chars.
 - Generated files (`*.g.dart`, `*.mocks.dart`) must never be hand-edited — run codegen or mockito instead
 - Riverpod providers that need to react to state changes must use `overrideWith((ref) =>)`, not `overrideWithValue()`
 - Firestore composite queries (teamId + eventId + isDeleted + createdAt) may require composite indexes — deploy with `firebase deploy --only firestore:indexes`
+- **`functions/venv` must be Python 3.11**, matching `"runtime": "python311"` in `firebase.json`. The CLI looks for `venv/bin/python3.11` and otherwise fails with `Missing virtual environment at venv directory`. If the system lacks 3.11: `uv python install 3.11 && uv venv functions/venv --python 3.11`. A venv missing `bin/activate` (created when `python3-venv` isn't installed) also fails.
+- **Never run the web app with `flutter run -d web-server`** — in debug it loads all ~1371 DDC modules with zero errors but `main()` waits on a Dart debugger handshake that only the Chrome extension satisfies, so you get a silent blank page. Use `flutter build web --release` + a static server, or `-d chrome`.
+- **Firestore rules: `resource` is null when the doc doesn't exist.** `allow read: if isTeamMember(resource.data.teamId)` throws `Null value error` (=> denied) on a get-or-create path. Guard with `resource == null ? <fallback> : <check>` — this broke the first match written to every new event.
+- Deploying functions validates ALL secrets up front: one missing secret (e.g. `TBA_API_KEY`) blocks the whole deploy. Deploy a subset with `firebase deploy --only functions:name1,functions:name2`.
 
 ## Testing
 
-- Run `flutter test` from `frontend/` for the full Dart suite (currently 285 tests).
-- Run `python -m pytest tests/` from `functions/` for the Python suite (currently 24 tests).
+- Run `flutter test` from `frontend/` for the full Dart suite (currently 292 tests).
+- Run `./venv/bin/python -m pytest tests/` from `functions/` for the Python suite (currently 56 tests).
+- Firestore rules have an automated isolation suite (16 tests): `firebase emulators:exec --only firestore "cd test/firestore-rules && ./node_modules/.bin/jest --runInBand"` (run from repo root; `npm test` inside `emulators:exec` hits a shell-quoting bug on Linux — call the jest binary directly). Emulator is pinned to port 8099 so it doesn't collide with a local app server on 8080.
 - Generated files (`*.g.dart`, `*.mocks.dart`, `*.freezed.dart`) are excluded from `flutter analyze` via `analysis_options.yaml`.
 
 ## Working on this repo with AI (Claude Code)

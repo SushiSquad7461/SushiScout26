@@ -7,7 +7,7 @@ A cross-platform FRC & FTC scouting app built by [SushiSquad 7461](https://githu
 - **Multi-platform** — Windows, macOS, Linux, Android, iOS, and web
 - **Offline-first** — Full functionality without internet; syncs when back online
 - **FRC + FTC** — Separate scouting forms tailored to each program
-- **Team isolation** — Firebase Auth with team-scoped data access
+- **Team isolation** — server-enforced: every team's events and matches are private to that team, so multiple teams can scout the same competition independently
 - **Live sync** — Match data syncs bidirectionally between Firestore and Google Sheets
 - **Schedule import** — Pull match schedules from The Blue Alliance (FRC) and FIRST Events API (FTC)
 
@@ -33,11 +33,13 @@ A cross-platform FRC & FTC scouting app built by [SushiSquad 7461](https://githu
                                     │
                     ┌───────────────┴───────────────┐
                     │     Firebase Cloud Functions   │
-                    │  ┌──────────┐  ┌───────────┐  │
-                    │  │  Sheets  │  │ Schedule  │  │
-                    │  │   Sync   │  │  Fetch    │  │
-                    │  └──────────┘  └───────────┘  │
+                    │  ┌────────┐ ┌────────┐ ┌─────┐ │
+                    │  │ Sheets │ │Schedule│ │Team │ │
+                    │  │  Sync  │ │ Fetch  │ │Member│ │
+                    │  └────────┘ └────────┘ └─────┘ │
                     └───────────────────────────────┘
+   Team membership is mutated ONLY by the create_team/join_team/leave_team
+   callables, which set a custom auth claim that Firestore rules enforce.
 ```
 
 ## Quick Start
@@ -45,8 +47,9 @@ A cross-platform FRC & FTC scouting app built by [SushiSquad 7461](https://githu
 ### Prerequisites
 
 - [Flutter SDK](https://docs.flutter.dev/get-started/install) 3.10+
-- [Python 3.11+](https://www.python.org/downloads/) (for Cloud Functions)
+- [Python **3.11**](https://www.python.org/downloads/) (for Cloud Functions — must be 3.11 exactly, matching the `python311` runtime in `firebase.json`; the Firebase CLI looks for `functions/venv/bin/python3.11` and fails to deploy otherwise)
 - [Firebase CLI](https://firebase.google.com/docs/cli)
+- [Node.js](https://nodejs.org/) (only for the Firestore rules test suite)
 
 ### Setup
 
@@ -60,17 +63,30 @@ flutter pub get
 dart run build_runner build --delete-conflicting-outputs
 
 # Run the app
-flutter run -d windows    # or macos, chrome, etc.
+flutter run -d windows    # or macos, linux, chrome
 ```
+
+> **Running on the web:** use `flutter run -d chrome`, or build and serve a
+> release bundle (`flutter build web --release` then serve `build/web`).
+> Avoid `flutter run -d web-server` — in debug it loads every module without
+> error but never starts the app, giving a silent blank page.
 
 ### Cloud Functions (optional, for deployment)
 
 ```bash
 cd functions
-python -m venv venv
-source venv/Scripts/activate   # Windows (use bin/activate on macOS/Linux)
+python3.11 -m venv venv        # must be 3.11 (see Prerequisites)
+source venv/bin/activate       # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 python -m pytest tests/ -v     # Verify tests pass
+```
+
+### Firestore rules tests
+
+```bash
+cd test/firestore-rules && npm install && cd ../..
+firebase emulators:exec --only firestore \
+  "cd test/firestore-rules && ./node_modules/.bin/jest --runInBand"
 ```
 
 ## How It Works
@@ -87,8 +103,9 @@ python -m pytest tests/ -v     # Verify tests pass
 ### Team System
 
 - Sign in with Google (mobile/web) or email/password (desktop)
-- Create or join a team with a 6-character invite code
-- All data is scoped to your team — other teams can't see your matches
+- Create or join a team with an 8-character invite code
+- All data is scoped to your team — other teams can't see your matches, even when scouting the same competition
+- Membership is **server-authoritative**: joining is validated by a Cloud Function that mints a signed auth claim, and Firestore rules trust only that claim. Clients cannot grant themselves membership.
 - Team admins can manage settings and regenerate invite codes
 
 ### Offline Support
