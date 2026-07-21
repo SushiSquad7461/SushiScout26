@@ -2,88 +2,60 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper: user is signed in
-    function isSignedIn() {
-      return request.auth != null;
-    }
+    function isSignedIn() { return request.auth != null; }
 
-    // Helper: user belongs to the team that owns the document
+    // Team memberships are mirrored into a custom claim by the membership
+    // callables (create_team/join_team/leave_team). Reading the token is
+    // free — no document read — unlike the old exists() check.
+    function memberTeams() {
+      return isSignedIn() ? request.auth.token.get('teams', {}) : {};
+    }
     function isTeamMember(teamId) {
-      return isSignedIn()
-        && teamId != ''
-        && exists(/databases/$(database)/documents/teams/$(teamId)/members/$(request.auth.uid));
+      return teamId != '' && teamId in memberTeams();
     }
 
-    // Helper: incoming teamId is either empty or belongs to the caller's team
-    function isValidTeamId() {
-      return request.resource.data.teamId == ''
-        || isTeamMember(request.resource.data.teamId);
-    }
-
-    // Events — team members can read their team's events
     match /events/{eventId} {
-      allow read: if isSignedIn()
-        && (resource.data.teamId == '' || isTeamMember(resource.data.teamId));
-      allow create: if isSignedIn() && isValidTeamId();
-      allow update, delete: if isSignedIn()
-        && (resource.data.teamId == '' || isTeamMember(resource.data.teamId));
+      allow read, update, delete: if isTeamMember(resource.data.teamId);
+      allow create:               if isTeamMember(request.resource.data.teamId);
     }
 
-    // Matches — scoped to the team that owns them
     match /matches/{reportId} {
-      allow read: if isSignedIn()
-        && (resource.data.teamId == '' || isTeamMember(resource.data.teamId));
-      allow create: if isSignedIn() && isValidTeamId();
-      allow update, delete: if isSignedIn()
-        && (resource.data.teamId == '' || isTeamMember(resource.data.teamId));
+      allow read, update, delete: if isTeamMember(resource.data.teamId);
+      allow create:               if isTeamMember(request.resource.data.teamId);
     }
 
-    // User profiles — users can read/write their own profile
     match /users/{userId} {
-      allow read, write: if isSignedIn() && request.auth.uid == userId;
+      allow read:   if isSignedIn() && request.auth.uid == userId;
+      allow create: if isSignedIn() && request.auth.uid == userId;
+      // teamMemberships is the claim source — a client may update its own
+      // profile / currentTeamId but NEVER teamMemberships (server-only, set
+      // by the membership callables). This is the core of the isolation fix.
+      allow update: if isSignedIn() && request.auth.uid == userId
+                      && !('teamMemberships' in
+                           request.resource.data.diff(resource.data).affectedKeys());
     }
 
-    // Teams — members can read; creator can create; members can update
     match /teams/{teamId} {
-      allow read: if isSignedIn() && isTeamMember(teamId);
-      // Allow create: creator must be setting themselves as initial member
-      allow create: if isSignedIn();
-      allow update: if isSignedIn() && isTeamMember(teamId);
+      allow read:   if isTeamMember(teamId);
+      allow create: if false;                      // create_team callable only
+      allow update: if isTeamMember(teamId);       // e.g. invite-code regen
 
+      // Membership is server-authoritative: only the callables (Admin SDK,
+      // which bypasses rules) write member docs. A client-writable member
+      // doc would let anyone self-join any team.
       match /members/{memberId} {
-        allow read: if isSignedIn() && isTeamMember(teamId);
-        // Allow creator to write the first member doc (themselves) during team creation
-        allow create: if isSignedIn()
-          && (memberId == request.auth.uid || isTeamMember(teamId));
-        allow update, delete: if isSignedIn() && isTeamMember(teamId);
+        allow read:  if isTeamMember(teamId);
+        allow write: if false;
       }
     }
 
-    // Sync tracking — server-side only (Cloud Functions), deny client access
-    match /sync_tracking/{doc} {
-      allow read, write: if false;
+    match /teamSettings/{teamId} {
+      allow read, write: if isTeamMember(teamId);
     }
 
-    // TBA cache — read-only for authenticated users, write by Cloud Functions
-    match /tba_cache/{doc} {
-      allow read: if isSignedIn();
-      allow write: if false;
-    }
-
-    // FTC cache — read-only for authenticated users, write by Cloud Functions
-    match /ftc_cache/{doc} {
-      allow read: if isSignedIn();
-      allow write: if false;
-    }
-
-    // Schedule data populated from TBA/FTC APIs — public match schedule,
-    // no team scope. Any signed-in user can read; only Cloud Functions
-    // write. Previously this lived in /matches and broke both Sheets sync
-    // (triggered on_match_written with garbage rows) and client reads
-    // (matches read rule required teamId).
-    match /schedules/{doc} {
-      allow read: if isSignedIn();
-      allow write: if false;
-    }
+    match /sync_tracking/{doc} { allow read, write: if false; }
+    match /tba_cache/{doc}     { allow read: if isSignedIn(); allow write: if false; }
+    match /ftc_cache/{doc}     { allow read: if isSignedIn(); allow write: if false; }
+    match /schedules/{doc}     { allow read: if isSignedIn(); allow write: if false; }
   }
 }
