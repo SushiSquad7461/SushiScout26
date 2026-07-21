@@ -29,62 +29,6 @@ class TestIsTeamMember(unittest.TestCase):
         self.assertFalse(main._is_team_member({'email': 'a@b.c'}, 'team1'))
 
 
-class TestDeleteSheetRowForReport(unittest.TestCase):
-    """Verify the shared delete helper used by hard+soft delete paths."""
-
-    @patch('services.sheets_service.get_sheets_service')
-    @patch('services.sync_tracker.SyncTracker')
-    @patch.dict(os.environ, {'MASTER_SPREADSHEET_ID': 'sheet1'})
-    def test_deletes_row_and_record_when_tracked(self, mock_tracker, mock_get_svc):
-        mock_tracker.get_sync_record.return_value = {
-            'rowNumber': 5,
-            'sheetName': 'event1',
-        }
-        svc = mock_get_svc.return_value
-        svc.delete_row.return_value = True
-
-        main._delete_sheet_row_for_report('event1', 'rep1')
-
-        svc.delete_row.assert_called_once_with('sheet1', 'event1', 5)
-        mock_tracker.delete_sync_record.assert_called_once_with('event1', 'rep1')
-
-    @patch('services.sheets_service.get_sheets_service')
-    @patch('services.sync_tracker.SyncTracker')
-    @patch.dict(os.environ, {'MASTER_SPREADSHEET_ID': 'sheet1'})
-    def test_falls_back_to_find_by_id_when_row_delete_fails(self, mock_tracker, mock_get_svc):
-        mock_tracker.get_sync_record.return_value = {
-            'rowNumber': 5,
-            'sheetName': 'event1',
-        }
-        svc = mock_get_svc.return_value
-        svc.delete_row.side_effect = [False, True]
-        svc.find_row_by_report_id.return_value = 7
-
-        main._delete_sheet_row_for_report('event1', 'rep1')
-
-        svc.find_row_by_report_id.assert_called_once_with('sheet1', 'event1', 'rep1')
-        self.assertEqual(svc.delete_row.call_count, 2)
-        svc.delete_row.assert_called_with('sheet1', 'event1', 7)
-
-    @patch('services.sheets_service.get_sheets_service')
-    @patch('services.sync_tracker.SyncTracker')
-    @patch.dict(os.environ, {'MASTER_SPREADSHEET_ID': 'sheet1'})
-    def test_no_sync_record_still_clears_tracker(self, mock_tracker, mock_get_svc):
-        mock_tracker.get_sync_record.return_value = None
-        svc = mock_get_svc.return_value
-
-        main._delete_sheet_row_for_report('event1', 'rep1')
-
-        svc.delete_row.assert_not_called()
-        mock_tracker.delete_sync_record.assert_called_once_with('event1', 'rep1')
-
-    @patch('services.sheets_service.get_sheets_service')
-    @patch.dict(os.environ, {'MASTER_SPREADSHEET_ID': ''})
-    def test_no_spreadsheet_id_is_a_noop(self, mock_get_svc):
-        main._delete_sheet_row_for_report('event1', 'rep1')
-        mock_get_svc.return_value.delete_row.assert_not_called()
-
-
 class TestResolveEventProgramType(unittest.TestCase):
     """The event doc is authoritative for programType — match-doc field is
     only used as a fallback so legacy / external writes can't lock an FTC
@@ -399,6 +343,91 @@ class TestEventTabName(unittest.TestCase):
 
     def test_only_strips_first_occurrence(self):
         self.assertEqual(main._event_tab_name('t1_t1_evt', 't1'), 't1_evt')
+
+
+class TestSyncReportToSheets(unittest.TestCase):
+    """Row identity now comes from the sheet itself: found -> update,
+    absent -> append. No tracker, so no stale row numbers."""
+
+    def _report(self):
+        return {'teamId': 't1', 'eventId': 't1_evt', 'scouterName': 'sam'}
+
+    @patch('services.sheets_service.get_sheets_service')
+    @patch.object(main, '_get_team_sheet_id', return_value='')
+    def test_unconfigured_team_is_a_noop(self, mock_sheet_id, mock_get_svc):
+        main.sync_report_to_sheets('t1_evt', 'rep1', self._report())
+
+        mock_get_svc.assert_not_called()
+
+    @patch('services.sheets_service.get_sheets_service')
+    @patch.object(main, '_resolve_event_program_type', return_value='FRC')
+    @patch.object(main, '_get_team_sheet_id', return_value='sheet-abc')
+    def test_appends_when_report_not_in_sheet(self, _sid, _pt, mock_get_svc):
+        svc = mock_get_svc.return_value
+        svc.find_row_by_report_id.return_value = None
+        svc.transform_match_report.return_value = ['a', 'b']
+
+        main.sync_report_to_sheets('t1_evt', 'rep1', self._report())
+
+        svc.get_or_create_sheet.assert_called_once_with('sheet-abc', 'evt', 'FRC')
+        svc.append_row.assert_called_once_with('sheet-abc', 'evt', ['a', 'b'])
+        svc.update_row.assert_not_called()
+
+    @patch('services.sheets_service.get_sheets_service')
+    @patch.object(main, '_resolve_event_program_type', return_value='FRC')
+    @patch.object(main, '_get_team_sheet_id', return_value='sheet-abc')
+    def test_updates_in_place_when_report_already_in_sheet(self, _sid, _pt, mock_get_svc):
+        svc = mock_get_svc.return_value
+        svc.find_row_by_report_id.return_value = 7
+        svc.transform_match_report.return_value = ['a', 'b']
+
+        main.sync_report_to_sheets('t1_evt', 'rep1', self._report())
+
+        svc.update_row.assert_called_once_with('sheet-abc', 'evt', 7, ['a', 'b'])
+        svc.append_row.assert_not_called()
+
+    @patch('services.sheets_service.get_sheets_service')
+    @patch.object(main, '_resolve_event_program_type', return_value='FTC')
+    @patch.object(main, '_get_team_sheet_id', return_value='sheet-abc')
+    def test_uses_bare_event_code_as_tab(self, _sid, _pt, mock_get_svc):
+        svc = mock_get_svc.return_value
+        svc.find_row_by_report_id.return_value = None
+
+        main.sync_report_to_sheets('t1_2026waore', 'rep1', self._report())
+
+        svc.get_or_create_sheet.assert_called_once_with('sheet-abc', '2026waore', 'FTC')
+
+
+class TestDeleteSheetRowForReport(unittest.TestCase):
+    """Deletes find their row the same way writes do."""
+
+    @patch('services.sheets_service.get_sheets_service')
+    @patch.object(main, '_get_team_sheet_id', return_value='')
+    def test_unconfigured_team_is_a_noop(self, _sid, mock_get_svc):
+        main._delete_sheet_row_for_report('t1_evt', 'rep1', {'teamId': 't1'})
+
+        mock_get_svc.assert_not_called()
+
+    @patch('services.sheets_service.get_sheets_service')
+    @patch.object(main, '_get_team_sheet_id', return_value='sheet-abc')
+    def test_deletes_found_row(self, _sid, mock_get_svc):
+        svc = mock_get_svc.return_value
+        svc.find_row_by_report_id.return_value = 4
+
+        main._delete_sheet_row_for_report('t1_evt', 'rep1', {'teamId': 't1'})
+
+        svc.find_row_by_report_id.assert_called_once_with('sheet-abc', 'evt', 'rep1')
+        svc.delete_row.assert_called_once_with('sheet-abc', 'evt', 4)
+
+    @patch('services.sheets_service.get_sheets_service')
+    @patch.object(main, '_get_team_sheet_id', return_value='sheet-abc')
+    def test_missing_row_is_not_an_error(self, _sid, mock_get_svc):
+        svc = mock_get_svc.return_value
+        svc.find_row_by_report_id.return_value = None
+
+        main._delete_sheet_row_for_report('t1_evt', 'rep1', {'teamId': 't1'})
+
+        svc.delete_row.assert_not_called()
 
 
 if __name__ == '__main__':

@@ -105,103 +105,77 @@ def _event_tab_name(event_id: str, team_id: str) -> str:
     return event_id
 
 
-def _delete_sheet_row_for_report(event_id: str, report_id: str) -> None:
-    """Remove a report's row from Sheets and clear its sync record.
+def _delete_sheet_row_for_report(
+    event_id: str, report_id: str, report_data: dict | None = None
+) -> None:
+    """Remove a report's row from its team's sheet.
     Used for hard deletes and for soft-delete transitions."""
     from services.sheets_service import get_sheets_service
-    from services.sync_tracker import SyncTracker
 
-    sheets_service = get_sheets_service()
-    spreadsheet_id = get_master_spreadsheet_id()
+    team_id = _resolve_team_id(event_id, report_data)
+    spreadsheet_id = _get_team_sheet_id(team_id)
 
     if not spreadsheet_id:
-        logger.error("MASTER_SPREADSHEET_ID not configured")
+        logger.debug(
+            f"No sheet configured for team {team_id!r}; skipping delete of {report_id}"
+        )
         return
 
-    sync_record = SyncTracker.get_sync_record(event_id, report_id)
+    tab = _event_tab_name(event_id, team_id)
+    sheets_service = get_sheets_service()
 
-    if sync_record and sync_record.get('rowNumber') and sync_record.get('sheetName'):
-        row_number = sync_record['rowNumber']
-        sheet_name = sync_record['sheetName']
+    row_number = sheets_service.find_row_by_report_id(spreadsheet_id, tab, report_id)
 
-        success = sheets_service.delete_row(spreadsheet_id, sheet_name, row_number)
+    if row_number is None:
+        logger.info(f"Report {report_id} not present in sheet tab {tab}; nothing to delete")
+        return
 
-        if success:
-            logger.info(f"Deleted row {row_number} for report {report_id}")
-        else:
-            logger.warn(f"Failed to delete row for report {report_id}, trying to find and delete")
-            found_row = sheets_service.find_row_by_report_id(spreadsheet_id, sheet_name, report_id)
-            if found_row:
-                sheets_service.delete_row(spreadsheet_id, sheet_name, found_row)
-                logger.info(f"Found and deleted row {found_row} for report {report_id}")
-
-    SyncTracker.delete_sync_record(event_id, report_id)
-    logger.info(f"Deleted sync record for report {report_id}")
+    if sheets_service.delete_row(spreadsheet_id, tab, row_number):
+        logger.info(f"Deleted row {row_number} for report {report_id}")
+    else:
+        logger.warn(f"Failed to delete row {row_number} for report {report_id}")
 
 
-def sync_report_to_sheets(event_id: str, report_id: str, report_data: dict, is_update: bool = False):
-    """Sync a single match report to Google Sheets."""
+def sync_report_to_sheets(event_id: str, report_id: str, report_data: dict) -> None:
+    """Push a single match report to its team's spreadsheet.
+
+    Row identity is resolved against the sheet itself rather than a tracker
+    collection: the sheet is the only record of what is in the sheet, so
+    there is no second store that can drift out of agreement with it."""
     from services.sheets_service import get_sheets_service
-    from services.sync_tracker import SyncTracker
-    
+
+    team_id = _resolve_team_id(event_id, report_data)
+    spreadsheet_id = _get_team_sheet_id(team_id)
+
+    if not spreadsheet_id:
+        logger.debug(
+            f"No sheet configured for team {team_id!r}; skipping sync of {report_id}"
+        )
+        return
+
+    tab = _event_tab_name(event_id, team_id)
+
+    # The event doc is authoritative for programType — the match doc's field
+    # may be missing (legacy writes, external admin writes) which used to
+    # silently force the sheet to FRC columns on first sync of an FTC event.
+    program_type = _resolve_event_program_type(event_id, report_data)
+
     try:
         sheets_service = get_sheets_service()
-        spreadsheet_id = get_master_spreadsheet_id()
-        
-        if not spreadsheet_id:
-            logger.error("MASTER_SPREADSHEET_ID not configured")
-            return
+        sheets_service.get_or_create_sheet(spreadsheet_id, tab, program_type)
 
-        # The event doc is authoritative for programType — the match doc's
-        # field may be missing (legacy writes, reverse-sync from Sheets,
-        # external admin writes) which used to silently force the sheet to
-        # FRC columns on first sync of an FTC event.
-        program_type = _resolve_event_program_type(event_id, report_data)
-
-        sheet_name = event_id
-        sheets_service.get_or_create_sheet(spreadsheet_id, sheet_name, program_type)
-        
         row_data = sheets_service.transform_match_report(report_data)
-        
-        sync_record = SyncTracker.get_sync_record(event_id, report_id)
-        
-        if sync_record and sync_record.get('rowNumber'):
-            row_number = sync_record['rowNumber']
-            sheets_service.update_row(spreadsheet_id, sheet_name, row_number, row_data)
+        row_number = sheets_service.find_row_by_report_id(spreadsheet_id, tab, report_id)
+
+        if row_number is not None:
+            sheets_service.update_row(spreadsheet_id, tab, row_number, row_data)
             logger.info(f"Updated report {report_id} in row {row_number}")
-            
-            SyncTracker.record_sync(
-                event_id=event_id,
-                report_id=report_id,
-                spreadsheet_id=spreadsheet_id,
-                sheet_name=sheet_name,
-                row_number=row_number,
-                status='updated'
-            )
         else:
-            row_number = sheets_service.append_row(spreadsheet_id, sheet_name, row_data)
+            row_number = sheets_service.append_row(spreadsheet_id, tab, row_data)
             logger.info(f"Appended report {report_id} to row {row_number}")
-            
-            SyncTracker.record_sync(
-                event_id=event_id,
-                report_id=report_id,
-                spreadsheet_id=spreadsheet_id,
-                sheet_name=sheet_name,
-                row_number=row_number,
-                status='success'
-            )
-            
+
     except Exception as e:
         logger.error(f"Failed to sync report {report_id}: {str(e)}")
-        SyncTracker.record_sync(
-            event_id=event_id,
-            report_id=report_id,
-            spreadsheet_id=get_master_spreadsheet_id() or 'unknown',
-            sheet_name=event_id,
-            row_number=0,
-            status='failed',
-            error_message=str(e)
-        )
         raise
 
 
