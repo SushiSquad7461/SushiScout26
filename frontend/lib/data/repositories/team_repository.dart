@@ -1,158 +1,90 @@
 import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import '../../core/auth/auth_exceptions.dart';
 import '../models/team.dart';
 
 class TeamRepository {
   final FirebaseFirestore _firestore;
+  final FirebaseFunctions _functions;
   static final Random _random = Random();
 
-  TeamRepository({FirebaseFirestore? firestore})
-      : _firestore = firestore ?? FirebaseFirestore.instance;
+  TeamRepository({FirebaseFirestore? firestore, FirebaseFunctions? functions})
+      : _firestore = firestore ?? FirebaseFirestore.instance,
+        _functions = functions ?? FirebaseFunctions.instance;
 
+  /// Creates a team via the server-side `create_team` callable. Rules
+  /// forbid clients from writing team/membership docs directly, and the
+  /// callable is what sets the `teams` custom auth claim.
   Future<Team> createTeam({
     required String name,
     required String createdBy,
     bool isMasterTeam = false,
   }) async {
-    final inviteCode = _generateInviteCode();
-    
-    final teamRef = _firestore.collection('teams').doc();
-    final team = Team(
-      id: teamRef.id,
-      name: name,
-      inviteCode: inviteCode,
-      createdBy: createdBy,
-      createdAt: DateTime.now(),
-      isMasterTeam: isMasterTeam,
-      memberCount: 1,
-    );
-
-    await _firestore.runTransaction((transaction) async {
-      final existing = await _firestore
-          .collection('teams')
-          .where('inviteCode', isEqualTo: inviteCode)
-          .get();
-      
-      if (existing.docs.isNotEmpty) {
-        throw const AuthException('Invite code collision, please try again');
-      }
-      
-      transaction.set(teamRef, team.toFirestore());
-
-      // Write to members subcollection so isTeamMember() rule works
-      final memberRef = teamRef.collection('members').doc(createdBy);
-      transaction.set(memberRef, {
-        'role': 'admin',
-        'joinedAt': Timestamp.fromDate(DateTime.now()),
+    try {
+      final callable = _functions.httpsCallable('create_team');
+      final result = await callable.call<dynamic>({
+        'name': name,
+        'isMasterTeam': isMasterTeam,
       });
-
-      // set+merge instead of update so first-time team creation works
-      // even if the user doc hasn't been bootstrapped yet.
-      final userRef = _firestore.collection('users').doc(createdBy);
-      transaction.set(userRef, {
-        'currentTeamId': teamRef.id,
-        'teamMemberships': {teamRef.id: 'admin'},
-      }, SetOptions(merge: true));
-    });
-
-    return team;
+      return _teamFromCallable(result.data);
+    } on FirebaseFunctionsException catch (e) {
+      _mapFunctionsError(e);
+    }
   }
 
+  /// Joins a team via the server-side `join_team` callable.
   Future<Team?> joinTeamByCode({
     required String inviteCode,
     required String userId,
   }) async {
-    final teamQuery = await _firestore
-        .collection('teams')
-        .where('inviteCode', isEqualTo: inviteCode.toUpperCase())
-        .get();
-
-    if (teamQuery.docs.isEmpty) {
-      throw const AuthExceptionInvalidInviteCode();
+    try {
+      final callable = _functions.httpsCallable('join_team');
+      final result = await callable.call<dynamic>({'inviteCode': inviteCode});
+      return _teamFromCallable(result.data);
+    } on FirebaseFunctionsException catch (e) {
+      _mapFunctionsError(e);
     }
-
-    final teamDoc = teamQuery.docs.first;
-    final team = Team.fromFirestore(teamDoc);
-
-    final userDoc = await _firestore.collection('users').doc(userId).get();
-    final userData = userDoc.data();
-    if (userData != null && userData['teamMemberships'] != null) {
-      final memberships = Map<String, String>.from(userData['teamMemberships']);
-      if (memberships.containsKey(team.id)) {
-        throw const AuthExceptionAlreadyInTeam();
-      }
-    }
-
-    await _firestore.runTransaction((transaction) async {
-      final userRef = _firestore.collection('users').doc(userId);
-      // set+merge so we don't fail if the user doc is missing.
-      transaction.set(userRef, {
-        'currentTeamId': team.id,
-        'teamMemberships': {
-          ...?userData?['teamMemberships'],
-          team.id: 'member',
-        },
-      }, SetOptions(merge: true));
-
-      final teamRef = _firestore.collection('teams').doc(team.id);
-      transaction.update(teamRef, {
-        'memberCount': FieldValue.increment(1),
-      });
-
-      // Write to members subcollection so isTeamMember() rule works
-      final memberRef = teamRef.collection('members').doc(userId);
-      transaction.set(memberRef, {
-        'role': 'member',
-        'joinedAt': Timestamp.fromDate(DateTime.now()),
-      });
-    });
-
-    return team;
   }
 
+  /// Leaves a team via the server-side `leave_team` callable.
   Future<void> leaveTeam({
     required String teamId,
     required String userId,
   }) async {
-    final teamDoc = await _firestore.collection('teams').doc(teamId).get();
-    final team = Team.fromFirestore(teamDoc);
-    
-    final userDoc = await _firestore.collection('users').doc(userId).get();
-    final userData = userDoc.data();
-    
-    if (userData == null) return;
-    
-    final memberships = Map<String, String>.from(userData['teamMemberships'] ?? {});
-    final currentRole = memberships[teamId];
-    
-    if (currentRole == 'admin' && team.memberCount == 1) {
-      throw const AuthExceptionCannotLeaveTeam();
+    try {
+      final callable = _functions.httpsCallable('leave_team');
+      await callable.call<dynamic>({'teamId': teamId});
+    } on FirebaseFunctionsException catch (e) {
+      _mapFunctionsError(e);
     }
+  }
 
-    await _firestore.runTransaction((transaction) async {
-      final userRef = _firestore.collection('users').doc(userId);
-      memberships.remove(teamId);
-      
-      String? newCurrentTeamId = userData['currentTeamId'];
-      if (newCurrentTeamId == teamId) {
-        newCurrentTeamId = memberships.keys.firstOrNull;
-      }
-      
-      transaction.update(userRef, {
-        'currentTeamId': newCurrentTeamId,
-        'teamMemberships': memberships,
-      });
+  Team _teamFromCallable(dynamic data) {
+    final map = Map<String, dynamic>.from(data as Map);
+    return Team(
+      id: map['teamId'] as String,
+      name: (map['name'] as String?) ?? '',
+      inviteCode: (map['inviteCode'] as String?) ?? '',
+      createdBy: (map['createdBy'] as String?) ?? '',
+      createdAt: DateTime.now(),
+      isMasterTeam: (map['isMasterTeam'] as bool?) ?? false,
+      memberCount: (map['memberCount'] as int?) ?? 1,
+    );
+  }
 
-      final teamRef = _firestore.collection('teams').doc(teamId);
-      transaction.update(teamRef, {
-        'memberCount': FieldValue.increment(-1),
-      });
-
-      // Remove from members subcollection
-      final memberRef = teamRef.collection('members').doc(userId);
-      transaction.delete(memberRef);
-    });
+  /// Maps a callable error to the AuthException the UI already handles.
+  Never _mapFunctionsError(FirebaseFunctionsException e) {
+    switch (e.code) {
+      case 'not-found':
+        throw const AuthExceptionInvalidInviteCode();
+      case 'already-exists':
+        throw const AuthExceptionAlreadyInTeam();
+      case 'failed-precondition':
+        throw const AuthExceptionCannotLeaveTeam();
+      default:
+        throw AuthException(e.message ?? 'Team operation failed');
+    }
   }
 
   Future<Team?> getTeam(String teamId) async {

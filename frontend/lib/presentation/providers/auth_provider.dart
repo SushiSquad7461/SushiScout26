@@ -6,6 +6,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 import '../../core/auth/auth_service.dart';
 import '../../core/auth/auth_state.dart';
 import '../../core/auth/auth_exceptions.dart';
+import '../../core/auth/claims_refresher.dart';
 import '../../data/repositories/auth_repository.dart';
 import '../../data/repositories/team_repository.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -200,12 +201,18 @@ class AuthNotifier extends Notifier<AuthState> {
       }
       
       final teamRepo = ref.read(teamRepositoryProvider);
-      await teamRepo.createTeam(
+      final team = await teamRepo.createTeam(
         name: name,
         createdBy: userId,
         isMasterTeam: isMasterTeam,
       );
-      
+
+      final authService = ref.read(authServiceProvider);
+      await waitForTeamClaim(
+        fetchClaims: authService.forceRefreshClaims,
+        expectedTeamId: team.id,
+      );
+
       await _loadUserProfile();
     } on AuthException catch (e) {
       state = AuthState(
@@ -240,11 +247,19 @@ class AuthNotifier extends Notifier<AuthState> {
       }
       
       final teamRepo = ref.read(teamRepositoryProvider);
-      await teamRepo.joinTeamByCode(
+      final team = await teamRepo.joinTeamByCode(
         inviteCode: inviteCode,
         userId: userId,
       );
-      
+
+      if (team != null) {
+        final authService = ref.read(authServiceProvider);
+        await waitForTeamClaim(
+          fetchClaims: authService.forceRefreshClaims,
+          expectedTeamId: team.id,
+        );
+      }
+
       await _loadUserProfile();
     } on AuthException catch (e) {
       state = AuthState(
