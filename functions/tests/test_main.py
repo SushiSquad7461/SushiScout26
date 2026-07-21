@@ -89,12 +89,13 @@ class TestOnMatchWrittenSoftDelete(unittest.TestCase):
     @patch.object(main, '_delete_sheet_row_for_report')
     @patch.object(main, 'sync_report_to_sheets')
     def test_soft_delete_transition_calls_delete_helper(self, mock_sync, mock_delete):
+        after = {'eventId': 'e1', 'isDeleted': True}
         evt = self._build_event(
             before={'eventId': 'e1', 'isDeleted': False},
-            after={'eventId': 'e1', 'isDeleted': True},
+            after=after,
         )
         main.on_match_written.__wrapped__(evt)
-        mock_delete.assert_called_once_with('e1', 'rep1')
+        mock_delete.assert_called_once_with('e1', 'rep1', after)
         mock_sync.assert_not_called()
 
     @patch.object(main, '_delete_sheet_row_for_report')
@@ -125,25 +126,14 @@ class TestOnMatchWrittenSoftDelete(unittest.TestCase):
     @patch.object(main, '_delete_sheet_row_for_report')
     @patch.object(main, 'sync_report_to_sheets')
     def test_hard_delete_calls_delete_helper(self, mock_sync, mock_delete):
+        before = {'eventId': 'e1', 'isDeleted': False}
         evt = self._build_event(
-            before={'eventId': 'e1', 'isDeleted': False},
+            before=before,
             after=None,
         )
         main.on_match_written.__wrapped__(evt)
-        mock_delete.assert_called_once_with('e1', 'rep1')
+        mock_delete.assert_called_once_with('e1', 'rep1', before)
         mock_sync.assert_not_called()
-
-    @patch.object(main, '_delete_sheet_row_for_report')
-    @patch.object(main, 'sync_report_to_sheets')
-    @patch('services.sync_tracker.SyncTracker')
-    def test_new_already_deleted_doc_is_skipped(self, mock_tracker, mock_sync, mock_delete):
-        evt = self._build_event(
-            before=None,
-            after={'eventId': 'e1', 'isDeleted': True},
-        )
-        main.on_match_written.__wrapped__(evt)
-        mock_sync.assert_not_called()
-        mock_delete.assert_not_called()
 
     @patch.object(main, '_delete_sheet_row_for_report')
     @patch.object(main, 'sync_report_to_sheets')
@@ -165,87 +155,61 @@ class TestOnMatchWrittenSoftDelete(unittest.TestCase):
 
     @patch.object(main, '_delete_sheet_row_for_report')
     @patch.object(main, 'sync_report_to_sheets')
-    def test_sheets_origin_update_is_skipped(self, mock_sync, mock_delete):
-        # Sheets→Firestore writes stamp lastSyncSource='sheets'. The
-        # trigger must not echo that data back to Sheets.
-        evt = self._build_event(
-            before={'eventId': 'e1', 'isDeleted': False, 'autoFuel': 1},
-            after={
-                'eventId': 'e1',
-                'isDeleted': False,
-                'autoFuel': 2,
-                'lastSyncSource': 'sheets',
-            },
-        )
-        main.on_match_written.__wrapped__(evt)
-        mock_sync.assert_not_called()
-        mock_delete.assert_not_called()
-
-    @patch.object(main, '_delete_sheet_row_for_report')
-    @patch.object(main, 'sync_report_to_sheets')
-    def test_app_edit_after_sheets_edit_still_syncs(self, mock_sync, mock_delete):
-        # Once the doc has been touched by Sheets, the very next app-side
-        # update must still flow back to Sheets. App writes now stamp
-        # lastSyncSource='app' explicitly so the guard distinguishes the
-        # origin from the after-value alone.
-        evt = self._build_event(
-            before={
-                'eventId': 'e1',
-                'isDeleted': False,
-                'autoFuel': 2,
-                'lastSyncSource': 'sheets',
-            },
-            after={
-                'eventId': 'e1',
-                'isDeleted': False,
-                'autoFuel': 3,
-                'lastSyncSource': 'app',
-            },
-        )
-        main.on_match_written.__wrapped__(evt)
-        mock_sync.assert_called_once()
-
-    @patch.object(main, '_delete_sheet_row_for_report')
-    @patch.object(main, 'sync_report_to_sheets')
-    def test_repeated_sheets_edit_does_not_echo(self, mock_sync, mock_delete):
-        # The previous guard required `before != 'sheets'`, so a SECOND
-        # consecutive Sheets edit (before='sheets', after='sheets')
-        # slipped through and got echoed back. The simplified guard
-        # treats any after=='sheets' as a Sheets-origin write.
-        evt = self._build_event(
-            before={
-                'eventId': 'e1',
-                'isDeleted': False,
-                'autoFuel': 2,
-                'lastSyncSource': 'sheets',
-            },
-            after={
-                'eventId': 'e1',
-                'isDeleted': False,
-                'autoFuel': 3,
-                'lastSyncSource': 'sheets',
-            },
-        )
-        main.on_match_written.__wrapped__(evt)
-        mock_sync.assert_not_called()
-        mock_delete.assert_not_called()
-
-    @patch.object(main, '_delete_sheet_row_for_report')
-    @patch.object(main, 'sync_report_to_sheets')
-    def test_sheets_origin_soft_delete_still_propagates(self, mock_sync, mock_delete):
+    def test_soft_delete_with_legacy_sync_source_still_propagates(self, mock_sync, mock_delete):
         # A Sheets edit that flips isDeleted must NOT be silently swallowed
         # by the echo guard — the trigger still needs to remove the row.
+        after = {
+            'eventId': 'e1',
+            'isDeleted': True,
+            'lastSyncSource': 'sheets',
+        }
         evt = self._build_event(
             before={'eventId': 'e1', 'isDeleted': False},
-            after={
-                'eventId': 'e1',
-                'isDeleted': True,
-                'lastSyncSource': 'sheets',
-            },
+            after=after,
         )
         main.on_match_written.__wrapped__(evt)
-        mock_delete.assert_called_once_with('e1', 'rep1')
+        mock_delete.assert_called_once_with('e1', 'rep1', after)
         mock_sync.assert_not_called()
+
+    @patch.object(main, '_delete_sheet_row_for_report')
+    @patch.object(main, 'sync_report_to_sheets')
+    def test_legacy_sheets_source_no_longer_blocks_sync(self, mock_sync, mock_delete):
+        """lastSyncSource is dead residue on old docs — it must not suppress
+        an export the way the removed echo guard did."""
+        evt = self._build_event(
+            before={'eventId': 'e1', 'lastSyncSource': 'sheets'},
+            after={'eventId': 'e1', 'lastSyncSource': 'sheets', 'scouterName': 'sam'},
+        )
+
+        main.on_match_written.__wrapped__(evt)
+
+        mock_sync.assert_called_once_with('e1', 'rep1', evt.data.after.to_dict.return_value)
+        mock_delete.assert_not_called()
+
+    @patch.object(main, '_delete_sheet_row_for_report')
+    @patch.object(main, 'sync_report_to_sheets')
+    def test_new_already_deleted_doc_is_skipped(self, mock_sync, mock_delete):
+        evt = self._build_event(
+            before=None,
+            after={'eventId': 'e1', 'isDeleted': True, 'scouterName': 'sam'},
+        )
+
+        main.on_match_written.__wrapped__(evt)
+
+        mock_sync.assert_not_called()
+        mock_delete.assert_not_called()
+
+    @patch.object(main, '_delete_sheet_row_for_report')
+    @patch.object(main, 'sync_report_to_sheets')
+    def test_delete_helper_receives_report_data(self, mock_sync, mock_delete):
+        """The delete path needs the doc to resolve teamId -> spreadsheet."""
+        before = {'eventId': 'e1', 'teamId': 't1', 'isDeleted': False}
+        after = {'eventId': 'e1', 'teamId': 't1', 'isDeleted': True}
+        evt = self._build_event(before=before, after=after)
+
+        main.on_match_written.__wrapped__(evt)
+
+        mock_delete.assert_called_once_with('e1', 'rep1', after)
 
     @patch.object(main, '_delete_sheet_row_for_report')
     @patch.object(main, 'sync_report_to_sheets')

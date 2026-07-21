@@ -179,7 +179,7 @@ def sync_report_to_sheets(event_id: str, report_id: str, report_data: dict) -> N
         raise
 
 
-@firestore_fn.on_document_written(document="matches/{reportId}", secrets=["GOOGLE_SHEETS_CREDENTIALS", "MASTER_SPREADSHEET_ID"])
+@firestore_fn.on_document_written(document="matches/{reportId}", secrets=["GOOGLE_SHEETS_CREDENTIALS"])
 def on_match_written(event: firestore_fn.Event):
     """Trigger when a match report is created, updated, or deleted in Firestore."""
     report_id = event.params['reportId']
@@ -211,7 +211,7 @@ def on_match_written(event: firestore_fn.Event):
     if data_before and not data_after:
         logger.info(f"Processing hard-deleted match report: {report_id} for event {event_id}")
         try:
-            _delete_sheet_row_for_report(event_id, report_id)
+            _delete_sheet_row_for_report(event_id, report_id, data_before)
         except Exception as e:
             logger.error(f"Failed to sync delete for report {report_id}: {str(e)}")
     elif not data_before and data_after:
@@ -222,42 +222,17 @@ def on_match_written(event: firestore_fn.Event):
             return
 
         logger.info(f"Processing new match report: {report_id} for event {event_id}")
-
-        from services.sync_tracker import SyncTracker
-        existing = SyncTracker.get_sync_record(event_id, report_id)
-        if existing and existing.get('status') == 'success':
-            logger.info(f"Report {report_id} already synced, skipping")
-            return
-
-        sync_report_to_sheets(event_id, report_id, data_after, is_update=False)
+        sync_report_to_sheets(event_id, report_id, data_after)
     elif data_before and data_after:
         was_deleted = bool(data_before.get('isDeleted'))
         is_deleted = bool(data_after.get('isDeleted'))
-
-        # Echo guard: if this update came from the Sheets → Firestore path
-        # (update_match_from_sheets / sync_from_sheets_http stamp
-        # lastSyncSource='sheets'), don't push the same data back to Sheets.
-        # App-originated writes stamp lastSyncSource='app' explicitly, so
-        # the after-value alone tells us the origin — we don't need to
-        # compare against before. (The earlier "transition-only" guard
-        # echoed on the SECOND consecutive sheets edit because before was
-        # also 'sheets'.) was_deleted == is_deleted ensures soft deletes
-        # initiated from Sheets still propagate to the trash path below.
-        if (
-            data_after.get('lastSyncSource') == 'sheets'
-            and was_deleted == is_deleted
-        ):
-            logger.info(
-                f"Skipping echo sync for {report_id}: write originated in Sheets"
-            )
-            return
 
         if is_deleted and not was_deleted:
             # Soft delete (trash): remove the row from Sheets so trashed
             # matches don't keep showing up in analysis views.
             logger.info(f"Processing soft-deleted match report: {report_id} for event {event_id}")
             try:
-                _delete_sheet_row_for_report(event_id, report_id)
+                _delete_sheet_row_for_report(event_id, report_id, data_after)
             except Exception as e:
                 logger.error(f"Failed to sync soft delete for report {report_id}: {str(e)}")
             return
@@ -268,10 +243,10 @@ def on_match_written(event: firestore_fn.Event):
             logger.info(f"Ignoring update to soft-deleted match {report_id}")
             return
 
-        # Restore (was_deleted -> not is_deleted) is handled here too: the
-        # sync record was cleared on trash, so this re-appends a new row.
+        # Restore (was_deleted -> not is_deleted) lands here too: the row was
+        # removed on trash, so find_row_by_report_id misses and re-appends.
         logger.info(f"Processing updated match report: {report_id} for event {event_id}")
-        sync_report_to_sheets(event_id, report_id, data_after, is_update=True)
+        sync_report_to_sheets(event_id, report_id, data_after)
 
 
 def _generate_invite_code() -> str:
