@@ -85,15 +85,45 @@ class TestLeaveTeam(unittest.TestCase):
     def test_last_admin_cannot_leave(self, mock_db, mock_claims):
         db = mock_db.return_value
         team_ref = MagicMock()
-        team_ref.get.return_value = Mock(exists=True, **{'to_dict.return_value': {'memberCount': 1}})
+        team_ref.get.return_value = Mock(exists=True, **{'to_dict.return_value': {'memberCount': 2}})
         member_snap = Mock(exists=True)
         member_snap.to_dict.return_value = {'role': 'admin'}
         team_ref.collection.return_value.document.return_value.get.return_value = member_snap
+        # Only one admin in the members subcollection -> leaving is blocked,
+        # even though memberCount (2) would have passed the old buggy check.
+        admin_doc = Mock()
+        team_ref.collection.return_value.where.return_value.get.return_value = [admin_doc]
         db.collection.return_value.document.return_value = team_ref
 
         with self.assertRaises(https_fn.HttpsError):
             main.leave_team.__wrapped__.__wrapped__(_req('uid1', {'teamId': 'team_x'}))
         mock_claims.assert_not_called()
+
+    @patch('main._set_team_claims')
+    @patch('main.get_db')
+    def test_non_last_admin_can_leave(self, mock_db, mock_claims):
+        db = mock_db.return_value
+        team_ref = MagicMock()
+        team_ref.get.return_value = Mock(exists=True, **{'to_dict.return_value': {'memberCount': 2}})
+        member_snap = Mock(exists=True)
+        member_snap.to_dict.return_value = {'role': 'admin'}
+        team_ref.collection.return_value.document.return_value.get.return_value = member_snap
+        # Two admins in the members subcollection -> this admin may leave.
+        team_ref.collection.return_value.where.return_value.get.return_value = [Mock(), Mock()]
+        db.collection.return_value.document.return_value = team_ref
+
+        result = main.leave_team.__wrapped__.__wrapped__(_req('uid1', {'teamId': 'team_x'}))
+        self.assertTrue(result['success'])
+        mock_claims.assert_called_once()
+
+
+class TestSetTeamClaims(unittest.TestCase):
+    @patch('main.fb_auth')
+    def test_wraps_memberships_under_teams_key(self, mock_fb_auth):
+        main._set_team_claims('uid1', {'teamA': 'admin'})
+        mock_fb_auth.set_custom_user_claims.assert_called_once_with(
+            'uid1', {'teams': {'teamA': 'admin'}}
+        )
 
 
 if __name__ == '__main__':

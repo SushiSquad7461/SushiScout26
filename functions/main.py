@@ -1,7 +1,7 @@
 """Main entry point for Firebase Cloud Functions."""
 
 import os
-import random
+import secrets
 from firebase_functions import https_fn, firestore_fn, logger, options
 from firebase_functions.options import CorsOptions
 from firebase_admin import initialize_app, firestore, auth as fb_auth
@@ -262,7 +262,7 @@ def on_match_written(event: firestore_fn.Event):
 
 def _generate_invite_code() -> str:
     chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
-    return ''.join(random.choice(chars) for _ in range(6))
+    return ''.join(secrets.choice(chars) for _ in range(8))
 
 
 def _set_team_claims(uid: str, memberships: dict) -> None:
@@ -380,9 +380,11 @@ def leave_team(req: https_fn.CallableRequest) -> dict:
     member_snap = member_ref.get()
     if not member_snap.exists:
         raise https_fn.HttpsError(https_fn.FunctionsErrorCode.PERMISSION_DENIED, "Not a member of this team")
-    if (member_snap.to_dict() or {}).get('role') == 'admin' and team.get('memberCount', 0) <= 1:
-        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
-                                  "The last admin cannot leave the team")
+    if (member_snap.to_dict() or {}).get('role') == 'admin':
+        admins = list(team_ref.collection('members').where('role', '==', 'admin').get())
+        if len(admins) <= 1:
+            raise https_fn.HttpsError(https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
+                                      "The last admin cannot leave the team")
 
     user_snap = db.collection('users').document(uid).get()
     user_data = user_snap.to_dict() or {} if user_snap.exists else {}
