@@ -30,20 +30,15 @@ def get_master_spreadsheet_id() -> str:
     return os.environ.get('MASTER_SPREADSHEET_ID') or ''
 
 
-def _is_team_member(uid: str, team_id: str) -> bool:
-    """True if uid is a member of team_id. Cloud Functions use the Admin SDK
-    which bypasses Firestore rules, so callable functions must check team
-    membership themselves before mutating team-scoped data."""
-    if not uid or not team_id:
+def _is_team_member(auth_token: dict | None, team_id: str) -> bool:
+    """True if the caller's token carries `team_id` in its `teams` custom
+    claim. Cloud Functions use the Admin SDK which bypasses Firestore
+    rules, so callables must check membership themselves — but the claim
+    (mirrored by on_user_membership_changed) makes it a free token read
+    instead of a Firestore lookup."""
+    if not auth_token or not team_id:
         return False
-    db = get_db()
-    member_ref = (
-        db.collection('teams')
-        .document(team_id)
-        .collection('members')
-        .document(uid)
-    )
-    return member_ref.get().exists
+    return team_id in (auth_token.get('teams') or {})
 
 
 def _resolve_event_program_type(event_id: str, report_data: dict | None = None) -> str:
@@ -447,7 +442,7 @@ def backfill_event_to_sheets(req: https_fn.CallableRequest) -> dict:
             program_type = event_data.get('programType', 'FRC')
             event_team_id = event_data.get('teamId', '') or ''
 
-        if event_team_id and not _is_team_member(req.auth.uid, event_team_id):
+        if event_team_id and not _is_team_member(req.auth.token, event_team_id):
             raise https_fn.HttpsError(
                 code=https_fn.FunctionsErrorCode.PERMISSION_DENIED,
                 message="Caller is not a member of the team that owns this event"
@@ -580,7 +575,7 @@ def update_match_from_sheets(req: https_fn.CallableRequest) -> dict:
             )
 
         existing_team_id = existing_data.get('teamId', '') or ''
-        if existing_team_id and not _is_team_member(req.auth.uid, existing_team_id):
+        if existing_team_id and not _is_team_member(req.auth.token, existing_team_id):
             raise https_fn.HttpsError(
                 code=https_fn.FunctionsErrorCode.PERMISSION_DENIED,
                 message="Caller is not a member of the team that owns this match"
