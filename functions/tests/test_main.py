@@ -323,5 +323,83 @@ class TestOnMatchWrittenSoftDelete(unittest.TestCase):
         mock_sync.assert_called_once()
 
 
+class TestResolveTeamId(unittest.TestCase):
+    """teamId comes from the match doc, falling back to the event doc the
+    same way programType does — legacy and externally-written match docs
+    may not carry it."""
+
+    @patch.object(main, 'get_db')
+    def test_prefers_report_team_id(self, mock_get_db):
+        self.assertEqual(
+            main._resolve_team_id('t1_evt', {'teamId': 't1'}), 't1'
+        )
+        mock_get_db.assert_not_called()
+
+    @patch.object(main, 'get_db')
+    def test_falls_back_to_event_doc(self, mock_get_db):
+        doc = Mock()
+        doc.exists = True
+        doc.to_dict.return_value = {'teamId': 't1'}
+        mock_get_db.return_value.collection.return_value.document.return_value.get.return_value = doc
+
+        self.assertEqual(main._resolve_team_id('t1_evt', {}), 't1')
+
+    @patch.object(main, 'get_db')
+    def test_returns_empty_when_unknown(self, mock_get_db):
+        doc = Mock()
+        doc.exists = False
+        mock_get_db.return_value.collection.return_value.document.return_value.get.return_value = doc
+
+        self.assertEqual(main._resolve_team_id('evt', {}), '')
+
+
+class TestGetTeamSheetId(unittest.TestCase):
+
+    @patch.object(main, 'get_db')
+    def test_returns_configured_id(self, mock_get_db):
+        doc = Mock()
+        doc.exists = True
+        doc.to_dict.return_value = {'googleSheetId': 'sheet-abc'}
+        mock_get_db.return_value.collection.return_value.document.return_value.get.return_value = doc
+
+        self.assertEqual(main._get_team_sheet_id('t1'), 'sheet-abc')
+
+    @patch.object(main, 'get_db')
+    def test_returns_empty_when_settings_doc_missing(self, mock_get_db):
+        doc = Mock()
+        doc.exists = False
+        mock_get_db.return_value.collection.return_value.document.return_value.get.return_value = doc
+
+        self.assertEqual(main._get_team_sheet_id('t1'), '')
+
+    @patch.object(main, 'get_db')
+    def test_returns_empty_when_field_absent(self, mock_get_db):
+        doc = Mock()
+        doc.exists = True
+        doc.to_dict.return_value = {'defaultEventCode': 'waore'}
+        mock_get_db.return_value.collection.return_value.document.return_value.get.return_value = doc
+
+        self.assertEqual(main._get_team_sheet_id('t1'), '')
+
+    def test_returns_empty_for_empty_team_id(self):
+        self.assertEqual(main._get_team_sheet_id(''), '')
+
+
+class TestEventTabName(unittest.TestCase):
+    """The workbook is already team-scoped, so tabs use the bare event code."""
+
+    def test_strips_team_prefix(self):
+        self.assertEqual(main._event_tab_name('t1_2026waore', 't1'), '2026waore')
+
+    def test_leaves_uncomposite_id_alone(self):
+        self.assertEqual(main._event_tab_name('2026waore', 't1'), '2026waore')
+
+    def test_leaves_id_alone_when_team_unknown(self):
+        self.assertEqual(main._event_tab_name('t1_2026waore', ''), 't1_2026waore')
+
+    def test_only_strips_first_occurrence(self):
+        self.assertEqual(main._event_tab_name('t1_t1_evt', 't1'), 't1_evt')
+
+
 if __name__ == '__main__':
     unittest.main()

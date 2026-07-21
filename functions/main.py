@@ -60,6 +60,51 @@ def _resolve_event_program_type(event_id: str, report_data: dict | None = None) 
     return 'FRC'
 
 
+def _resolve_team_id(event_id: str, report_data: dict | None = None) -> str:
+    """Resolve the owning teamId for a match. The match doc normally
+    carries it, but legacy and externally-written docs may not — fall back
+    to the event doc, which Step 1 (team isolation) made authoritative."""
+    if report_data and report_data.get('teamId'):
+        return report_data['teamId']
+
+    try:
+        event_doc = get_db().collection('events').document(event_id).get()
+        if event_doc.exists:
+            return (event_doc.to_dict() or {}).get('teamId') or ''
+    except Exception as e:
+        logger.warn(f"Failed to read event {event_id} for teamId: {e}")
+
+    return ''
+
+
+def _get_team_sheet_id(team_id: str) -> str:
+    """The team's own spreadsheet id, or '' when export isn't configured.
+
+    Sheets export is opt-in: an unset id is a normal state, not an error."""
+    if not team_id:
+        return ''
+
+    try:
+        doc = get_db().collection('teamSettings').document(team_id).get()
+        if doc.exists:
+            return (doc.to_dict() or {}).get('googleSheetId') or ''
+    except Exception as e:
+        logger.warn(f"Failed to read teamSettings/{team_id}: {e}")
+
+    return ''
+
+
+def _event_tab_name(event_id: str, team_id: str) -> str:
+    """Tab name for an event inside a team's workbook.
+
+    Event ids are composite `{teamId}_{eventCode}`. The workbook already
+    belongs to one team, so the prefix is redundant noise in the tab name."""
+    prefix = f"{team_id}_"
+    if team_id and event_id.startswith(prefix):
+        return event_id[len(prefix):]
+    return event_id
+
+
 def _delete_sheet_row_for_report(event_id: str, report_id: str) -> None:
     """Remove a report's row from Sheets and clear its sync record.
     Used for hard deletes and for soft-delete transitions."""
