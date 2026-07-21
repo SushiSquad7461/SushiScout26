@@ -8,7 +8,11 @@ venv/
 # Firebase
 .firebase/
 firebase-debug.log
+firestore-debug.log
 ui-debug.log
+
+# Node (Firestore rules test harness)
+node_modules/
 
 # Secrets and sensitive files
 *.json.key
@@ -45,3 +49,4 @@ frontend/.pub/
 .claude/ralph-loop*.md
 .superpowers/
 .opencode/
+test/firestore-rules/package-lock.json

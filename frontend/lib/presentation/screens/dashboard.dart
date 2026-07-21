@@ -19,6 +19,7 @@ import '../widgets/match_search_delegate.dart';
 import '../../data/services/export_service.dart';
 import '../../core/validation/form_validators.dart';
 import '../providers/auth_provider.dart';
+import '../providers/event_providers.dart';
 import 'dart:async';
 
 class DashboardScreen extends ConsumerStatefulWidget {
@@ -34,9 +35,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   @override
   void initState() {
     super.initState();
-    final eventCode =
-        ref.read(settingsProvider)[PrefKeys.eventCode] ?? "Unknown";
-    _matchesStream = ref.read(hybridRepositoryProvider).watchMatches(eventCode);
+    final eventId = ref.read(currentEventIdProvider);
+    _matchesStream = ref.read(hybridRepositoryProvider).watchMatches(eventId);
   }
 
   void _openSettings(BuildContext context) {
@@ -46,18 +46,16 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       useSafeArea: true,
       builder: (context) => const _SettingsSheet(),
     ).then((_) {
-      final eventCode =
-          ref.read(settingsProvider)[PrefKeys.eventCode] ?? "Unknown";
+      final eventId = ref.read(currentEventIdProvider);
       setState(() {
-        _matchesStream = ref.read(hybridRepositoryProvider).watchMatches(eventCode);
+        _matchesStream = ref.read(hybridRepositoryProvider).watchMatches(eventId);
       });
     });
   }
 
   Future<void> _showExportOptions(BuildContext context, WidgetRef ref) async {
-    final eventCode =
-        ref.read(settingsProvider)[PrefKeys.eventCode] ?? "Unknown";
-    final matches = await ref.read(hybridRepositoryProvider).getMatches(eventCode);
+    final eventId = ref.read(currentEventIdProvider);
+    final matches = await ref.read(hybridRepositoryProvider).getMatches(eventId);
 
     if (!context.mounted) return;
 
@@ -105,9 +103,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   }
 
   Future<void> _exportCsv(BuildContext context, WidgetRef ref) async {
-    final eventCode =
-        ref.read(settingsProvider)[PrefKeys.eventCode] ?? "Unknown";
-    final matches = await ref.read(hybridRepositoryProvider).getMatches(eventCode);
+    final eventId = ref.read(currentEventIdProvider);
+    final matches = await ref.read(hybridRepositoryProvider).getMatches(eventId);
 
     if (!context.mounted) return;
 
@@ -191,11 +188,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
   Future<void> _onRefresh() async {
     AppHaptics.medium();
-    final eventCode =
-        ref.read(settingsProvider)[PrefKeys.eventCode] ?? "Unknown";
+    final eventId = ref.read(currentEventIdProvider);
     // Force refresh by re-creating the stream
     setState(() {
-      _matchesStream = ref.read(hybridRepositoryProvider).watchMatches(eventCode);
+      _matchesStream = ref.read(hybridRepositoryProvider).watchMatches(eventId);
     });
     // Wait a moment for the stream to update
     await Future.delayed(const Duration(milliseconds: 500));
@@ -235,8 +231,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 icon: const Icon(Icons.search),
                 tooltip: "Search Matches",
                 onPressed: () async {
-                  final eventCode = ref.read(settingsProvider)[PrefKeys.eventCode] ?? "Unknown";
-                  final matches = await ref.read(hybridRepositoryProvider).getMatches(eventCode);
+                  final eventId = ref.read(currentEventIdProvider);
+                  final matches = await ref.read(hybridRepositoryProvider).getMatches(eventId);
                   if (context.mounted) {
                     showSearch(
                       context: context,
@@ -530,14 +526,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           onPressed: () async {
             try {
               AppHaptics.medium();
-              final eventCode =
-                  ref.read(settingsProvider)[PrefKeys.eventCode] ?? "Unknown";
+              final eventId = ref.read(currentEventIdProvider);
+              final eventCode = ref.read(currentEventCodeProvider);
               final programType =
                   ref.read(settingsProvider)[PrefKeys.programType] ?? "FRC";
 
               // Timeout prevents hanging when Firestore is slow/offline
               final event = await ref.read(hybridRepositoryProvider)
-                  .getEvent(eventCode)
+                  .getEvent(eventId)
                   .timeout(const Duration(seconds: 5), onTimeout: () => null);
 
               if (!context.mounted) return;
@@ -551,11 +547,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   ),
                 );
                 final dummyEvent = Event(
-                  id: eventCode,
-                  name: "Dummy/Offline Event",
+                  id: eventId,          // composite: events/matches
+                  name: eventCode,
                   programType: programType,
-                  tbaKey: eventCode,
+                  tbaKey: eventCode,    // raw code: schedule/TBA
                   startDate: DateTime.now(),
+                  teamId: ref.read(currentTeamIdProvider) ?? '',
                 );
 
                 Navigator.of(context).push(
@@ -825,12 +822,12 @@ class _MatchCard extends ConsumerWidget {
   }
 
   Future<void> _moveToTrash(BuildContext context, WidgetRef ref) async {
-    final eventCode = ref.read(settingsProvider)[PrefKeys.eventCode];
-    if (eventCode == null || eventCode.isEmpty) return;
+    final eventId = ref.read(currentEventIdProvider);
+    if (eventId.isEmpty) return;
 
     try {
       final repo = ref.read(hybridRepositoryProvider);
-      await repo.trashMatch(eventCode, match.id);
+      await repo.trashMatch(eventId, match.id);
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -840,7 +837,7 @@ class _MatchCard extends ConsumerWidget {
               label: "Undo",
               onPressed: () async {
                 try {
-                  await repo.restoreMatch(eventCode, match.id);
+                  await repo.restoreMatch(eventId, match.id);
                 } catch (_) {
                   // Silently fail undo — user can restore from trash screen
                 }

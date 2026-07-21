@@ -81,6 +81,15 @@ class AuthService {
     }
   }
 
+  /// Force-refreshes the ID token and returns its custom claims. Used after
+  /// a team create/join so the new `teams` claim takes effect immediately.
+  Future<Map<String, dynamic>> forceRefreshClaims() async {
+    final user = _auth.currentUser;
+    if (user == null) return const {};
+    final result = await user.getIdTokenResult(true);
+    return result.claims ?? const {};
+  }
+
   Future<UserProfile?> getUserProfile(String uid) async {
     final doc = await _firestore.collection('users').doc(uid).get();
     if (doc.exists) {

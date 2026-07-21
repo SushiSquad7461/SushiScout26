@@ -88,6 +88,19 @@ class MockAuthService extends _i1.Mock implements _i4.AuthService {
           as _i5.Future<void>);
 
   @override
+  _i5.Future<Map<String, dynamic>> forceRefreshClaims() =>
+      (super.noSuchMethod(
+            Invocation.method(#forceRefreshClaims, []),
+            returnValue: _i5.Future<Map<String, dynamic>>.value(
+              <String, dynamic>{},
+            ),
+            returnValueForMissingStub: _i5.Future<Map<String, dynamic>>.value(
+              <String, dynamic>{},
+            ),
+          )
+          as _i5.Future<Map<String, dynamic>>);
+
+  @override
   _i5.Future<_i3.UserProfile?> getUserProfile(String? uid) =>
       (super.noSuchMethod(
             Invocation.method(#getUserProfile, [uid]),

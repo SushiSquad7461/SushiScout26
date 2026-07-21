@@ -83,7 +83,7 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm>
   }
 
   Future<void> _loadSchedule() async {
-    final eventCode = widget.eventId;
+    final eventCode = widget.event.tbaKey;
     final programType = widget.event.programType;
     if (eventCode.isEmpty) return;
 

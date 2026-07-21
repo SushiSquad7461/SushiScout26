@@ -11,38 +11,22 @@ with patch('firebase_admin.initialize_app'):
 
 
 class TestIsTeamMember(unittest.TestCase):
-    """Verify _is_team_member checks the teams/{tid}/members/{uid} doc."""
+    """Membership is now read from the token's `teams` custom claim."""
 
-    def setUp(self):
-        main._db = None  # reset singleton
+    def test_none_token_returns_false(self):
+        self.assertFalse(main._is_team_member(None, 'team1'))
 
-    @patch('main.get_db')
-    def test_empty_uid_returns_false(self, mock_get_db):
-        self.assertFalse(main._is_team_member('', 'team1'))
-        mock_get_db.assert_not_called()
+    def test_empty_team_returns_false(self):
+        self.assertFalse(main._is_team_member({'teams': {'team1': 'admin'}}, ''))
 
-    @patch('main.get_db')
-    def test_empty_team_returns_false(self, mock_get_db):
-        self.assertFalse(main._is_team_member('uid1', ''))
-        mock_get_db.assert_not_called()
+    def test_true_when_team_in_claim(self):
+        self.assertTrue(main._is_team_member({'teams': {'team1': 'admin'}}, 'team1'))
 
-    @patch('main.get_db')
-    def test_returns_true_when_member_doc_exists(self, mock_get_db):
-        member_doc = Mock(exists=True)
-        chain = mock_get_db.return_value.collection.return_value.document.return_value \
-            .collection.return_value.document.return_value
-        chain.get.return_value = member_doc
+    def test_false_when_team_not_in_claim(self):
+        self.assertFalse(main._is_team_member({'teams': {'team2': 'member'}}, 'team1'))
 
-        self.assertTrue(main._is_team_member('uid1', 'team1'))
-
-    @patch('main.get_db')
-    def test_returns_false_when_member_doc_missing(self, mock_get_db):
-        member_doc = Mock(exists=False)
-        chain = mock_get_db.return_value.collection.return_value.document.return_value \
-            .collection.return_value.document.return_value
-        chain.get.return_value = member_doc
-
-        self.assertFalse(main._is_team_member('uid1', 'team1'))
+    def test_false_when_no_teams_claim(self):
+        self.assertFalse(main._is_team_member({'email': 'a@b.c'}, 'team1'))
 
 
 class TestDeleteSheetRowForReport(unittest.TestCase):

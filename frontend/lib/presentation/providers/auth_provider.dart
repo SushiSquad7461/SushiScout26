@@ -6,6 +6,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 import '../../core/auth/auth_service.dart';
 import '../../core/auth/auth_state.dart';
 import '../../core/auth/auth_exceptions.dart';
+import '../../core/auth/claims_refresher.dart';
 import '../../data/repositories/auth_repository.dart';
 import '../../data/repositories/team_repository.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -200,12 +201,18 @@ class AuthNotifier extends Notifier<AuthState> {
       }
       
       final teamRepo = ref.read(teamRepositoryProvider);
-      await teamRepo.createTeam(
+      final team = await teamRepo.createTeam(
         name: name,
         createdBy: userId,
         isMasterTeam: isMasterTeam,
       );
-      
+
+      final authService = ref.read(authServiceProvider);
+      await waitForTeamClaim(
+        fetchClaims: authService.forceRefreshClaims,
+        expectedTeamId: team.id,
+      );
+
       await _loadUserProfile();
     } on AuthException catch (e) {
       state = AuthState(
@@ -240,11 +247,19 @@ class AuthNotifier extends Notifier<AuthState> {
       }
       
       final teamRepo = ref.read(teamRepositoryProvider);
-      await teamRepo.joinTeamByCode(
+      final team = await teamRepo.joinTeamByCode(
         inviteCode: inviteCode,
         userId: userId,
       );
-      
+
+      if (team != null) {
+        final authService = ref.read(authServiceProvider);
+        await waitForTeamClaim(
+          fetchClaims: authService.forceRefreshClaims,
+          expectedTeamId: team.id,
+        );
+      }
+
       await _loadUserProfile();
     } on AuthException catch (e) {
       state = AuthState(
@@ -276,6 +291,20 @@ class AuthNotifier extends Notifier<AuthState> {
 
       final teamRepo = ref.read(teamRepositoryProvider);
       await teamRepo.leaveTeam(teamId: teamId, userId: userId);
+
+      // Force-refresh the token so the reduced claim (team removed
+      // server-side) takes effect immediately, closing the isolation seam
+      // where a stale token would still grant access to the left team's
+      // data until the natural ~1h refresh. Unlike join, we're waiting for
+      // a claim to disappear, so a single forced refresh (not
+      // waitForTeamClaim's polling-for-presence) is what fits here.
+      try {
+        await ref.read(authServiceProvider).forceRefreshClaims();
+      } catch (_) {
+        // A failed refresh should not crash the leave — the profile reload
+        // below still reflects the server-side membership change, and the
+        // token will naturally refresh later.
+      }
 
       await _loadUserProfile();
     } catch (e) {

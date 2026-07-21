@@ -1,9 +1,10 @@
 """Main entry point for Firebase Cloud Functions."""
 
 import os
+import secrets
 from firebase_functions import https_fn, firestore_fn, logger, options
 from firebase_functions.options import CorsOptions
-from firebase_admin import initialize_app, firestore
+from firebase_admin import initialize_app, firestore, auth as fb_auth
 from flask import jsonify, Request, Response
 
 # Initialize Firebase Admin
@@ -29,20 +30,15 @@ def get_master_spreadsheet_id() -> str:
     return os.environ.get('MASTER_SPREADSHEET_ID') or ''
 
 
-def _is_team_member(uid: str, team_id: str) -> bool:
-    """True if uid is a member of team_id. Cloud Functions use the Admin SDK
-    which bypasses Firestore rules, so callable functions must check team
-    membership themselves before mutating team-scoped data."""
-    if not uid or not team_id:
+def _is_team_member(auth_token: dict | None, team_id: str) -> bool:
+    """True if the caller's token carries `team_id` in its `teams` custom
+    claim. Cloud Functions use the Admin SDK which bypasses Firestore
+    rules, so callables must check membership themselves — but the claim
+    (set by the membership callables: create_team/join_team/leave_team)
+    makes it a free token read instead of a Firestore lookup."""
+    if not auth_token or not team_id:
         return False
-    db = get_db()
-    member_ref = (
-        db.collection('teams')
-        .document(team_id)
-        .collection('members')
-        .document(uid)
-    )
-    return member_ref.get().exists
+    return team_id in (auth_token.get('teams') or {})
 
 
 def _resolve_event_program_type(event_id: str, report_data: dict | None = None) -> str:
@@ -259,6 +255,150 @@ def on_match_written(event: firestore_fn.Event):
         sync_report_to_sheets(event_id, report_id, data_after, is_update=True)
 
 
+def _generate_invite_code() -> str:
+    chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+    return ''.join(secrets.choice(chars) for _ in range(8))
+
+
+def _set_team_claims(uid: str, memberships: dict) -> None:
+    """Mirror a user's team memberships into their auth token. The claim is
+    the ONLY membership signal Firestore rules trust, and it is written only
+    here (server-side) — clients cannot forge it."""
+    fb_auth.set_custom_user_claims(uid, {'teams': memberships})
+
+
+def _user_memberships(db, uid: str) -> dict:
+    snap = db.collection('users').document(uid).get()
+    if not snap.exists:
+        return {}
+    return dict((snap.to_dict() or {}).get('teamMemberships') or {})
+
+
+@https_fn.on_call()
+def create_team(req: https_fn.CallableRequest) -> dict:
+    """Create a team, make the caller its admin, and set their claim."""
+    if not req.auth:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.UNAUTHENTICATED, "Must be authenticated")
+    data = req.data or {}
+    name = data.get('name')
+    if not name:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Missing team name")
+    is_master = bool(data.get('isMasterTeam'))
+    uid = req.auth.uid
+    db = get_db()
+
+    invite_code = _generate_invite_code()
+    while list(db.collection('teams').where('inviteCode', '==', invite_code).limit(1).get()):
+        invite_code = _generate_invite_code()
+
+    team_ref = db.collection('teams').document()
+    team_id = team_ref.id
+    now = firestore.SERVER_TIMESTAMP
+    memberships = _user_memberships(db, uid)
+    memberships[team_id] = 'admin'
+
+    batch = db.batch()
+    batch.set(team_ref, {
+        'name': name, 'inviteCode': invite_code, 'createdBy': uid,
+        'createdAt': now, 'isMasterTeam': is_master, 'memberCount': 1,
+    })
+    batch.set(team_ref.collection('members').document(uid),
+              {'role': 'admin', 'userId': uid, 'joinedAt': now})
+    batch.set(db.collection('users').document(uid),
+              {'currentTeamId': team_id, 'teamMemberships': memberships}, merge=True)
+    batch.commit()
+
+    _set_team_claims(uid, memberships)
+    return {'teamId': team_id, 'name': name, 'inviteCode': invite_code,
+            'createdBy': uid, 'isMasterTeam': is_master, 'memberCount': 1}
+
+
+@https_fn.on_call()
+def join_team(req: https_fn.CallableRequest) -> dict:
+    """Join a team by invite code. The code is verified server-side — it is
+    the only proof of authorization, so this must never be a client write."""
+    if not req.auth:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.UNAUTHENTICATED, "Must be authenticated")
+    code = ((req.data or {}).get('inviteCode') or '').upper()
+    if not code:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Missing invite code")
+    uid = req.auth.uid
+    db = get_db()
+
+    teams = list(db.collection('teams').where('inviteCode', '==', code).limit(1).get())
+    if not teams:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.NOT_FOUND, "Invalid invite code")
+    team_doc = teams[0]
+    team_id = team_doc.id
+    team = team_doc.to_dict() or {}
+
+    team_ref = db.collection('teams').document(team_id)
+    member_ref = team_ref.collection('members').document(uid)
+    if member_ref.get().exists:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.ALREADY_EXISTS, "Already a member of this team")
+
+    memberships = _user_memberships(db, uid)
+    memberships[team_id] = 'member'
+
+    batch = db.batch()
+    batch.set(member_ref, {'role': 'member', 'userId': uid, 'joinedAt': firestore.SERVER_TIMESTAMP})
+    batch.update(team_ref, {'memberCount': firestore.Increment(1)})
+    batch.set(db.collection('users').document(uid),
+              {'currentTeamId': team_id, 'teamMemberships': memberships}, merge=True)
+    batch.commit()
+
+    _set_team_claims(uid, memberships)
+    return {'teamId': team_id, 'name': team.get('name'), 'inviteCode': code,
+            'createdBy': team.get('createdBy'),
+            'isMasterTeam': team.get('isMasterTeam', False),
+            'memberCount': team.get('memberCount', 0) + 1}
+
+
+@https_fn.on_call()
+def leave_team(req: https_fn.CallableRequest) -> dict:
+    """Leave a team. Blocks the last admin from orphaning the team."""
+    if not req.auth:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.UNAUTHENTICATED, "Must be authenticated")
+    team_id = (req.data or {}).get('teamId')
+    if not team_id:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Missing teamId")
+    uid = req.auth.uid
+    db = get_db()
+
+    team_ref = db.collection('teams').document(team_id)
+    team_snap = team_ref.get()
+    if not team_snap.exists:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.NOT_FOUND, "Team not found")
+    team = team_snap.to_dict() or {}
+
+    member_ref = team_ref.collection('members').document(uid)
+    member_snap = member_ref.get()
+    if not member_snap.exists:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.PERMISSION_DENIED, "Not a member of this team")
+    if (member_snap.to_dict() or {}).get('role') == 'admin':
+        admins = list(team_ref.collection('members').where('role', '==', 'admin').get())
+        if len(admins) <= 1:
+            raise https_fn.HttpsError(https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
+                                      "The last admin cannot leave the team")
+
+    user_snap = db.collection('users').document(uid).get()
+    user_data = user_snap.to_dict() or {} if user_snap.exists else {}
+    memberships = dict(user_data.get('teamMemberships') or {})
+    memberships.pop(team_id, None)
+    current = user_data.get('currentTeamId')
+    new_current = current if current != team_id else next(iter(memberships), None)
+
+    batch = db.batch()
+    batch.delete(member_ref)
+    batch.update(team_ref, {'memberCount': firestore.Increment(-1)})
+    batch.set(db.collection('users').document(uid),
+              {'currentTeamId': new_current, 'teamMemberships': memberships}, merge=True)
+    batch.commit()
+
+    _set_team_claims(uid, memberships)
+    return {'success': True, 'currentTeamId': new_current}
+
+
 @https_fn.on_call(secrets=["GOOGLE_SHEETS_CREDENTIALS", "MASTER_SPREADSHEET_ID"])
 def backfill_event_to_sheets(req: https_fn.CallableRequest) -> dict:
     """Backfill all match reports for an event to Google Sheets."""
@@ -302,7 +442,7 @@ def backfill_event_to_sheets(req: https_fn.CallableRequest) -> dict:
             program_type = event_data.get('programType', 'FRC')
             event_team_id = event_data.get('teamId', '') or ''
 
-        if event_team_id and not _is_team_member(req.auth.uid, event_team_id):
+        if event_team_id and not _is_team_member(req.auth.token, event_team_id):
             raise https_fn.HttpsError(
                 code=https_fn.FunctionsErrorCode.PERMISSION_DENIED,
                 message="Caller is not a member of the team that owns this event"
@@ -435,7 +575,7 @@ def update_match_from_sheets(req: https_fn.CallableRequest) -> dict:
             )
 
         existing_team_id = existing_data.get('teamId', '') or ''
-        if existing_team_id and not _is_team_member(req.auth.uid, existing_team_id):
+        if existing_team_id and not _is_team_member(req.auth.token, existing_team_id):
             raise https_fn.HttpsError(
                 code=https_fn.FunctionsErrorCode.PERMISSION_DENIED,
                 message="Caller is not a member of the team that owns this match"

@@ -117,10 +117,13 @@ class FirestoreRepository implements ScoutingRepository {
       }
 
       _logger.i('Auto-creating event $eventId in Firestore');
+      final rawCode = (teamId != null && teamId.isNotEmpty && eventId.startsWith('${teamId}_'))
+          ? eventId.substring(teamId.length + 1)
+          : eventId;
       await eventDoc.set({
-        'name': eventId,
+        'name': rawCode,
         'programType': fallbackProgramType,
-        'tbaKey': eventId,
+        'tbaKey': rawCode,
         'startDate': Timestamp.fromDate(DateTime.now()),
         'createdAt': Timestamp.fromDate(DateTime.now()),
         'teamId': teamId ?? '',

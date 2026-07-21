@@ -202,11 +202,9 @@ class SyncManager {
         // The local SQLite cache is shared across team switches, so without
         // this gate a team switch would mass-requeue the previous team's
         // matches under the new team's FirestoreRepository — silently
-        // re-stamping their ownership. Empty teamId is allowed for
-        // backwards-compatibility with pre-team-stamping data.
+        // re-stamping their ownership.
         if (activeTeamId != null &&
             activeTeamId.isNotEmpty &&
-            match.teamId.isNotEmpty &&
             match.teamId != activeTeamId) {
           skippedCrossTeam++;
           continue;

@@ -816,14 +816,11 @@ class HybridRepository implements ScoutingRepository {
 
   /// Drop matches that belong to other teams. The local SQLite cache is
   /// shared across team switches, so a stale row for Team A can otherwise
-  /// surface while the user is signed in to Team B. We accept rows with an
-  /// empty teamId for backwards compatibility with pre-team-stamping data.
+  /// surface while the user is signed in to Team B.
   List<LocalMatchReport> _filterToActiveTeam(List<LocalMatchReport> rows) {
     final activeTeamId = _firestore.teamId;
     if (activeTeamId == null || activeTeamId.isEmpty) return rows;
-    return rows
-        .where((r) => r.teamId.isEmpty || r.teamId == activeTeamId)
-        .toList();
+    return rows.where((r) => r.teamId == activeTeamId).toList();
   }
 
   Event _toEvent(LocalEvent local) {
