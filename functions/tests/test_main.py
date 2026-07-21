@@ -1,6 +1,5 @@
 """Tests for main.py — team isolation helpers and soft-delete propagation."""
 
-import os
 import unittest
 from unittest.mock import Mock, patch, MagicMock
 
@@ -213,11 +212,9 @@ class TestOnMatchWrittenSoftDelete(unittest.TestCase):
 
     @patch.object(main, '_delete_sheet_row_for_report')
     @patch.object(main, 'sync_report_to_sheets')
-    @patch('services.sync_tracker.SyncTracker')
-    def test_real_report_with_complevel_still_syncs(self, mock_tracker, mock_sync, mock_delete):
+    def test_real_report_with_complevel_still_syncs(self, mock_sync, mock_delete):
         # A genuine scouting report has scouterName set; compLevel alone
         # shouldn't disqualify it.
-        mock_tracker.get_sync_record.return_value = None
         evt = self._build_event(
             before=None,
             after={
@@ -392,6 +389,76 @@ class TestDeleteSheetRowForReport(unittest.TestCase):
         main._delete_sheet_row_for_report('t1_evt', 'rep1', {'teamId': 't1'})
 
         svc.delete_row.assert_not_called()
+
+
+class TestBackfillEventToSheets(unittest.TestCase):
+    """Backfill resolves the same per-team target as the trigger, and is
+    idempotent because sync_report_to_sheets updates rows in place."""
+
+    def _req(self):
+        req = Mock()
+        req.auth = Mock()
+        req.auth.token = {'teams': {'t1': 'admin'}}
+        req.data = {'eventId': 't1_evt'}
+        return req
+
+    @patch.object(main, 'sync_report_to_sheets')
+    @patch.object(main, '_get_team_sheet_id', return_value='sheet-abc')
+    @patch.object(main, 'get_db')
+    def test_syncs_each_live_report(self, mock_get_db, _sid, mock_sync):
+        event_doc = Mock()
+        event_doc.exists = True
+        event_doc.to_dict.return_value = {'programType': 'FRC', 'teamId': 't1'}
+
+        live = Mock()
+        live.id = 'rep1'
+        live.to_dict.return_value = {'scouterName': 'sam', 'teamId': 't1'}
+        trashed = Mock()
+        trashed.id = 'rep2'
+        trashed.to_dict.return_value = {'scouterName': 'sam', 'isDeleted': True}
+
+        db = mock_get_db.return_value
+        db.collection.return_value.document.return_value.get.return_value = event_doc
+        query = db.collection.return_value.where.return_value
+        query.where.return_value.stream.return_value = [live, trashed]
+        query.stream.return_value = [live, trashed]
+
+        result = main.backfill_event_to_sheets.__wrapped__.__wrapped__(self._req())
+
+        self.assertEqual(result['syncedCount'], 1)
+        mock_sync.assert_called_once_with('t1_evt', 'rep1', live.to_dict.return_value)
+
+    @patch.object(main, '_get_team_sheet_id', return_value='')
+    @patch.object(main, 'get_db')
+    def test_unconfigured_team_raises_failed_precondition(self, mock_get_db, _sid):
+        event_doc = Mock()
+        event_doc.exists = True
+        event_doc.to_dict.return_value = {'programType': 'FRC', 'teamId': 't1'}
+        mock_get_db.return_value.collection.return_value.document.return_value.get.return_value = event_doc
+
+        with self.assertRaises(main.https_fn.HttpsError) as ctx:
+            main.backfill_event_to_sheets.__wrapped__.__wrapped__(self._req())
+
+        self.assertEqual(
+            ctx.exception.code, main.https_fn.FunctionsErrorCode.FAILED_PRECONDITION
+        )
+
+    @patch.object(main, 'get_db')
+    def test_non_member_is_denied(self, mock_get_db):
+        event_doc = Mock()
+        event_doc.exists = True
+        event_doc.to_dict.return_value = {'programType': 'FRC', 'teamId': 't1'}
+        mock_get_db.return_value.collection.return_value.document.return_value.get.return_value = event_doc
+
+        req = self._req()
+        req.auth.token = {'teams': {'other': 'admin'}}
+
+        with self.assertRaises(main.https_fn.HttpsError) as ctx:
+            main.backfill_event_to_sheets.__wrapped__.__wrapped__(req)
+
+        self.assertEqual(
+            ctx.exception.code, main.https_fn.FunctionsErrorCode.PERMISSION_DENIED
+        )
 
 
 if __name__ == '__main__':
