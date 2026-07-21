@@ -4,9 +4,11 @@
 
 **Goal:** Make multiple teams fully independent in SushiScout by team-scoping event identity and replacing the `teamId == ''` global-access hole with Firebase custom-claims membership checks.
 
-**Architecture:** Event identity becomes a composite `${teamId}_${eventCode}` carried in `Event.id` and `matches.eventId` (raw code stays in `Event.tbaKey` for public schedule/TBA lookups). Team membership is mirrored from `users/{uid}.teamMemberships` into a custom auth claim by a Firestore-triggered Cloud Function; Firestore rules and Cloud Functions read the claim instead of doing document reads. Dev data is wiped rather than migrated.
+**Architecture:** Event identity becomes a composite `${teamId}_${eventCode}` carried in `Event.id` and `matches.eventId` (raw code stays in `Event.tbaKey` for public schedule/TBA lookups). Team membership is **server-authoritative**: `create_team`/`join_team`/`leave_team` callable Cloud Functions validate and mutate membership with the Admin SDK and set a `{teams: {...}}` custom auth claim; Firestore rules read the claim (free) and forbid clients from writing `users/{uid}.teamMemberships` or `teams/{tid}/members/**`. Dev data is wiped rather than migrated.
 
-**Tech Stack:** Flutter + Riverpod (Dart), Firebase Cloud Functions (Python 3.11), Firestore security rules, `@firebase/rules-unit-testing` (Node, for the rules test only).
+> **Security note (why callables, not a trigger):** an earlier draft mirrored the client-writable `users/{uid}.teamMemberships` into the claim via a Firestore trigger. That is a privilege-escalation hole — a user could self-assert membership in any team and read/write its data. Membership mutation therefore lives in server-side callables, and the claim source is write-locked to them.
+
+**Tech Stack:** Flutter + Riverpod (Dart), Firebase Cloud Functions (Python 3.12), Firestore security rules, `@firebase/rules-unit-testing` (Node, for the rules test only).
 
 ## Global Constraints
 
@@ -14,157 +16,310 @@
 - Commit message footer for every commit: `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`.
 - Work happens on the existing `team-isolation` branch (already checked out).
 - Never hand-edit generated files (`*.g.dart`, `*.mocks.dart`). Regenerate instead.
-- Dart tests: `cd frontend && flutter test`. Python tests: `cd functions && python -m pytest tests/`.
+- **This machine's test commands:** Dart → `cd frontend && flutter test` (flutter is on PATH). Python → `cd functions && ./venv/bin/python -m pytest tests/` (use the venv, NOT bare `python`). Rules → `firebase emulators:exec --only firestore "cd test/firestore-rules && npm test"`.
+- Membership claim shape is exactly `{ "teams": { "<teamId>": "<role>" } }` where role is `"admin"` or `"member"`.
+- Membership is server-authoritative: clients never write `users/{uid}.teamMemberships` or `teams/{tid}/members/**`; only the callables do (Admin SDK).
 - The composite event id format is exactly `"${teamId}_${eventCode}"` (single underscore separator). `programType` (`FRC`/`FTC`) is NOT part of the id — it stays an authoritative field.
 - The raw event code (never composite) is what keys the public `schedules`, `tba_cache`, and `ftc_cache` collections.
 
 ---
 
-## Task 1: Custom-claims sync Cloud Function
+## Task 1: Membership callable Cloud Functions
 
-Mirror `users/{uid}.teamMemberships` into the `teams` custom auth claim so rules and callables can check membership for free.
+Membership must be server-authoritative (see the Architecture security note). Add three callable functions that validate + mutate membership with the Admin SDK and set the `{teams: {...}}` custom claim. This ports the logic currently in `frontend/lib/data/repositories/team_repository.dart` (`createTeam`/`joinTeamByCode`/`leaveTeam`) to the backend.
+
+> This is an integration/port task, not pure transcription. The implementation code below is complete; the test file gives the required behavioral assertions — you adapt the Admin-SDK mock plumbing (following the existing `functions/tests/test_main.py` chained-`Mock` style) to drive RED→GREEN. The behaviors asserted are the contract; do not weaken them.
 
 **Files:**
-- Modify: `functions/main.py` (add `fb_auth` import near line 6; add `on_user_membership_changed` after `on_match_written`)
-- Test: `functions/tests/test_membership_claims.py` (create)
+- Modify: `functions/main.py` (add `auth as fb_auth` import near line 6; add helpers + three `@https_fn.on_call` functions after `on_match_written`)
+- Test: `functions/tests/test_membership_callables.py` (create)
+- Read for reference: `frontend/lib/data/repositories/team_repository.dart` (the logic being ported — invite-code format `[A-Z0-9]{6}`, already-member rejection, last-admin-can't-leave, currentTeamId/teamMemberships maintenance)
 
 **Interfaces:**
-- Produces: `on_user_membership_changed(event: firestore_fn.Event) -> None` — Firestore `on_document_written` trigger on `users/{userId}`. Calls `fb_auth.set_custom_user_claims(uid, {'teams': <teamMemberships map>})` and stamps `users/{uid}.claimsRefreshedAt`. No-op when `teamMemberships` is unchanged.
+- Produces (all `@https_fn.on_call`, callable from the Flutter app):
+  - `create_team(req)` — data `{name, isMasterTeam?}` → creates team + `members/{uid}='admin'` + user mirror, sets claim; returns `{teamId, name, inviteCode, createdBy, isMasterTeam, memberCount}`.
+  - `join_team(req)` — data `{inviteCode}` → validates code server-side, rejects if already a member, writes `members/{uid}='member'` + user mirror, sets claim; returns the same team dict shape.
+  - `leave_team(req)` — data `{teamId}` → verifies membership, enforces last-admin rule, removes member + user mirror, sets claim; returns `{success: true, currentTeamId}`.
+  - Helpers `_generate_invite_code() -> str` and `_set_team_claims(uid: str, memberships: dict) -> None` (wraps `fb_auth.set_custom_user_claims(uid, {'teams': memberships})`).
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: Write the failing tests**
 
-Create `functions/tests/test_membership_claims.py`:
+Create `functions/tests/test_membership_callables.py`. These assert the security-critical behaviors; adapt the mock plumbing (chained `MagicMock`, following `test_main.py`) so they run:
 
 ```python
-"""Tests for the on_user_membership_changed custom-claims trigger."""
+"""Tests for the membership callables: create_team / join_team / leave_team."""
 
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 with patch('firebase_admin.initialize_app'):
     import main  # noqa: E402
 
-
-def _user_event(user_id, before, after):
-    evt = Mock()
-    evt.params = {'userId': user_id}
-    evt.data = Mock()
-    if before is None:
-        evt.data.before = None
-    else:
-        evt.data.before = Mock()
-        evt.data.before.to_dict.return_value = before
-    if after is None:
-        evt.data.after = None
-    else:
-        evt.data.after = Mock()
-        evt.data.after.to_dict.return_value = after
-    return evt
+from firebase_functions import https_fn  # noqa: E402
 
 
-class TestOnUserMembershipChanged(unittest.TestCase):
+def _req(uid, data):
+    r = Mock()
+    r.auth = Mock(uid=uid) if uid else None
+    r.data = data
+    return r
+
+
+class TestCreateTeam(unittest.TestCase):
     def setUp(self):
         main._db = None
 
-    @patch('main.get_db')
-    @patch('main.fb_auth')
-    def test_sets_claim_when_memberships_added(self, mock_auth, mock_get_db):
-        evt = _user_event(
-            'uid1',
-            before={'teamMemberships': {}},
-            after={'teamMemberships': {'teamA': 'admin'}},
-        )
-        main.on_user_membership_changed.__wrapped__(evt)
-        mock_auth.set_custom_user_claims.assert_called_once_with(
-            'uid1', {'teams': {'teamA': 'admin'}}
-        )
+    def test_unauthenticated_raises(self):
+        with self.assertRaises(https_fn.HttpsError):
+            main.create_team.__wrapped__(_req(None, {'name': 'Alpha'}))
 
+    @patch('main._set_team_claims')
+    @patch('main._generate_invite_code', return_value='ABC123')
     @patch('main.get_db')
-    @patch('main.fb_auth')
-    def test_noop_when_memberships_unchanged(self, mock_auth, mock_get_db):
-        evt = _user_event(
-            'uid1',
-            before={'teamMemberships': {'teamA': 'admin'}, 'displayName': 'A'},
-            after={'teamMemberships': {'teamA': 'admin'}, 'displayName': 'B'},
-        )
-        main.on_user_membership_changed.__wrapped__(evt)
-        mock_auth.set_custom_user_claims.assert_not_called()
+    def test_creates_team_and_sets_admin_claim(self, mock_db, mock_code, mock_claims):
+        db = mock_db.return_value
+        # no invite collision
+        db.collection.return_value.where.return_value.limit.return_value.get.return_value = []
+        # new team ref with a generated id
+        team_ref = MagicMock()
+        team_ref.id = 'team_new'
+        # user doc has no prior memberships
+        user_ref = MagicMock()
+        user_ref.get.return_value = Mock(exists=False)
+        # route document() calls: teams.document() -> team_ref, users.document(uid) -> user_ref
+        db.collection.return_value.document.side_effect = lambda *a: team_ref if not a else user_ref
+        db.batch.return_value = MagicMock()
 
+        result = main.create_team.__wrapped__(_req('uid1', {'name': 'Alpha'}))
+
+        # The caller's claim must include the new team as admin.
+        mock_claims.assert_called_once_with('uid1', {'team_new': 'admin'})
+        self.assertEqual(result['teamId'], 'team_new')
+        self.assertEqual(result['inviteCode'], 'ABC123')
+
+
+class TestJoinTeam(unittest.TestCase):
+    def setUp(self):
+        main._db = None
+
+    @patch('main._set_team_claims')
     @patch('main.get_db')
-    @patch('main.fb_auth')
-    def test_revokes_claim_when_user_doc_deleted(self, mock_auth, mock_get_db):
-        evt = _user_event(
-            'uid1',
-            before={'teamMemberships': {'teamA': 'admin'}},
-            after=None,
-        )
-        main.on_user_membership_changed.__wrapped__(evt)
-        mock_auth.set_custom_user_claims.assert_called_once_with('uid1', {'teams': {}})
+    def test_rejects_when_already_member(self, mock_db, mock_claims):
+        db = mock_db.return_value
+        team_doc = Mock(id='team_x')
+        team_doc.to_dict.return_value = {'name': 'X', 'memberCount': 2}
+        db.collection.return_value.where.return_value.limit.return_value.get.return_value = [team_doc]
+        # member doc already exists -> ALREADY_EXISTS
+        db.collection.return_value.document.return_value.collection.return_value.document.return_value.get.return_value = Mock(exists=True)
+
+        with self.assertRaises(https_fn.HttpsError):
+            main.join_team.__wrapped__(_req('uid1', {'inviteCode': 'ABC123'}))
+        mock_claims.assert_not_called()
+
+    @patch('main._set_team_claims')
+    @patch('main.get_db')
+    def test_invalid_code_raises(self, mock_db, mock_claims):
+        db = mock_db.return_value
+        db.collection.return_value.where.return_value.limit.return_value.get.return_value = []
+        with self.assertRaises(https_fn.HttpsError):
+            main.join_team.__wrapped__(_req('uid1', {'inviteCode': 'NOPE00'}))
+
+
+class TestLeaveTeam(unittest.TestCase):
+    def setUp(self):
+        main._db = None
+
+    @patch('main._set_team_claims')
+    @patch('main.get_db')
+    def test_last_admin_cannot_leave(self, mock_db, mock_claims):
+        db = mock_db.return_value
+        team_ref = MagicMock()
+        team_ref.get.return_value = Mock(exists=True, **{'to_dict.return_value': {'memberCount': 1}})
+        member_snap = Mock(exists=True)
+        member_snap.to_dict.return_value = {'role': 'admin'}
+        team_ref.collection.return_value.document.return_value.get.return_value = member_snap
+        db.collection.return_value.document.return_value = team_ref
+
+        with self.assertRaises(https_fn.HttpsError):
+            main.leave_team.__wrapped__(_req('uid1', {'teamId': 'team_x'}))
+        mock_claims.assert_not_called()
 
 
 if __name__ == '__main__':
     unittest.main()
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd functions && python -m pytest tests/test_membership_claims.py -v`
-Expected: FAIL — `AttributeError: module 'main' has no attribute 'fb_auth'` / `on_user_membership_changed`.
+Run: `cd functions && ./venv/bin/python -m pytest tests/test_membership_callables.py -v`
+Expected: FAIL — `create_team`/`join_team`/`leave_team` and the helpers do not exist yet.
 
-- [ ] **Step 3: Write minimal implementation**
+- [ ] **Step 3: Write the implementation**
 
-In `functions/main.py`, add the import next to the existing firebase_admin imports (near line 6):
+In `functions/main.py`, replace the firebase_admin import line with:
 
 ```python
 from firebase_admin import initialize_app, firestore, auth as fb_auth
 ```
 
-(Replace the existing `from firebase_admin import initialize_app, firestore` line.)
-
-Then add this function immediately after `on_match_written` (after line ~259):
+Add these helpers and callables after `on_match_written`:
 
 ```python
-@firestore_fn.on_document_written(document="users/{userId}")
-def on_user_membership_changed(event: firestore_fn.Event) -> None:
-    """Mirror users/{uid}.teamMemberships into a custom auth claim so
-    Firestore rules and callables can check team membership without a
-    document read. Runs on every users/{uid} write but is a no-op unless
-    the teamMemberships map actually changed."""
-    user_id = event.params['userId']
-    before = event.data.before.to_dict() if event.data and event.data.before else {}
-    after = event.data.after.to_dict() if event.data and event.data.after else {}
-    before_memberships = (before or {}).get('teamMemberships') or {}
-    after_memberships = (after or {}).get('teamMemberships') or {}
+import random  # (top of file with the other imports)
 
-    # Echo guard: the claimsRefreshedAt write below re-triggers this
-    # function. Only act when the membership map actually changed,
-    # otherwise it loops forever.
-    if before_memberships == after_memberships:
-        return
 
-    fb_auth.set_custom_user_claims(user_id, {'teams': after_memberships})
+def _generate_invite_code() -> str:
+    chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+    return ''.join(random.choice(chars) for _ in range(6))
 
-    # Signal the client to force-refresh its ID token so the new claim
-    # takes effect without waiting up to an hour for natural refresh.
-    get_db().collection('users').document(user_id).set(
-        {'claimsRefreshedAt': firestore.SERVER_TIMESTAMP},
-        merge=True,
-    )
-    logger.info(
-        f"Synced team claims for {user_id}: {list(after_memberships.keys())}"
-    )
+
+def _set_team_claims(uid: str, memberships: dict) -> None:
+    """Mirror a user's team memberships into their auth token. The claim is
+    the ONLY membership signal Firestore rules trust, and it is written only
+    here (server-side) — clients cannot forge it."""
+    fb_auth.set_custom_user_claims(uid, {'teams': memberships})
+
+
+def _user_memberships(db, uid: str) -> dict:
+    snap = db.collection('users').document(uid).get()
+    if not snap.exists:
+        return {}
+    return dict((snap.to_dict() or {}).get('teamMemberships') or {})
+
+
+@https_fn.on_call()
+def create_team(req: https_fn.CallableRequest) -> dict:
+    """Create a team, make the caller its admin, and set their claim."""
+    if not req.auth:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.UNAUTHENTICATED, "Must be authenticated")
+    data = req.data or {}
+    name = data.get('name')
+    if not name:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Missing team name")
+    is_master = bool(data.get('isMasterTeam'))
+    uid = req.auth.uid
+    db = get_db()
+
+    invite_code = _generate_invite_code()
+    while list(db.collection('teams').where('inviteCode', '==', invite_code).limit(1).get()):
+        invite_code = _generate_invite_code()
+
+    team_ref = db.collection('teams').document()
+    team_id = team_ref.id
+    now = firestore.SERVER_TIMESTAMP
+    memberships = _user_memberships(db, uid)
+    memberships[team_id] = 'admin'
+
+    batch = db.batch()
+    batch.set(team_ref, {
+        'name': name, 'inviteCode': invite_code, 'createdBy': uid,
+        'createdAt': now, 'isMasterTeam': is_master, 'memberCount': 1,
+    })
+    batch.set(team_ref.collection('members').document(uid),
+              {'role': 'admin', 'userId': uid, 'joinedAt': now})
+    batch.set(db.collection('users').document(uid),
+              {'currentTeamId': team_id, 'teamMemberships': memberships}, merge=True)
+    batch.commit()
+
+    _set_team_claims(uid, memberships)
+    return {'teamId': team_id, 'name': name, 'inviteCode': invite_code,
+            'createdBy': uid, 'isMasterTeam': is_master, 'memberCount': 1}
+
+
+@https_fn.on_call()
+def join_team(req: https_fn.CallableRequest) -> dict:
+    """Join a team by invite code. The code is verified server-side — it is
+    the only proof of authorization, so this must never be a client write."""
+    if not req.auth:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.UNAUTHENTICATED, "Must be authenticated")
+    code = ((req.data or {}).get('inviteCode') or '').upper()
+    if not code:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Missing invite code")
+    uid = req.auth.uid
+    db = get_db()
+
+    teams = list(db.collection('teams').where('inviteCode', '==', code).limit(1).get())
+    if not teams:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.NOT_FOUND, "Invalid invite code")
+    team_doc = teams[0]
+    team_id = team_doc.id
+    team = team_doc.to_dict() or {}
+
+    team_ref = db.collection('teams').document(team_id)
+    member_ref = team_ref.collection('members').document(uid)
+    if member_ref.get().exists:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.ALREADY_EXISTS, "Already a member of this team")
+
+    memberships = _user_memberships(db, uid)
+    memberships[team_id] = 'member'
+
+    batch = db.batch()
+    batch.set(member_ref, {'role': 'member', 'userId': uid, 'joinedAt': firestore.SERVER_TIMESTAMP})
+    batch.update(team_ref, {'memberCount': firestore.Increment(1)})
+    batch.set(db.collection('users').document(uid),
+              {'currentTeamId': team_id, 'teamMemberships': memberships}, merge=True)
+    batch.commit()
+
+    _set_team_claims(uid, memberships)
+    return {'teamId': team_id, 'name': team.get('name'), 'inviteCode': code,
+            'createdBy': team.get('createdBy'),
+            'isMasterTeam': team.get('isMasterTeam', False),
+            'memberCount': team.get('memberCount', 0) + 1}
+
+
+@https_fn.on_call()
+def leave_team(req: https_fn.CallableRequest) -> dict:
+    """Leave a team. Blocks the last admin from orphaning the team."""
+    if not req.auth:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.UNAUTHENTICATED, "Must be authenticated")
+    team_id = (req.data or {}).get('teamId')
+    if not team_id:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Missing teamId")
+    uid = req.auth.uid
+    db = get_db()
+
+    team_ref = db.collection('teams').document(team_id)
+    team_snap = team_ref.get()
+    if not team_snap.exists:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.NOT_FOUND, "Team not found")
+    team = team_snap.to_dict() or {}
+
+    member_ref = team_ref.collection('members').document(uid)
+    member_snap = member_ref.get()
+    if not member_snap.exists:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.PERMISSION_DENIED, "Not a member of this team")
+    if (member_snap.to_dict() or {}).get('role') == 'admin' and team.get('memberCount', 0) <= 1:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
+                                  "The last admin cannot leave the team")
+
+    user_snap = db.collection('users').document(uid).get()
+    user_data = user_snap.to_dict() or {} if user_snap.exists else {}
+    memberships = dict(user_data.get('teamMemberships') or {})
+    memberships.pop(team_id, None)
+    current = user_data.get('currentTeamId')
+    new_current = current if current != team_id else next(iter(memberships), None)
+
+    batch = db.batch()
+    batch.delete(member_ref)
+    batch.update(team_ref, {'memberCount': firestore.Increment(-1)})
+    batch.set(db.collection('users').document(uid),
+              {'currentTeamId': new_current, 'teamMemberships': memberships}, merge=True)
+    batch.commit()
+
+    _set_team_claims(uid, memberships)
+    return {'success': True, 'currentTeamId': new_current}
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cd functions && python -m pytest tests/test_membership_claims.py -v`
-Expected: PASS (3 passed).
+Run: `cd functions && ./venv/bin/python -m pytest tests/test_membership_callables.py -v` then the full suite `./venv/bin/python -m pytest tests/`
+Expected: new tests pass; full suite still green (baseline 47).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add functions/main.py functions/tests/test_membership_claims.py
-git commit -m "feat(auth): sync team memberships into custom claims
+git add functions/main.py functions/tests/test_membership_callables.py
+git commit -m "feat(auth): add server-side membership callables
 
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 ```
@@ -374,6 +529,31 @@ test('member cannot create a match stamped for another team', async () => {
     })
   );
 });
+
+// --- The two privilege-escalation vectors this fix closes ---
+
+test('client cannot write its own teamMemberships (claim-source escalation)', async () => {
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), 'users/alice'), {
+      displayName: 'Alice',
+      teamMemberships: {},
+    });
+  });
+  // She may update her profile...
+  await assertSucceeds(
+    setDoc(doc(alice(), 'users/alice'), { displayName: 'Al' }, { merge: true })
+  );
+  // ...but NOT teamMemberships (the claim source is server-only).
+  await assertFails(
+    setDoc(doc(alice(), 'users/alice'), { teamMemberships: { teamB: 'admin' } }, { merge: true })
+  );
+});
+
+test('client cannot self-insert a team member doc (self-join escalation)', async () => {
+  await assertFails(
+    setDoc(doc(alice(), 'teams/teamB/members/alice'), { role: 'admin', userId: 'alice' })
+  );
+});
 ```
 
 - [ ] **Step 2: Install deps and run the test to verify it fails**
@@ -396,8 +576,8 @@ service cloud.firestore {
 
     function isSignedIn() { return request.auth != null; }
 
-    // Team memberships are mirrored into a custom claim by the
-    // on_user_membership_changed Cloud Function. Reading the token is
+    // Team memberships are mirrored into a custom claim by the membership
+    // callables (create_team/join_team/leave_team). Reading the token is
     // free — no document read — unlike the old exists() check.
     function memberTeams() {
       return isSignedIn() ? request.auth.token.get('teams', {}) : {};
@@ -417,20 +597,32 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      allow read, write: if isSignedIn() && request.auth.uid == userId;
+      allow read:   if isSignedIn() && request.auth.uid == userId;
+      allow create: if isSignedIn() && request.auth.uid == userId;
+      // teamMemberships is the claim source — a client may update its own
+      // profile / currentTeamId but NEVER teamMemberships (server-only, set
+      // by the membership callables). This is the core of the isolation fix.
+      allow update: if isSignedIn() && request.auth.uid == userId
+                      && !('teamMemberships' in
+                           request.resource.data.diff(resource.data).affectedKeys());
     }
 
     match /teams/{teamId} {
       allow read:   if isTeamMember(teamId);
-      allow create: if isSignedIn();               // bootstrap a new team
-      allow update: if isTeamMember(teamId);
+      allow create: if false;                      // create_team callable only
+      allow update: if isTeamMember(teamId);       // e.g. invite-code regen
 
+      // Membership is server-authoritative: only the callables (Admin SDK,
+      // which bypasses rules) write member docs. A client-writable member
+      // doc would let anyone self-join any team.
       match /members/{memberId} {
-        allow read:           if isTeamMember(teamId);
-        allow create:         if isSignedIn()
-                                && (memberId == request.auth.uid || isTeamMember(teamId));
-        allow update, delete: if isTeamMember(teamId);
+        allow read:  if isTeamMember(teamId);
+        allow write: if false;
       }
+    }
+
+    match /teamSettings/{teamId} {
+      allow read, write: if isTeamMember(teamId);
     }
 
     match /sync_tracking/{doc} { allow read, write: if false; }
@@ -447,7 +639,7 @@ Run:
 ```bash
 firebase emulators:exec --only firestore "cd test/firestore-rules && npm test"
 ```
-Expected: PASS (5 passed).
+Expected: PASS (7 passed).
 
 - [ ] **Step 5: Commit**
 
@@ -658,20 +850,23 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 
 ---
 
-## Task 6: Force token refresh after create/join
+## Task 6: Route team_repository through the callables + refresh token
 
-After a membership change, the client must force-refresh its ID token so the new `teams` claim (set asynchronously by Task 1's trigger) takes effect before reading team data.
+`team_repository`'s mutation methods must stop writing membership client-side and instead call the Task 1 callables (`create_team`/`join_team`/`leave_team`). After the callable returns (claim already set server-side), the client force-refreshes its ID token so the new `teams` claim takes effect before reading team data.
 
 **Files:**
 - Create: `frontend/lib/core/auth/claims_refresher.dart`
 - Test: `frontend/test/core/auth/claims_refresher_test.dart` (create)
+- Modify: `frontend/lib/data/repositories/team_repository.dart` (`createTeam`, `joinTeamByCode`, `leaveTeam` → callables; keep read methods client-side)
 - Modify: `frontend/lib/core/auth/auth_service.dart` (add `forceRefreshClaims`)
 - Modify: `frontend/lib/presentation/providers/auth_provider.dart` (`createTeam`, `joinTeam`)
 
 **Interfaces:**
+- Consumes: the `create_team`/`join_team`/`leave_team` callables from Task 1 (return shapes documented there).
 - Produces:
   - `Future<bool> waitForTeamClaim({required ClaimsFetcher fetchClaims, required String expectedTeamId, int maxAttempts, Duration delay, Future<void> Function(Duration)? sleep})` where `typedef ClaimsFetcher = Future<Map<String, dynamic>> Function();`
   - `AuthService.forceRefreshClaims() -> Future<Map<String, dynamic>>` — force-refreshes the ID token and returns its claims.
+  - `team_repository.dart` keeps its existing method signatures (`createTeam`/`joinTeamByCode` return `Team`/`Team?`, `leaveTeam` returns void) — only the bodies change to invoke callables.
 
 - [ ] **Step 1: Write the failing test for the polling helper**
 
@@ -726,12 +921,12 @@ Create `frontend/lib/core/auth/claims_refresher.dart`:
 typedef ClaimsFetcher = Future<Map<String, dynamic>> Function();
 
 /// Polls [fetchClaims] until [expectedTeamId] appears in the `teams` claim
-/// (mirrored by the on_user_membership_changed Cloud Function) or
-/// [maxAttempts] is reached. Returns true if the claim arrived.
+/// (set by the membership callables) or [maxAttempts] is reached. Returns
+/// true if the claim arrived.
 ///
-/// The custom claim is set asynchronously by a Firestore trigger, so an
-/// immediate single refresh right after a membership write usually misses
-/// it — hence the bounded poll. [sleep] is injectable for tests.
+/// The callable sets the claim before returning, so the first refresh
+/// normally already has it — the bounded poll is a cheap safety net against
+/// token-refresh lag. [sleep] is injectable for tests.
 Future<bool> waitForTeamClaim({
   required ClaimsFetcher fetchClaims,
   required String expectedTeamId,
@@ -772,7 +967,92 @@ First read `frontend/lib/core/auth/auth_service.dart` to find the `FirebaseAuth`
 
 Ensure `import 'package:firebase_auth/firebase_auth.dart';` is present (it should be).
 
-- [ ] **Step 6: Wire the refresh into create/join**
+- [ ] **Step 6: Route team_repository mutations through the callables**
+
+`team_repository`'s `createTeam`/`joinTeamByCode`/`leaveTeam` must stop writing membership client-side (rules now forbid it) and call the Task 1 callables. Read methods (`getTeam`, `getUserTeams`, `getTeamSettings`, `updateTeamSettings`, `regenerateInviteCode`) stay as-is. `Team` and the `AuthException*` types are already imported; `cloud_functions` is already a dependency (schedule_service uses callables — obtain the callable the same way it does, so the Functions region matches).
+
+Add to `frontend/lib/data/repositories/team_repository.dart`:
+
+```dart
+import 'package:cloud_functions/cloud_functions.dart';
+```
+
+Replace the bodies of the three mutation methods (keep their existing signatures), deleting the `_firestore.runTransaction(...)` blocks they contained:
+
+```dart
+  Future<Team> createTeam({
+    required String name,
+    required String createdBy,
+    bool isMasterTeam = false,
+  }) async {
+    try {
+      final callable = FirebaseFunctions.instance.httpsCallable('create_team');
+      final result = await callable.call<dynamic>({
+        'name': name,
+        'isMasterTeam': isMasterTeam,
+      });
+      return _teamFromCallable(result.data);
+    } on FirebaseFunctionsException catch (e) {
+      _mapFunctionsError(e);
+    }
+  }
+
+  Future<Team?> joinTeamByCode({
+    required String inviteCode,
+    required String userId,
+  }) async {
+    try {
+      final callable = FirebaseFunctions.instance.httpsCallable('join_team');
+      final result = await callable.call<dynamic>({'inviteCode': inviteCode});
+      return _teamFromCallable(result.data);
+    } on FirebaseFunctionsException catch (e) {
+      _mapFunctionsError(e);
+    }
+  }
+
+  Future<void> leaveTeam({
+    required String teamId,
+    required String userId,
+  }) async {
+    try {
+      final callable = FirebaseFunctions.instance.httpsCallable('leave_team');
+      await callable.call<dynamic>({'teamId': teamId});
+    } on FirebaseFunctionsException catch (e) {
+      _mapFunctionsError(e);
+    }
+  }
+
+  Team _teamFromCallable(dynamic data) {
+    final map = Map<String, dynamic>.from(data as Map);
+    return Team(
+      id: map['teamId'] as String,
+      name: (map['name'] as String?) ?? '',
+      inviteCode: (map['inviteCode'] as String?) ?? '',
+      createdBy: (map['createdBy'] as String?) ?? '',
+      createdAt: DateTime.now(),
+      isMasterTeam: (map['isMasterTeam'] as bool?) ?? false,
+      memberCount: (map['memberCount'] as int?) ?? 1,
+    );
+  }
+
+  /// Maps a callable error to the AuthException the UI already handles.
+  Never _mapFunctionsError(FirebaseFunctionsException e) {
+    switch (e.code) {
+      case 'not-found':
+        throw const AuthExceptionInvalidInviteCode();
+      case 'already-exists':
+        throw const AuthExceptionAlreadyInTeam();
+      case 'failed-precondition':
+        throw const AuthExceptionCannotLeaveTeam();
+      default:
+        throw AuthException(e.message ?? 'Team operation failed');
+    }
+  }
+```
+
+Verify with `cd frontend && flutter analyze` before moving on.
+
+- [ ] **Step 7: Wire the refresh into create/join**
 
 In `auth_provider.dart`, add the import:
 
@@ -840,16 +1120,16 @@ to:
       await _loadUserProfile();
 ```
 
-- [ ] **Step 7: Verify analyze + full frontend suite**
+- [ ] **Step 8: Verify analyze + full frontend suite**
 
 Run: `cd frontend && flutter analyze && flutter test`
 Expected: analyze clean; all tests pass.
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 9: Commit**
 
 ```bash
-git add frontend/lib/core/auth/claims_refresher.dart frontend/test/core/auth/claims_refresher_test.dart frontend/lib/core/auth/auth_service.dart frontend/lib/presentation/providers/auth_provider.dart
-git commit -m "feat(auth): refresh token after team create/join
+git add frontend/lib/core/auth/claims_refresher.dart frontend/test/core/auth/claims_refresher_test.dart frontend/lib/data/repositories/team_repository.dart frontend/lib/core/auth/auth_service.dart frontend/lib/presentation/providers/auth_provider.dart
+git commit -m "feat(auth): route team membership through callables
 
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 ```

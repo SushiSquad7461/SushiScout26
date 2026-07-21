@@ -125,33 +125,31 @@ Replaces `exists()` in rules and the Firestore read in Cloud Functions.
 Well under the 1000-byte custom-claim limit for realistic team counts. The claim
 carries the role, matching the admin/member RBAC used by other cloud scouters.
 
-**Sync mechanism** — a new Firestore-triggered Cloud Function
-`on_user_membership_changed` on `users/{userId}`:
+**Sync mechanism — server-side callables (NOT a client-writable source).**
+> ⚠️ Security correction (supersedes an earlier trigger-based draft): membership
+> must never be derived from anything the client can write. Both `users/{uid}` and
+> a self-created `teams/{tid}/members/{uid}` doc are client-writable, so mirroring
+> them into a claim would let any user self-assert membership in any team and read
+> or write its data. Membership mutation therefore moves server-side.
 
-```python
-@firestore_fn.on_document_written(document="users/{userId}")
-def on_user_membership_changed(event):
-    before = event.data.before.to_dict() if event.data and event.data.before else {}
-    after  = event.data.after.to_dict()  if event.data and event.data.after  else {}
-    before_m = (before or {}).get('teamMemberships') or {}
-    after_m  = (after  or {}).get('teamMemberships') or {}
+Three callable Cloud Functions validate server-side and set the claim with the
+Admin SDK:
 
-    # Echo guard: only act when memberships actually changed. Without this the
-    # claimsRefreshedAt write below re-triggers this function forever.
-    if before_m == after_m:
-        return
+- `create_team(name, isMasterTeam)` — generates a unique invite code, creates the
+  team + `members/{uid}='admin'`, writes `users/{uid}.teamMemberships`, then sets
+  the caller's `{teams: ...}` claim. Returns the team.
+- `join_team(inviteCode)` — looks up the team by invite code **server-side** (the
+  only proof of authorization), rejects if already a member, writes
+  `members/{uid}='member'` + the user mirror, sets the claim. Returns the team.
+- `leave_team(teamId)` — verifies the caller's `members/{uid}` doc, enforces
+  "last admin can't leave", removes the member doc + user mirror, sets the claim.
 
-    from firebase_admin import auth
-    auth.set_custom_user_claims(event.params['userId'], {'teams': after_m})
-
-    # Signal the client to force-refresh its token so the new claim takes effect.
-    get_db().collection('users').document(event.params['userId']).set(
-        {'claimsRefreshedAt': firestore.SERVER_TIMESTAMP}, merge=True)
-```
-
-`team_repository` already maintains `users/{uid}.teamMemberships` transactionally in
-`createTeam`/`joinTeamByCode`/`leaveTeam`, so **no `team_repository` change is
-required** — the trigger follows the doc.
+`users/{uid}.teamMemberships` remains the claim source, but it is now written
+**only** by these callables (Admin SDK) and rules forbid the client from touching
+it (§8) — so it is trustworthy. No Firestore trigger, no echo guard, no
+`claimsRefreshedAt`. `team_repository`'s three mutation methods change from
+client-side Firestore transactions to callable invocations (reads stay
+client-side).
 
 **Rules** read the claim for free (see §8).
 
@@ -167,22 +165,13 @@ def _is_team_member(auth_token: dict, team_id: str) -> bool:
 
 (Callers pass `req.auth.token` instead of `req.auth.uid`.)
 
-**Propagation delay — the one real gotcha.** Custom claims only enter the ID token
-on refresh. So after `createTeam`/`joinTeamByCode`, the client must force
-`getIdToken(true)` before it can read the new team's data. Because the trigger runs
-asynchronously (~1-2 s after the membership write), the client cannot simply refresh
-immediately. The design:
-
-1. The trigger stamps `users/{uid}.claimsRefreshedAt` after setting the claim.
-2. `AuthService` listens to `users/{uid}`; when `claimsRefreshedAt` advances it
-   calls `currentUser.getIdToken(true)` and lets claim-dependent providers rebuild.
-3. Create/join flows await that refresh (with a timeout fallback that force-refreshes
-   anyway) before navigating into the team.
-
+**Token refresh — simpler now.** The callable sets the claim *before returning*, so
+there is no async propagation gap: after `create_team`/`join_team` succeeds the
+client makes a single `getIdToken(true)` and the new claim is present. A small
+bounded retry is kept as a cheap safety net but normally succeeds on the first try.
 `switchTeam` needs **no** refresh — the claim lists *all* the user's teams; the
 active team is separate state (`currentTeamId`), used only to choose the query
-filter. This exact orchestration is the trickiest part and will be pinned down under
-TDD in the plan.
+filter.
 
 **Offline alignment.** Members obtain connectivity before the competition (a stated
 requirement), so they receive their token+claims then; Firebase's cached token stays
@@ -201,8 +190,8 @@ service cloud.firestore {
 
     function isSignedIn() { return request.auth != null; }
 
-    // Team memberships mirrored into a custom claim by
-    // on_user_membership_changed. Free — no document read.
+    // Team memberships mirrored into a custom claim by the membership
+    // callables (create_team/join_team/leave_team). Free — no document read.
     function memberTeams() {
       return isSignedIn() ? request.auth.token.get('teams', {}) : {};
     }
@@ -221,20 +210,32 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      allow read, write: if isSignedIn() && request.auth.uid == userId;
+      allow read:   if isSignedIn() && request.auth.uid == userId;
+      allow create: if isSignedIn() && request.auth.uid == userId;
+      // teamMemberships is the claim source — a client may update its own
+      // profile / currentTeamId but NEVER teamMemberships (server-only, set
+      // by the membership callables). This is the core of the isolation fix.
+      allow update: if isSignedIn() && request.auth.uid == userId
+                      && !('teamMemberships' in
+                           request.resource.data.diff(resource.data).affectedKeys());
     }
 
     match /teams/{teamId} {
       allow read:   if isTeamMember(teamId);
-      allow create: if isSignedIn();               // bootstrap a new team
-      allow update: if isTeamMember(teamId);
+      allow create: if false;                      // create_team callable only
+      allow update: if isTeamMember(teamId);       // e.g. invite-code regen
 
+      // Membership is server-authoritative: only the callables (Admin SDK,
+      // which bypasses rules) write member docs. A client-writable member doc
+      // would let anyone self-join any team.
       match /members/{memberId} {
-        allow read:          if isTeamMember(teamId);
-        allow create:        if isSignedIn()
-                               && (memberId == request.auth.uid || isTeamMember(teamId));
-        allow update, delete: if isTeamMember(teamId);
+        allow read:  if isTeamMember(teamId);
+        allow write: if false;
       }
+    }
+
+    match /teamSettings/{teamId} {
+      allow read, write: if isTeamMember(teamId);
     }
 
     match /sync_tracking/{doc} { allow read, write: if false; }
@@ -292,29 +293,33 @@ branches are deleted outright rather than deprecated.
 - **Dart unit:** `currentEventIdProvider` composes `${teamId}_${code}` and handles a
   missing/empty active team; `currentEventCodeProvider` returns the raw code. Update
   existing repo/sync tests that assumed a raw-code `eventId`.
-- **Python:** `on_user_membership_changed` sets the claim from `teamMemberships`,
-  and its echo guard prevents re-triggering on the `claimsRefreshedAt` write;
-  `_is_team_member` reads token claims correctly.
-- **Isolation check (rules):** verify Team B cannot read Team A's `events`/`matches`
-  and cannot read a team it is not a member of. Run against the Firestore emulator.
-  Because rules-unit-testing is JS-based while this stack is Dart/Python, the primary
-  form is a documented emulator procedure; a minimal `@firebase/rules-unit-testing`
-  harness may be added if low-cost.
-- **Regression:** full `flutter test` (currently 285) and `pytest` (currently 24)
+- **Python:** the `create_team`/`join_team`/`leave_team` callables validate input,
+  mutate membership, and set the claim (tested with Admin-SDK mocks, following the
+  existing `test_main.py` mock style); `_is_team_member` reads token claims correctly.
+- **Isolation check (rules):** an automated `@firebase/rules-unit-testing` harness
+  run against the Firestore emulator verifies: Team B cannot read Team A's
+  `events`/`matches`; empty-`teamId` docs are not globally readable; **a client
+  cannot write `users/{uid}.teamMemberships`; a client cannot write a
+  `teams/{tid}/members/**` doc** (the two escalation vectors this fix closes).
+- **Regression:** full `flutter test` (currently 285) and `pytest` (currently 47)
   green before the step is considered done.
 
 ## 13. Risks / open questions
 
-- **Claim propagation latency** in the create/join flow (§7) is the trickiest
-  implementation detail; the listener-refresh + timeout fallback must be verified,
-  not assumed.
+- **Membership authority moved to callables.** This is the security fix: the client
+  can no longer write its own membership (rules block `users.teamMemberships` and
+  `members/**`), so it cannot forge a claim. A stale token can still name a team the
+  user just left until the next refresh, but Firestore rules re-evaluate the claim on
+  every request and reads are also query-filtered by `teamId`, so a stale claim grants
+  nothing a fresh one wouldn't within one token lifetime.
+- **`create_team` bootstrap:** the very first team read after `create_team` needs the
+  refreshed token; the callable returns the team data directly so the UI does not
+  block on a read before the refresh lands.
 - **Composite Sheet-tab names** are ugly (`aB3kZx9Q_2026casf`) but functional and
   read-only; they get cleaned up when Sheets moves to per-team spreadsheets
   (`teamSettings.googleSheetId` already exists) in a later step.
-- **`teams/{teamId}/members` subcollection** is retained (still written
-  transactionally, and enables a future roster view via
-  `users where teamMemberships.<teamId>`), even though rules no longer read it.
-  Retiring it is a separate cleanup, out of scope here.
+- **`teams/{teamId}/members` subcollection** is now the server-authoritative roster
+  (write-locked to the callables) and enables a future roster view.
 - **Transport model** (venue connectivity) is untouched; the FRC offline camp's
   QR/Bluetooth aggregation is prior art for a later transport brainstorm, not this
   step.
