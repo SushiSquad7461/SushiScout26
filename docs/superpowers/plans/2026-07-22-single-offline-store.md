@@ -14,7 +14,7 @@
 
 - Branch is `single-offline-store`. Already created. Do not merge or deploy — **nothing ships without the user present.**
 - Commit convention: `<type>(<scope>): <subject>` — imperative, lowercase, no trailing period, max 50 chars. Scopes used here: `frontend`, `test`, `sync`, `db`, `ui`, `deps`, `docs`.
-- Run the full suite from `frontend/` with `flutter test`. Baseline before this plan: **308 tests passing** (measured 2026-07-22 — `CLAUDE.md` says 292 and is stale; Task 8 corrects it). The count grows in Tasks 1–3 and shrinks in Task 6 (two obsolete tests deleted).
+- Run the full suite from `frontend/` with `flutter test`. Baseline before this plan: **308 tests passing** (measured 2026-07-22 — `CLAUDE.md` says 292 and is stale; Task 8 corrects it). The count grows in Tasks 1–3 and shrinks in Task 5 (two obsolete tests deleted).
 - `flutter analyze` must be clean before every commit.
 - Never hand-edit generated files (`*.g.dart`, `*.mocks.dart`).
 - There are **no real users and nothing in production** — the Drift database may be deleted outright. No migration or drain code anywhere in this plan.
@@ -25,7 +25,7 @@
 These were confirmed against the real code and a live `fake_cloud_firestore` probe on 2026-07-22. Trust them.
 
 - `MatchReport.fromFirestore` (`match_report.dart:75`) already sets `isSynced: !doc.metadata.hasPendingWrites`. **The pending-write signal is already on every `MatchReport`** — no new plumbing is needed to count unsynced reports.
-- `fake_cloud_firestore` supports `doc.metadata` and `snapshot.metadata` without throwing, but **always** reports `hasPendingWrites: false` / `isFromCache: false`. It cannot simulate offline. This is why Task 6 puts the status logic behind a pure function.
+- `fake_cloud_firestore` supports `doc.metadata` and `snapshot.metadata` without throwing, but **always** reports `hasPendingWrites: false` / `isFromCache: false`. It cannot simulate offline. This is why Task 5 puts the status logic behind a pure function.
 - `fake_cloud_firestore` correctly handles the `where + where + where + orderBy` composite query in `_matchesQuery`, and correctly scopes by `teamId`.
 - `activeTeamIdProvider` (`sync_manager.dart:57`) and `firestoreRepositoryProvider` (`sync_manager.dart:60`) are declared **inside the file being deleted** and are overridden in `main.dart:28-32`. Task 3 relocates them before any deletion.
 - `connectivity_plus` has exactly one import site: `sync_manager.dart:5`.
@@ -41,12 +41,12 @@ These were confirmed against the real code and a live `fake_cloud_firestore` pro
 | `lib/data/repositories/providers.dart` | CREATE — owns `activeTeamIdProvider`, `firestoreRepositoryProvider` | 3 |
 | `lib/presentation/screens/dashboard.dart` | MODIFY — repoint, then consolidate onto one stream | 4, 7 |
 | `lib/presentation/screens/{frc_rebuilt_form,ftc_decode_form,trash_screen}.dart` | MODIFY — repoint | 4 |
-| `lib/data/repositories/hybrid_repository.dart` | DELETE | 5 |
-| `lib/data/local/sync/sync_manager.dart` | DELETE | 5 |
-| `lib/data/local/database/**` | DELETE | 5 |
-| `lib/presentation/widgets/connection_status.dart` | CREATE — pure status fn + two widgets | 6 |
-| `lib/presentation/widgets/sync_status_indicator.dart` | DELETE | 6 |
-| `lib/data/repositories/firestore_repository.dart` | MODIFY — add `watchMatchesView` | 6 |
+| `lib/presentation/widgets/connection_status.dart` | CREATE — pure status fn + two widgets | 5 |
+| `lib/presentation/widgets/sync_status_indicator.dart` | DELETE | 5 |
+| `lib/data/repositories/firestore_repository.dart` | MODIFY — add `watchMatchesView` | 5 |
+| `lib/data/repositories/hybrid_repository.dart` | DELETE | 6 |
+| `lib/data/local/sync/sync_manager.dart` | DELETE | 6 |
+| `lib/data/local/database/**` | DELETE | 6 |
 | `CLAUDE.md`, roadmap spec | MODIFY | 8 |
 
 ---
@@ -631,71 +631,7 @@ git commit -m "refactor(frontend): point ui at firestore repository"
 
 ---
 
-### Task 5: The cut — delete Drift and the sync queue
-
-Nothing references these files any more. This is the subtraction the whole step exists for: roughly 6,100 lines including the 4,117-line generated Drift file.
-
-**Files:**
-- Delete: `frontend/lib/data/repositories/hybrid_repository.dart`
-- Delete: `frontend/lib/data/local/sync/sync_manager.dart`
-- Delete: `frontend/lib/data/local/database/` (entire directory: `app_database.dart`, `app_database.g.dart`, `tables.dart`, `connection/native.dart`, `connection/web.dart`, `connection/unsupported.dart`)
-- Modify: `frontend/pubspec.yaml`
-
-**Interfaces:**
-- Consumes: nothing.
-- Produces: nothing. This task only removes.
-
-**Note:** `sync_status_indicator.dart` imports `sync_manager.dart` and will break here. That is expected — Task 6 replaces it. To keep the branch bisectable, this task and Task 6 must both land before the app is run. Task 5's own verification is `flutter analyze`, which will report errors confined to `sync_status_indicator.dart` and `dashboard.dart`'s two references to it.
-
-- [ ] **Step 1: Delete the files**
-
-```bash
-cd frontend
-git rm lib/data/repositories/hybrid_repository.dart
-git rm lib/data/local/sync/sync_manager.dart
-git rm -r lib/data/local/database/
-```
-
-- [ ] **Step 2: Remove the Drift dependencies**
-
-In `frontend/pubspec.yaml`, delete these three lines from `dependencies` (lines 51-53):
-
-```yaml
-  drift: ^2.21.0
-  drift_flutter: ^0.2.0
-  sqlite3_flutter_libs: ^0.5.24
-```
-
-and this line from `dev_dependencies` (line 74):
-
-```yaml
-  drift_dev: ^2.21.0
-```
-
-Leave `connectivity_plus` for now — Task 6 removes it along with its only consumer.
-
-- [ ] **Step 3: Resolve dependencies**
-
-Run: `cd frontend && flutter pub get`
-Expected: succeeds, removing the drift/sqlite packages.
-
-- [ ] **Step 4: Confirm the expected breakage and nothing more**
-
-Run: `cd frontend && flutter analyze`
-Expected: errors **only** in `lib/presentation/widgets/sync_status_indicator.dart` (its `sync_manager.dart` import is gone) and `lib/presentation/screens/dashboard.dart` (references `SyncStatusBar`/`SyncStatusIndicator`).
-
-Any error in another file means a dependency on the deleted code was missed. Investigate before continuing.
-
-- [ ] **Step 5: Commit**
-
-```bash
-cd frontend && git add -A pubspec.yaml pubspec.lock lib/
-git commit -m "refactor(db): delete drift and the sync queue"
-```
-
----
-
-### Task 6: Honest connection status
+### Task 5: Honest connection status
 
 Replaces 525 lines of sync-queue UI with a small widget driven by Firestore's own metadata. This is the hardening item that answers the captive-portal case: `connectivity_plus` reports *associated with an access point*, which is true on a portal that blocks all traffic. Snapshot metadata reports whether the server stream is actually alive.
 
@@ -707,8 +643,9 @@ The status logic lives in a **pure function** because `fake_cloud_firestore` alw
 - Delete: `frontend/lib/presentation/widgets/sync_status_indicator.dart`
 - Delete: `frontend/test/widgets/sync_status_indicator_test.dart`
 - Modify: `frontend/lib/presentation/screens/dashboard.dart:210, 227`
-- Modify: `frontend/pubspec.yaml` (drop `connectivity_plus`)
 - Create: `frontend/test/presentation/widgets/connection_status_test.dart`
+
+**Order note:** this task comes *before* the cut (Task 6), deliberately. It removes the last import of `sync_manager.dart`, so Task 6's deletion leaves a tree that still compiles. **Do not touch `pubspec.yaml` here** — `sync_manager.dart` still imports `connectivity_plus` until Task 6 removes both together.
 
 **Interfaces:**
 - Consumes: `firestoreRepositoryProvider` (Task 3); `MatchReport.isSynced`, which is already `!doc.metadata.hasPendingWrites`.
@@ -718,6 +655,7 @@ The status logic lives in a **pure function** because `fake_cloud_firestore` alw
   - `class ConnectionStatus { final bool isOffline; final int pendingCount; ... String get message; }` in `connection_status.dart`
   - `ConnectionStatus connectionStatusFrom({required bool isFromCache, required int pendingCount})`
   - `matchesViewProvider` (`StreamProvider<MatchesView>`) — Task 7 consumes this
+  - Note: `connection_status.dart` imports `providers.dart` (Task 3) and `event_providers.dart`; it must NOT import `sync_manager.dart`, which Task 6 deletes
   - Widgets `ConnectionStatusBar` and `ConnectionStatusChip({bool compact})`
 
 - [ ] **Step 1: Write the failing test for the pure status function**
@@ -1017,41 +955,104 @@ git rm test/widgets/sync_status_indicator_test.dart
 
 The test file is deleted rather than ported: both of its cases assert on pending counts sourced from the `SyncManager` queue, which no longer exists. Its replacement coverage is the pure-function suite from Step 1.
 
-- [ ] **Step 8: Remove `connectivity_plus`**
+- [ ] **Step 8: Verify the app compiles and the suite passes**
 
-In `frontend/pubspec.yaml`, delete line 54 from `dependencies`:
+Run: `cd frontend && flutter analyze && flutter test`
+Expected: `No issues found!` and 339 tests passing (335 + 6 new − 2 deleted; the deleted file has exactly 2 tests).
+
+`sync_manager.dart` and `HybridRepository` still exist at this point and are still expected to analyze cleanly — they are simply unreferenced by the UI now. Task 6 deletes them.
+
+- [ ] **Step 9: Commit**
+
+```bash
+cd frontend && git add -A lib/ test/
+git commit -m "feat(ui): derive connection status from firestore"
+```
+
+---
+
+### Task 6: The cut — delete Drift and the sync queue
+
+Nothing references these files any more. This is the subtraction the whole step exists for: roughly 6,100 lines including the 4,117-line generated Drift file.
+
+**Files:**
+- Delete: `frontend/lib/data/repositories/hybrid_repository.dart`
+- Delete: `frontend/lib/data/local/sync/sync_manager.dart`
+- Delete: `frontend/lib/data/local/database/` (entire directory: `app_database.dart`, `app_database.g.dart`, `tables.dart`, `connection/native.dart`, `connection/web.dart`, `connection/unsupported.dart`)
+- Modify: `frontend/pubspec.yaml` (drop the Drift deps **and** `connectivity_plus`)
+
+**Interfaces:**
+- Consumes: nothing.
+- Produces: nothing. This task only removes.
+
+**Note:** Task 5 already removed the last import of `sync_manager.dart`, so this deletion should leave a fully compiling tree. `flutter analyze` must come back completely clean — any error here means a live reference to the deleted code was missed, not an expected transient break.
+
+- [ ] **Step 1: Delete the files**
+
+```bash
+cd frontend
+git rm lib/data/repositories/hybrid_repository.dart
+git rm lib/data/local/sync/sync_manager.dart
+git rm -r lib/data/local/database/
+```
+
+- [ ] **Step 2: Remove the Drift dependencies**
+
+In `frontend/pubspec.yaml`, delete these three lines from `dependencies` (lines 51-53):
+
+```yaml
+  drift: ^2.21.0
+  drift_flutter: ^0.2.0
+  sqlite3_flutter_libs: ^0.5.24
+```
+
+and this line from `dev_dependencies` (line 74):
+
+```yaml
+  drift_dev: ^2.21.0
+```
+
+Also delete `connectivity_plus` from `dependencies` (line 54) — `sync_manager.dart:5` was its only import site, and that file is now gone:
 
 ```yaml
   connectivity_plus: ^6.0.3
 ```
 
-Then run: `cd frontend && flutter pub get`
+- [ ] **Step 3: Resolve dependencies**
 
-- [ ] **Step 9: Verify the whole app compiles and the suite passes**
+Run: `cd frontend && flutter pub get`
+Expected: succeeds, removing the drift/sqlite/connectivity packages.
+
+- [ ] **Step 4: Verify the tree is clean and the suite still passes**
 
 Run: `cd frontend && flutter analyze && flutter test`
-Expected: `No issues found!` and 339 tests passing (335 + 6 new − 2 deleted; the deleted file has exactly 2 tests).
+Expected: `No issues found!` and 339 tests passing — unchanged from Task 5, because this task deletes only unreferenced code and no tests.
 
-This is the first point since Task 4 where the app compiles fully. If analyze reports anything, resolve it before committing.
+Any analyze error means a live reference to the deleted code was missed. Investigate rather than patching around it.
 
-- [ ] **Step 10: Commit**
+- [ ] **Step 5: Confirm the deleted symbols are gone**
+
+Run: `cd frontend && grep -rn "drift\|Drift\|SyncManager\|hybridRepository\|connectivity_plus" lib/`
+Expected: **no output.**
+
+- [ ] **Step 6: Commit**
 
 ```bash
-cd frontend && git add -A lib/ test/ pubspec.yaml pubspec.lock
-git commit -m "feat(ui): derive connection status from firestore"
+cd frontend && git add -A pubspec.yaml pubspec.lock lib/
+git commit -m "refactor(db): delete drift and the sync queue"
 ```
 
 ---
 
 ### Task 7: Consolidate the dashboard onto one stream
 
-The dashboard currently holds a manually-managed `Stream` field that it tears down and rebuilds in three places, and separately re-fetches with `getMatches()` at three more. Under a throttled network that is repeated full re-reads competing with a live listener. `matchesViewProvider` from Task 6 already subscribes once — everything reads from it.
+The dashboard currently holds a manually-managed `Stream` field that it tears down and rebuilds in three places, and separately re-fetches with `getMatches()` at three more. Under a throttled network that is repeated full re-reads competing with a live listener. `matchesViewProvider` from Task 5 already subscribes once — everything reads from it.
 
 **Files:**
 - Modify: `frontend/lib/presentation/screens/dashboard.dart` (lines 33, 36-40, 47-53, 58, 107, 190-197, 235)
 
 **Interfaces:**
-- Consumes: `matchesViewProvider` (`StreamProvider<MatchesView>`) from Task 6.
+- Consumes: `matchesViewProvider` (`StreamProvider<MatchesView>`) from Task 5.
 - Produces: nothing.
 
 - [ ] **Step 1: Delete the manual stream field and its lifecycle**
@@ -1148,7 +1149,7 @@ Make these edits:
 - Delete the **Key Technical Details** bullet beginning "Drift database requires code generation".
 - Delete the bullet "Drift SQLite has 4 tables: LocalMatchReports, LocalEvents, SyncQueue, SyncConflicts".
 - Delete the bullet "SyncManager runs periodic sync every 5 minutes with exponential backoff retry (max 5 attempts)".
-- In **Testing**, change "currently 292 tests" to the count Task 6 finished with (expected **339**; use the real number from `flutter test`, since 292 was already stale by 16 before this branch started). Note that repository tests use `fake_cloud_firestore`.
+- In **Testing**, change "currently 292 tests" to the count Task 7 finished with (expected **339**; use the real number from `flutter test`, since 292 was already stale by 16 before this branch started). Note that repository tests use `fake_cloud_firestore`.
 - Add a bullet under **Key Technical Details**: `**Connection status comes from Firestore snapshot metadata** (`isFromCache`, `hasPendingWrites`), never from `connectivity_plus`. Link-layer state reports "wifi" on a captive portal that blocks all traffic — which is the venue failure mode we actually face.`
 
 - [ ] **Step 2: Retire and retarget the reviewer agents**
