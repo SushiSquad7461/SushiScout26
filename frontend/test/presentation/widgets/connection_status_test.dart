@@ -47,4 +47,20 @@ void main() {
       expect(connectionStatusFrom(isFromCache: true, pendingCount: 0).isOffline, isTrue);
     });
   });
+
+  group('ConnectionStatus error state', () {
+    test('is not fully synced when the stream errors', () {
+      const status = ConnectionStatus(
+        isOffline: false,
+        pendingCount: 0,
+        hasError: true,
+      );
+
+      expect(status.isFullySynced, isFalse);
+      expect(
+        status.message,
+        "Can't reach the server — recent reports may not be uploaded",
+      );
+    });
+  });
 }

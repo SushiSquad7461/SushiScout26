@@ -12,13 +12,21 @@ import '../providers/event_providers.dart';
 class ConnectionStatus {
   final bool isOffline;
   final int pendingCount;
+  final bool hasError;
 
-  const ConnectionStatus({required this.isOffline, required this.pendingCount});
+  const ConnectionStatus({
+    required this.isOffline,
+    required this.pendingCount,
+    this.hasError = false,
+  });
 
-  bool get isFullySynced => !isOffline && pendingCount == 0;
+  bool get isFullySynced => !hasError && !isOffline && pendingCount == 0;
 
   String get message {
     final noun = pendingCount == 1 ? 'report' : 'reports';
+    if (hasError) {
+      return "Can't reach the server — recent reports may not be uploaded";
+    }
     if (isOffline) {
       if (pendingCount == 0) return 'Offline — showing saved data';
       return 'Offline — $pendingCount $noun saved on this device';
@@ -49,12 +57,17 @@ final matchesViewProvider = StreamProvider<MatchesView>((ref) {
 /// against a different event is not counted. Scouts work one event at a time.
 final connectionStatusProvider = Provider<ConnectionStatus>((ref) {
   final view = ref.watch(matchesViewProvider);
-  return view.maybeWhen(
+  return view.when(
     data: (v) => connectionStatusFrom(
       isFromCache: v.isFromCache,
       pendingCount: v.matches.where((m) => !m.isSynced).length,
     ),
-    orElse: () => const ConnectionStatus(isOffline: false, pendingCount: 0),
+    loading: () => const ConnectionStatus(isOffline: false, pendingCount: 0),
+    error: (error, stackTrace) => const ConnectionStatus(
+      isOffline: false,
+      pendingCount: 0,
+      hasError: true,
+    ),
   );
 });
 
@@ -69,10 +82,10 @@ class ConnectionStatusBar extends ConsumerWidget {
     if (status.isFullySynced) return const SizedBox.shrink();
 
     final colorScheme = Theme.of(context).colorScheme;
-    final background = status.isOffline
+    final background = (status.isOffline || status.hasError)
         ? colorScheme.errorContainer
         : colorScheme.secondaryContainer;
-    final foreground = status.isOffline
+    final foreground = (status.isOffline || status.hasError)
         ? colorScheme.onErrorContainer
         : colorScheme.onSecondaryContainer;
 
@@ -85,7 +98,11 @@ class ConnectionStatusBar extends ConsumerWidget {
           child: Row(
             children: [
               Icon(
-                status.isOffline ? Icons.cloud_off : Icons.cloud_upload,
+                status.hasError
+                    ? Icons.sync_problem
+                    : status.isOffline
+                        ? Icons.cloud_off
+                        : Icons.cloud_upload,
                 size: 18,
                 color: foreground,
               ),
@@ -119,8 +136,14 @@ class ConnectionStatusChip extends ConsumerWidget {
     if (status.isFullySynced) return const SizedBox.shrink();
 
     final colorScheme = Theme.of(context).colorScheme;
-    final color = status.isOffline ? colorScheme.error : colorScheme.primary;
-    final icon = status.isOffline ? Icons.cloud_off : Icons.cloud_upload;
+    final color = (status.isOffline || status.hasError)
+        ? colorScheme.error
+        : colorScheme.primary;
+    final icon = status.hasError
+        ? Icons.sync_problem
+        : status.isOffline
+            ? Icons.cloud_off
+            : Icons.cloud_upload;
 
     if (compact) {
       return Tooltip(
