@@ -161,6 +161,17 @@ class TeamRepository {
     return result.data['googleSheetId'] as String;
   }
 
+  /// Triggers a one-time backfill of an event's existing matches into the
+  /// team's connected sheet via the `backfill_event_to_sheets` callable.
+  Future<Map<String, dynamic>> backfillEventToSheets({
+    required String eventId,
+  }) async {
+    final callable = _functions.httpsCallable('backfill_event_to_sheets');
+    final result =
+        await callable.call<Map<String, dynamic>>({'eventId': eventId});
+    return result.data;
+  }
+
   Future<void> regenerateInviteCode({
     required String teamId,
     required String requestingUserId,

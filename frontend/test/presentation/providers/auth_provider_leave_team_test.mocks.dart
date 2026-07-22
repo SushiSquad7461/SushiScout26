@@ -372,6 +372,21 @@ class MockTeamRepository extends _i1.Mock implements _i8.TeamRepository {
           as _i6.Future<String>);
 
   @override
+  _i6.Future<Map<String, dynamic>> backfillEventToSheets({
+    required String? eventId,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(#backfillEventToSheets, [], {#eventId: eventId}),
+            returnValue: _i6.Future<Map<String, dynamic>>.value(
+              <String, dynamic>{},
+            ),
+            returnValueForMissingStub: _i6.Future<Map<String, dynamic>>.value(
+              <String, dynamic>{},
+            ),
+          )
+          as _i6.Future<Map<String, dynamic>>);
+
+  @override
   _i6.Future<void> regenerateInviteCode({
     required String? teamId,
     required String? requestingUserId,

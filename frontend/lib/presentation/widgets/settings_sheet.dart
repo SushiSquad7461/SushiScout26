@@ -23,6 +23,7 @@ class _SettingsSheetState extends ConsumerState<SettingsSheet> {
   String? _sheetError;
   bool _saving = false;
   bool _backfilling = false;
+  bool _sheetLoadFailed = false;
 
   @override
   void initState() {
@@ -34,20 +35,30 @@ class _SettingsSheetState extends ConsumerState<SettingsSheet> {
   }
 
   void _loadTeamSheet() {
+    final String teamId;
     try {
-      final teamId = ref.read(currentTeamIdProvider);
-      if (teamId == null) return;
-      ref.read(teamRepositoryProvider).getTeamSettings(teamId).then((settings) {
-        if (!mounted) return;
-        setState(() {
-          _sheetId = settings?.googleSheetId;
-          _sheetCtrl.text = _sheetId ?? '';
-        });
-      });
+      final id = ref.read(currentTeamIdProvider);
+      if (id == null) return;
+      teamId = id;
     } catch (_) {
       // Auth/team providers may not be ready yet (e.g. no signed-in user) —
       // leave the export section in its "not configured" state.
+      return;
     }
+
+    ref.read(teamRepositoryProvider).getTeamSettings(teamId).then((settings) {
+      if (!mounted) return;
+      setState(() {
+        _sheetId = settings?.googleSheetId;
+        _sheetCtrl.text = _sheetId ?? '';
+      });
+    }).catchError((Object _) {
+      // A genuine load failure (permission-denied, network) must not look
+      // like "not configured" — that would tell an admin whose sheet IS
+      // connected that exports are off.
+      if (!mounted) return;
+      setState(() => _sheetLoadFailed = true);
+    });
   }
 
   Future<void> _saveSheet() async {
@@ -68,9 +79,13 @@ class _SettingsSheetState extends ConsumerState<SettingsSheet> {
       setState(() => _sheetId = stored);
     } catch (e) {
       // The callable's failed-precondition message names the service
-      // account to share the sheet with — surface it verbatim.
+      // account to share the sheet with — surface it verbatim, without the
+      // technical "[firebase_functions/<code>]" prefix FirebaseFunctionsException
+      // adds to toString().
       if (!mounted) return;
-      setState(() => _sheetError = e.toString());
+      final message =
+          e is FirebaseFunctionsException ? (e.message ?? e.toString()) : e.toString();
+      setState(() => _sheetError = message);
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -81,9 +96,9 @@ class _SettingsSheetState extends ConsumerState<SettingsSheet> {
 
     setState(() => _backfilling = true);
     try {
-      await FirebaseFunctions.instance
-          .httpsCallable('backfill_event_to_sheets')
-          .call<Map<String, dynamic>>({'eventId': eventId});
+      await ref
+          .read(teamRepositoryProvider)
+          .backfillEventToSheets(eventId: eventId);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Backfill complete")),
@@ -220,9 +235,11 @@ class _SettingsSheetState extends ConsumerState<SettingsSheet> {
               ),
               const SizedBox(height: AppTheme.spacingSm),
               Text(
-                _sheetId == null || _sheetId!.isEmpty
-                    ? "Not configured — matches aren't being exported."
-                    : "Connected",
+                _sheetLoadFailed
+                    ? "Couldn't check export status"
+                    : (_sheetId == null || _sheetId!.isEmpty)
+                        ? "Not configured — matches aren't being exported."
+                        : "Connected",
                 style: Theme.of(context).textTheme.bodySmall,
               ),
               const SizedBox(height: AppTheme.spacingSm),
