@@ -4,6 +4,18 @@ import '../models/event.dart';
 import '../models/match_report.dart';
 import 'scouting_repository.dart';
 
+/// A snapshot of an event's matches plus whether it came from the local cache.
+///
+/// `isFromCache` is Firestore's own answer to "am I reaching the server?" — it
+/// is true when the stream is not live, including on a captive-portal network
+/// where the device is associated with wifi but nothing gets through.
+class MatchesView {
+  final List<MatchReport> matches;
+  final bool isFromCache;
+
+  const MatchesView({required this.matches, required this.isFromCache});
+}
+
 class FirestoreRepository implements ScoutingRepository {
   final FirebaseFirestore _firestore;
   final String? teamId;
@@ -24,15 +36,25 @@ class FirestoreRepository implements ScoutingRepository {
     return query.orderBy('createdAt', descending: true);
   }
 
+  /// Watches matches along with the snapshot metadata needed for connection
+  /// status. Uses `includeMetadataChanges` so an online/offline transition
+  /// emits even when no document changed.
+  Stream<MatchesView> watchMatchesView(String eventId) {
+    return _matchesQuery(eventId, isDeleted: false)
+        .snapshots(includeMetadataChanges: true)
+        .map(
+          (snapshot) => MatchesView(
+            matches: snapshot.docs
+                .map((doc) => MatchReport.fromFirestore(doc))
+                .toList(),
+            isFromCache: snapshot.metadata.isFromCache,
+          ),
+        );
+  }
+
   @override
   Stream<List<MatchReport>> watchMatches(String eventId) {
-    return _matchesQuery(eventId, isDeleted: false)
-        .snapshots()
-        .map(
-          (snapshot) => snapshot.docs
-              .map((doc) => MatchReport.fromFirestore(doc))
-              .toList(),
-        );
+    return watchMatchesView(eventId).map((view) => view.matches);
   }
 
   @override

@@ -12,7 +12,7 @@ import 'match_details.dart';
 import 'trash_screen.dart';
 import '../factories/scouting_form_factory.dart';
 import '../theme/app_theme.dart';
-import '../widgets/sync_status_indicator.dart';
+import '../widgets/connection_status.dart';
 import '../widgets/settings_sheet.dart';
 
 import '../widgets/match_search_delegate.dart';
@@ -207,7 +207,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     return Scaffold(
       body: Column(
         children: [
-          const SyncStatusBar(),
+          const ConnectionStatusBar(),
           Expanded(
             child: RefreshIndicator(
               onRefresh: _onRefresh,
@@ -224,7 +224,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               // Sync status indicator
               const Padding(
                 padding: EdgeInsets.only(right: 8),
-                child: Center(child: SyncStatusIndicator(compact: true)),
+                child: Center(child: ConnectionStatusChip(compact: true)),
               ),
               // Search button
               IconButton(
