@@ -20,7 +20,7 @@ Step 2 (Sheets one-way), Step 3 (collapse to a single offline store), and Step 4
 
 **Frontend** (`frontend/`): Flutter app using Riverpod for state management. Targets Windows, macOS, Linux, Android, iOS, and web. Firebase Auth for team-scoped access.
 
-**Backend** (`functions/`): Python 3.11 Firebase Cloud Functions. Syncs Firestore match data bidirectionally with Google Sheets.
+**Backend** (`functions/`): Python 3.11 Firebase Cloud Functions. One-way exports Firestore match data to each team's own Google Sheet (Firestore -> Sheets only; there is no reverse path).
 
 ### Frontend Architecture (offline-first)
 
@@ -37,7 +37,6 @@ Step 2 (Sheets one-way), Step 3 (collapse to a single offline store), and Step 4
 
 - `events` — competition events with programType (FRC/FTC), tbaKey, teamId
 - `matches` — top-level collection of match reports with eventId field (recently refactored from subcollection)
-- `sync_tracking` — maps report IDs to Google Sheets row numbers for sync idempotency
 - `tba_cache` — cached Blue Alliance API responses (24h TTL)
 
 ### Auth & Team Isolation
@@ -54,12 +53,11 @@ Step 2 (Sheets one-way), Step 3 (collapse to a single offline store), and Step 4
 ### Cloud Functions
 
 - `create_team` / `join_team` / `leave_team` — callables that own ALL membership mutation: validate server-side (invite code, already-member, last-admin), write membership with the Admin SDK, then set the `{teams: ...}` custom claim. See Auth & Team Isolation above.
-- `on_match_written` — Firestore trigger on `matches/{reportId}` that syncs creates/updates/deletes to Google Sheets
-- `backfill_event_to_sheets` — callable function to bulk-sync an event's matches
-- `update_match_from_sheets` / `sync_from_sheets_http` — reverse sync from Sheets back to Firestore
+- `set_team_sheet` — callable that validates write access to a team-supplied spreadsheet (via a real write probe, not just a metadata read) and stores it as that team's `teamSettings/{teamId}.googleSheetId`
+- `on_match_written` — Firestore trigger on `matches/{reportId}` that one-way exports creates/updates/deletes to the owning team's Google Sheet (no reverse path back into Firestore)
+- `backfill_event_to_sheets` — callable function to bulk-export an event's matches into its team's sheet; idempotent (row identity is resolved by looking the report id up in the sheet itself)
 - `fetch_event_schedule` (`tba_sync.py`) — callable that pulls FRC/FTC schedules from The Blue Alliance API (cached 24h in `tba_cache` collection)
-- `functions/services/sheets_service.py` — Google Sheets API wrapper (different column schemas for FRC vs FTC)
-- `functions/services/sync_tracker.py` — tracks row numbers in `sync_tracking` collection for Firestore↔Sheets mapping
+- `functions/services/sheets_service.py` — Google Sheets API wrapper (different column schemas for FRC vs FTC); one-way export only, no row-tracking collection
 
 ## Common Commands
 
@@ -102,7 +100,7 @@ Subject: imperative mood, no capitalization, no trailing period, max 50 chars.
 ## Key Technical Details
 
 - Drift database requires code generation — run `dart run build_runner build --delete-conflicting-outputs` after changing `tables.dart` or `app_database.dart`
-- Firebase secrets used: `GOOGLE_SHEETS_CREDENTIALS`, `MASTER_SPREADSHEET_ID`, `SYNC_API_KEY`, `TBA_API_KEY`
+- Firebase secrets used: `GOOGLE_SHEETS_CREDENTIALS`, `TBA_API_KEY`, `FTC_API_USERNAME`, `FTC_API_KEY`
 - Firestore persistence is enabled with unlimited cache for offline-first reliability
 - The `gameData` field on MatchReport is a flexible `Map<String, dynamic>` that varies by program type (FRC vs FTC)
 - Drift SQLite has 4 tables: LocalMatchReports, LocalEvents, SyncQueue, SyncConflicts
