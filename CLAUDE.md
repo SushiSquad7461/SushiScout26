@@ -25,13 +25,6 @@ research, and the scope of the remaining steps. Step 1 (team isolation) and Step
 ### Frontend Architecture (offline-first)
 
 - **Offline-first pattern**: Local Drift/SQLite DB is the source of truth for reads. Firestore syncs in background. App works fully offline.
-- `data/repositories/scouting_repository.dart` — abstract interface for data operations
-- `data/repositories/hybrid_repository.dart` — combines local SQLite + Firestore; reads from local, queues writes for sync
-- `data/repositories/firestore_repository.dart` — direct Firestore operations
-- `data/local/sync/sync_manager.dart` — handles offline queue and connectivity-aware sync
-- `data/local/database/` — Drift (SQLite) database with code generation
-- `presentation/factories/scouting_form_factory.dart` — factory that returns FRC or FTC form based on `event.programType`
-- Two scouting forms: `frc_rebuilt_form.dart` (FRC) and `ftc_decode_form.dart` (FTC)
 
 ### Firestore Collections
 
@@ -58,35 +51,6 @@ research, and the scope of the remaining steps. Step 1 (team isolation) and Step
 - `backfill_event_to_sheets` — callable function to bulk-export an event's matches into its team's sheet; idempotent (row identity is resolved by looking the report id up in the sheet itself)
 - `fetch_event_schedule` (`tba_sync.py`) — callable that pulls FRC/FTC schedules from The Blue Alliance API (cached 24h in `tba_cache` collection)
 - `functions/services/sheets_service.py` — Google Sheets API wrapper (different column schemas for FRC vs FTC); one-way export only, no row-tracking collection
-
-## Common Commands
-
-### Frontend (Flutter)
-```bash
-cd frontend
-flutter run -d windows --hot     # Run on Windows with hot reload
-flutter test                     # Run all tests
-flutter test test/widgets/counter_card_test.dart  # Run single test
-flutter analyze                  # Static analysis
-flutter pub get                  # Install dependencies
-dart run build_runner build      # Regenerate Drift/Riverpod code (*.g.dart files)
-```
-
-### Cloud Functions (Python)
-```bash
-cd functions
-python3.11 -m venv venv && source venv/bin/activate   # MUST be 3.11 — see note below
-pip install -r requirements.txt
-python -m pytest tests/          # Run function tests
-firebase deploy --only functions # Deploy functions
-firebase emulators:start         # Local emulator
-```
-
-### Firebase
-```bash
-firebase deploy --only firestore:rules   # Deploy Firestore rules
-firebase deploy --only firestore:indexes # Deploy indexes
-```
 
 ## Commit Convention
 
@@ -124,33 +88,9 @@ Subject: imperative mood, no capitalization, no trailing period, max 50 chars.
 
 ## Working on this repo with AI (Claude Code)
 
-This repo ships shared Claude Code config in `.claude/` so collaborators get a
-consistent AI setup on clone:
-- **Hooks** (`settings.json`): auto `dart format` + `flutter analyze` on `.dart`
-  edits, and a guard that blocks edits to generated `*.g.dart` / `*.mocks.dart`.
-- **Agents** (`.claude/agents/`): `security-reviewer`, `sync-logic-reviewer`,
-  `drift-migration-reviewer` — invoke after touching the matching code.
-- **Skills** (`.claude/skills/`): `/run-tests`, `/drift-codegen`,
-  `/deploy-functions`, `/firestore-rules-check`.
-
 Personal/ephemeral state (`settings.local.json`, ralph logs, `.superpowers/`,
 `.opencode/`) is gitignored — set your own `settings.local.json` permissions.
 
-### Recommended plugins (installed per-user, not via clone)
-
-Plugins live in `~/.claude/`, so they are not pulled in by cloning. Add the
-marketplaces, then install:
-
-```bash
-claude plugin marketplace add anthropics/claude-plugins-official
-claude plugin marketplace add mksglu/context-mode
-
-# Core for this repo
-claude plugin install firebase@claude-plugins-official        # enabled via settings.json
-claude plugin install superpowers@claude-plugins-official     # TDD/debugging/review disciplines
-claude plugin install context-mode@context-mode               # keeps large tool output out of context
-claude plugin install context7@claude-plugins-official        # live library docs (Flutter/Firebase/Riverpod)
-claude plugin install commit-commands@claude-plugins-official # /commit, /commit-push-pr
-claude plugin install code-review@claude-plugins-official     # /code-review
-```
+For recommended plugins and first-time setup, see the `repo-ai-setup` skill
+(`.claude/skills/repo-ai-setup/SKILL.md`).
 
