@@ -129,7 +129,16 @@ void main() {
     });
   });
 
-  group('team isolation', () {
+  // Scope note: these cover READ-side isolation only, which is the part
+  // FirestoreRepository enforces itself (via _matchesQuery's teamId filter).
+  //
+  // Write-side isolation is NOT tested here and cannot be: trashMatch,
+  // restoreMatch, and deleteMatch address matches/{id} directly with no
+  // ownership check, delegating enforcement entirely to Firestore rules.
+  // FakeFirebaseFirestore does not evaluate rules, so a test asserting that
+  // team B cannot trash team A's match would fail against correct code.
+  // That guarantee is covered by test/firestore-rules/rules.test.js instead.
+  group('team isolation (read side)', () {
     test('a repository scoped to another team cannot read these matches', () async {
       await repo.createMatch('teamA_evt', buildMatch(id: 'm1'));
 
