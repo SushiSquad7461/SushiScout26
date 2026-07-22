@@ -72,6 +72,7 @@ dev_dependencies:
   integration_test:
     sdk: flutter
   drift_dev: ^2.21.0
+  fake_cloud_firestore: ^4.2.0
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
