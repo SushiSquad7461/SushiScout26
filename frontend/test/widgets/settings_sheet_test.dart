@@ -110,6 +110,70 @@ void main() {
     expect(find.textContaining('[firebase_functions/'), findsNothing);
   });
 
+  testWidgets(
+      'service-account address is rendered without a line/overflow limit '
+      'that would truncate it', (tester) async {
+    // find.textContaining above passes even when the on-screen text is
+    // ellipsized, because it inspects widget data, not layout — it would
+    // NOT have caught the original bug. This test pins the actual
+    // rendering constraint instead: the message must live in a widget
+    // that isn't configured to clip it. Reproduces on pre-fix code, where
+    // the message went into TextField's InputDecoration.errorText (whose
+    // errorMaxLines defaults to a value that ellipsizes ~110-char text).
+    await growViewport(tester);
+    const serviceAccountMessage =
+        "Can't open that sheet. Share it as Editor with "
+        "sushiscout-sync@sushiscout26.iam.gserviceaccount.com, then try again.";
+    when(mockTeamRepository.setTeamSheet(
+      teamId: anyNamed('teamId'),
+      sheetId: anyNamed('sheetId'),
+    )).thenThrow(FirebaseFunctionsException(
+      code: 'failed-precondition',
+      message: serviceAccountMessage,
+    ));
+
+    await tester.pumpWidget(wrap(await baseOverrides()));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+        find.widgetWithText(TextField, 'Google Sheet link or id'),
+        'https://docs.google.com/spreadsheets/d/abc123');
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+
+    // The full message must be findable in a SelectableText with no
+    // maxLines cap — i.e. rendered outside InputDecoration.errorText.
+    final errorFinder = find.widgetWithText(SelectableText, serviceAccountMessage);
+    expect(errorFinder, findsOneWidget);
+    final selectable = tester.widget<SelectableText>(errorFinder);
+    expect(selectable.maxLines, isNull);
+
+    // The field's own decoration must not carry a (truncatable) errorText.
+    final textField = tester.widget<TextField>(
+        find.widgetWithText(TextField, 'Google Sheet link or id'));
+    expect(textField.decoration?.errorText, isNull);
+  });
+
+  testWidgets('Connected status links to the spreadsheet', (tester) async {
+    await growViewport(tester);
+    when(mockTeamRepository.getTeamSettings(any)).thenAnswer((_) async =>
+        TeamSettings(
+          teamId: 'team1',
+          googleSheetId: 'abc123',
+          createdBy: 'alice',
+          createdAt: DateTime(2026, 1, 1),
+        ));
+
+    await tester.pumpWidget(wrap(await baseOverrides()));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Connected'), findsOneWidget);
+    expect(
+      find.textContaining('https://docs.google.com/spreadsheets/d/abc123'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('shows connected state after a successful save',
       (tester) async {
     await growViewport(tester);

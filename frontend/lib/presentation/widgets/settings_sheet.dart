@@ -242,15 +242,43 @@ class _SettingsSheetState extends ConsumerState<SettingsSheet> {
                         : "Connected",
                 style: Theme.of(context).textTheme.bodySmall,
               ),
+              if (!_sheetLoadFailed &&
+                  _sheetId != null &&
+                  _sheetId!.isNotEmpty) ...[
+                const SizedBox(height: AppTheme.spacingXs),
+                // Selectable so an admin can copy the link straight to a
+                // new tab — this is the only place that spreadsheet id is
+                // surfaced in the UI.
+                SelectableText(
+                  'https://docs.google.com/spreadsheets/d/${_sheetId!}',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                ),
+              ],
               const SizedBox(height: AppTheme.spacingSm),
               TextField(
                 controller: _sheetCtrl,
-                decoration: InputDecoration(
+                decoration: const InputDecoration(
                   labelText: "Google Sheet link or id",
-                  errorText: _sheetError,
-                  border: const OutlineInputBorder(),
+                  border: OutlineInputBorder(),
                 ),
               ),
+              // Rendered outside the field's InputDecoration on purpose:
+              // InputDecorator's errorText ellipsizes past a couple of
+              // lines by default, but this message's entire point is the
+              // ~110-char service-account address the admin must copy —
+              // truncating it defeats the message. SelectableText here
+              // also lets them copy it directly instead of retyping.
+              if (_sheetError != null) ...[
+                const SizedBox(height: AppTheme.spacingXs),
+                SelectableText(
+                  _sheetError!,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                ),
+              ],
               const SizedBox(height: AppTheme.spacingSm),
               Row(
                 children: [
