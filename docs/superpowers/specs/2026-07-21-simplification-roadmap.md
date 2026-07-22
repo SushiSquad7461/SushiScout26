@@ -84,7 +84,34 @@ get-or-create read) were first-run-only. **Test the empty-DB path.**
 
 ---
 
-## 5. Step 2 — Make Google Sheets a one-way export
+## 5. Step 2 — Make Google Sheets a one-way export — **DONE (shipped 2026-07-22)**
+
+Design: [`2026-07-21-sheets-one-way-export-design.md`](2026-07-21-sheets-one-way-export-design.md).
+Plan: [`../plans/2026-07-21-sheets-one-way-export.md`](../plans/2026-07-21-sheets-one-way-export.md).
+Merged as `5fca203`, deployed, and verified end-to-end against the real Sheets API on an empty
+database. Everything below is the original scope; it shipped as written except where noted.
+
+**What differed from this section's plan, and why it matters to Step 3:**
+- `googleSheetId` lives on `teamSettings/{teamId}`, not `teams/{teamId}`.
+- `sync_tracking` was deleted entirely, not trimmed: row identity is now resolved by searching
+  the sheet for the report id. One less store to drift.
+- Added (not in the original scope): `set_team_sheet`, an admin-only callable that validates a
+  team's spreadsheet with a real write probe before storing the id, plus rules denying every
+  client write to that field.
+- `_stampSource` was renamed, not deleted — its `teamId` backfill is load-bearing for the
+  trash/restore-races-hard-delete path.
+
+**Process lessons worth carrying into Step 3:**
+1. **All three Critical/Important defects came from the PLAN's sample code, not from the
+   implementers.** A write probe that only proved read access; a rules guard that let field
+   removal through; a service-account address silently ellipsized by a Flutter default. Treat
+   code in a plan as a starting point to be reviewed, never as pre-validated.
+2. **Mocked tests cannot validate an external API.** The Sheets integration was 100% green
+   locally while never having touched Google. Budget for real end-to-end verification.
+3. **The empty-DB first-run path keeps producing bugs** — three times now across Steps 1 and 2.
+   Test the cold start explicitly, on a brand-new team with no documents.
+4. Wiping team data requires deleting `users/` docs too, or `create_team` re-mints the custom
+   claim from the surviving `teamMemberships` map and resurrects the dead team id.
 
 **Why:** Sheets is read-only by decision (§3), but the code still treats it as a bidirectional
 peer. That bidirectionality is the single largest source of backend complexity and bugs.
