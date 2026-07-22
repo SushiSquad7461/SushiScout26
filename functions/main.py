@@ -523,24 +523,26 @@ def backfill_event_to_sheets(req: https_fn.CallableRequest) -> dict:
         db = get_db()
         event_doc = db.collection('events').document(event_id).get()
 
-        if event_doc.exists:
-            event_team_id = (event_doc.to_dict() or {}).get('teamId', '') or ''
-            if event_team_id and not _is_team_member(req.auth.token, event_team_id):
-                raise https_fn.HttpsError(
-                    code=https_fn.FunctionsErrorCode.PERMISSION_DENIED,
-                    message="Caller is not a member of the team that owns this event"
-                )
-        else:
-            # No events/ doc yet (created lazily on first match write).
-            # Resolve the team from the caller's own claim instead of
-            # treating "event unknown" as "team unknown" — the latter was
-            # reported to the admin as a false "no sheet configured".
+        # The event doc is authoritative when it has a teamId. Otherwise
+        # (no doc yet — created lazily on first match write — or a doc
+        # missing teamId) resolve from the caller's own claim instead of
+        # treating "team unknown" as "no sheet configured", which was
+        # reported to the admin as a false diagnosis.
+        event_team_id = ((event_doc.to_dict() or {}).get('teamId') if event_doc.exists else '') or ''
+        if not event_team_id:
             event_team_id = _team_id_from_claim(event_id, req.auth.token)
-            if not event_team_id:
-                raise https_fn.HttpsError(
-                    code=https_fn.FunctionsErrorCode.PERMISSION_DENIED,
-                    message="Caller is not a member of the team that owns this event"
-                )
+
+        if not event_team_id:
+            raise https_fn.HttpsError(
+                code=https_fn.FunctionsErrorCode.PERMISSION_DENIED,
+                message="Caller is not a member of the team that owns this event"
+            )
+
+        if not _is_team_member(req.auth.token, event_team_id):
+            raise https_fn.HttpsError(
+                code=https_fn.FunctionsErrorCode.PERMISSION_DENIED,
+                message="Caller is not a member of the team that owns this event"
+            )
 
         if not _get_team_sheet_id(event_team_id):
             raise https_fn.HttpsError(

@@ -517,6 +517,53 @@ class TestBackfillEventToSheets(unittest.TestCase):
             ctx.exception.code, main.https_fn.FunctionsErrorCode.FAILED_PRECONDITION
         )
 
+    @patch.object(main, 'sync_report_to_sheets')
+    @patch.object(main, '_get_team_sheet_id', return_value='sheet-abc')
+    @patch.object(main, 'get_db')
+    def test_event_doc_without_team_id_resolves_team_from_claim(self, mock_get_db, _sid, mock_sync):
+        """Event doc exists but carries no teamId (e.g. legacy/partial
+        write). Must still resolve the team from the caller's claim and
+        proceed, not skip the membership check and report a false
+        "no sheet configured"."""
+        event_doc = Mock()
+        event_doc.exists = True
+        event_doc.to_dict.return_value = {'programType': 'FRC'}
+
+        live = Mock()
+        live.id = 'rep1'
+        live.to_dict.return_value = {'scouterName': 'sam', 'teamId': 't1'}
+
+        db = mock_get_db.return_value
+        db.collection.return_value.document.return_value.get.return_value = event_doc
+        query = db.collection.return_value.where.return_value
+        query.where.return_value.stream.return_value = [live]
+        query.stream.return_value = [live]
+
+        result = main.backfill_event_to_sheets.__wrapped__.__wrapped__(self._req())
+
+        self.assertTrue(result['success'])
+        self.assertEqual(result['syncedCount'], 1)
+        mock_sync.assert_called_once_with('t1_evt', 'rep1', live.to_dict.return_value)
+
+    @patch.object(main, 'get_db')
+    def test_event_doc_without_team_id_and_non_member_is_denied(self, mock_get_db):
+        """Same shape as above, but the caller isn't a member of the team
+        the composite eventId prefix names — must still be rejected."""
+        event_doc = Mock()
+        event_doc.exists = True
+        event_doc.to_dict.return_value = {'programType': 'FRC'}
+        mock_get_db.return_value.collection.return_value.document.return_value.get.return_value = event_doc
+
+        req = self._req()
+        req.auth.token = {'teams': {'other': 'admin'}}
+
+        with self.assertRaises(main.https_fn.HttpsError) as ctx:
+            main.backfill_event_to_sheets.__wrapped__.__wrapped__(req)
+
+        self.assertEqual(
+            ctx.exception.code, main.https_fn.FunctionsErrorCode.PERMISSION_DENIED
+        )
+
     @patch.object(main, 'get_db')
     def test_missing_event_doc_and_unresolvable_team_is_denied(self, mock_get_db):
         """The eventId's `{teamId}_` prefix matches none of the caller's
