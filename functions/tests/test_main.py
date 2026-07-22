@@ -373,6 +373,7 @@ class TestDeleteSheetRowForReport(unittest.TestCase):
     @patch.object(main, '_get_team_sheet_id', return_value='sheet-abc')
     def test_deletes_found_row(self, _sid, mock_get_svc):
         svc = mock_get_svc.return_value
+        svc.sheet_exists.return_value = True
         svc.find_row_by_report_id.return_value = 4
 
         main._delete_sheet_row_for_report('t1_evt', 'rep1', {'teamId': 't1'})
@@ -384,10 +385,26 @@ class TestDeleteSheetRowForReport(unittest.TestCase):
     @patch.object(main, '_get_team_sheet_id', return_value='sheet-abc')
     def test_missing_row_is_not_an_error(self, _sid, mock_get_svc):
         svc = mock_get_svc.return_value
+        svc.sheet_exists.return_value = True
         svc.find_row_by_report_id.return_value = None
 
         main._delete_sheet_row_for_report('t1_evt', 'rep1', {'teamId': 't1'})
 
+        svc.delete_row.assert_not_called()
+
+    @patch('services.sheets_service.get_sheets_service')
+    @patch.object(main, '_get_team_sheet_id', return_value='sheet-abc')
+    def test_missing_tab_is_not_an_error(self, _sid, mock_get_svc):
+        """A team connects a sheet mid-competition, then trashes a match
+        recorded before the tab existed. Deleting must be a silent no-op,
+        not an HttpError escaping from a values().get() on a nonexistent
+        tab."""
+        svc = mock_get_svc.return_value
+        svc.sheet_exists.return_value = False
+
+        main._delete_sheet_row_for_report('t1_evt', 'rep1', {'teamId': 't1'})
+
+        svc.find_row_by_report_id.assert_not_called()
         svc.delete_row.assert_not_called()
 
 
@@ -452,6 +469,65 @@ class TestBackfillEventToSheets(unittest.TestCase):
 
         req = self._req()
         req.auth.token = {'teams': {'other': 'admin'}}
+
+        with self.assertRaises(main.https_fn.HttpsError) as ctx:
+            main.backfill_event_to_sheets.__wrapped__.__wrapped__(req)
+
+        self.assertEqual(
+            ctx.exception.code, main.https_fn.FunctionsErrorCode.PERMISSION_DENIED
+        )
+
+    @patch.object(main, 'sync_report_to_sheets')
+    @patch.object(main, '_get_team_sheet_id', return_value='sheet-abc')
+    @patch.object(main, 'get_db')
+    def test_missing_event_doc_resolves_team_from_claim(self, mock_get_db, _sid, mock_sync):
+        """First-run path: the events/ doc doesn't exist yet (it's created
+        lazily on first match write), but the caller's own claim names the
+        team the composite eventId belongs to, and that team has a sheet
+        configured. This must succeed, not report a false
+        "no sheet configured"."""
+        event_doc = Mock()
+        event_doc.exists = False
+        db = mock_get_db.return_value
+        db.collection.return_value.document.return_value.get.return_value = event_doc
+        query = db.collection.return_value.where.return_value
+        query.where.return_value.stream.return_value = []
+        query.stream.return_value = []
+
+        result = main.backfill_event_to_sheets.__wrapped__.__wrapped__(self._req())
+
+        self.assertTrue(result['success'])
+        self.assertEqual(result['syncedCount'], 0)
+        mock_sync.assert_not_called()
+
+    @patch.object(main, '_get_team_sheet_id', return_value='')
+    @patch.object(main, 'get_db')
+    def test_missing_event_doc_and_no_sheet_raises_failed_precondition(self, mock_get_db, _sid):
+        """Team resolves fine from the claim, but this team genuinely has
+        no sheet configured — the FAILED_PRECONDITION here is accurate,
+        unlike the false positive in the bug this replaces."""
+        event_doc = Mock()
+        event_doc.exists = False
+        mock_get_db.return_value.collection.return_value.document.return_value.get.return_value = event_doc
+
+        with self.assertRaises(main.https_fn.HttpsError) as ctx:
+            main.backfill_event_to_sheets.__wrapped__.__wrapped__(self._req())
+
+        self.assertEqual(
+            ctx.exception.code, main.https_fn.FunctionsErrorCode.FAILED_PRECONDITION
+        )
+
+    @patch.object(main, 'get_db')
+    def test_missing_event_doc_and_unresolvable_team_is_denied(self, mock_get_db):
+        """The eventId's `{teamId}_` prefix matches none of the caller's
+        claimed teams — this must still be rejected, not silently proceed
+        with an unfiltered/empty team scope."""
+        event_doc = Mock()
+        event_doc.exists = False
+        mock_get_db.return_value.collection.return_value.document.return_value.get.return_value = event_doc
+
+        req = self._req()
+        req.data = {'eventId': 'someOtherTeam_evt'}
 
         with self.assertRaises(main.https_fn.HttpsError) as ctx:
             main.backfill_event_to_sheets.__wrapped__.__wrapped__(req)

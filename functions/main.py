@@ -1,6 +1,5 @@
 """Main entry point for Firebase Cloud Functions."""
 
-import os
 import re
 import secrets
 from firebase_functions import https_fn, firestore_fn, logger, options
@@ -71,6 +70,23 @@ def _resolve_team_id(event_id: str, report_data: dict | None = None) -> str:
     return ''
 
 
+def _team_id_from_claim(event_id: str, auth_token: dict | None) -> str:
+    """Best-effort team id for an event that has no `events` doc yet.
+
+    Event docs are created lazily on first match write, so a brand-new
+    team can have a valid eventId with nothing in `events/` — resolving
+    team-ness solely from that doc makes a legitimate first-run backfill
+    look like "no sheet configured". Event ids are composite
+    `{teamId}_{eventCode}`, so fall back to the prefix — but trust it only
+    when it matches one of the CALLER's own claimed teams, never blindly,
+    so an unresolvable event can't be used to read another team's data."""
+    claimed_teams = (auth_token or {}).get('teams') or {}
+    for team_id in claimed_teams:
+        if event_id.startswith(f"{team_id}_"):
+            return team_id
+    return ''
+
+
 def _get_team_sheet_id(team_id: str) -> str:
     """The team's own spreadsheet id, or '' when export isn't configured.
 
@@ -117,6 +133,16 @@ def _delete_sheet_row_for_report(
 
     tab = _event_tab_name(event_id, team_id)
     sheets_service = get_sheets_service()
+
+    # A team that connects a sheet mid-competition can be asked to delete a
+    # match that predates the tab's existence. Unlike sync_report_to_sheets,
+    # this path must not create the tab just to look inside it — a missing
+    # tab means there is nothing to delete, not an error.
+    if not sheets_service.sheet_exists(spreadsheet_id, tab):
+        logger.debug(
+            f"Sheet tab {tab!r} does not exist; nothing to delete for {report_id}"
+        )
+        return
 
     row_number = sheets_service.find_row_by_report_id(spreadsheet_id, tab, report_id)
 
@@ -496,15 +522,25 @@ def backfill_event_to_sheets(req: https_fn.CallableRequest) -> dict:
         # we must enforce team isolation here.
         db = get_db()
         event_doc = db.collection('events').document(event_id).get()
-        event_team_id = ''
+
         if event_doc.exists:
             event_team_id = (event_doc.to_dict() or {}).get('teamId', '') or ''
-
-        if event_team_id and not _is_team_member(req.auth.token, event_team_id):
-            raise https_fn.HttpsError(
-                code=https_fn.FunctionsErrorCode.PERMISSION_DENIED,
-                message="Caller is not a member of the team that owns this event"
-            )
+            if event_team_id and not _is_team_member(req.auth.token, event_team_id):
+                raise https_fn.HttpsError(
+                    code=https_fn.FunctionsErrorCode.PERMISSION_DENIED,
+                    message="Caller is not a member of the team that owns this event"
+                )
+        else:
+            # No events/ doc yet (created lazily on first match write).
+            # Resolve the team from the caller's own claim instead of
+            # treating "event unknown" as "team unknown" — the latter was
+            # reported to the admin as a false "no sheet configured".
+            event_team_id = _team_id_from_claim(event_id, req.auth.token)
+            if not event_team_id:
+                raise https_fn.HttpsError(
+                    code=https_fn.FunctionsErrorCode.PERMISSION_DENIED,
+                    message="Caller is not a member of the team that owns this event"
+                )
 
         if not _get_team_sheet_id(event_team_id):
             raise https_fn.HttpsError(
