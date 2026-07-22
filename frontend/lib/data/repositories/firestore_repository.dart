@@ -68,22 +68,16 @@ class FirestoreRepository implements ScoutingRepository {
     await _firestore
         .collection('matches')
         .doc(match.id)
-        .set(_stampSource(prepared.toFirestore()), SetOptions(merge: true));
+        .set(_withTeamId(prepared.toFirestore()), SetOptions(merge: true));
   }
 
-  /// Stamp every app-originated write with:
-  ///   - lastSyncSource='app' so the on_match_written echo guard can tell
-  ///     "app -> sheets" from "sheets -> sheets" (otherwise a doc once
-  ///     touched by Sheets keeps lastSyncSource='sheets' under merge:true
-  ///     forever and the second Sheets edit echoes back).
-  ///   - teamId, when not already in the payload, so trash/restore writes
-  ///     that race against a hard-delete (the doc no longer exists, so
-  ///     set+merge becomes a CREATE with only {isDeleted: ...}) still
-  ///     satisfy the matches/{id} create rule's isValidTeamId() check.
-  ///     createMatch/updateMatch already include teamId via
-  ///     _prepareForFirestore, so we don't override there.
-  Map<String, dynamic> _stampSource(Map<String, dynamic> data) {
-    final stamped = <String, dynamic>{...data, 'lastSyncSource': 'app'};
+  /// Backfill teamId when it isn't already in the payload, so trash/restore
+  /// writes that race a hard-delete (the doc no longer exists, so set+merge
+  /// becomes a CREATE carrying only {isDeleted: ...}) still satisfy the
+  /// matches/{id} create rule's isValidTeamId() check. createMatch and
+  /// updateMatch already include teamId via _prepareForFirestore.
+  Map<String, dynamic> _withTeamId(Map<String, dynamic> data) {
+    final stamped = <String, dynamic>{...data};
     if (!stamped.containsKey('teamId') &&
         teamId != null &&
         teamId!.isNotEmpty) {
@@ -147,7 +141,7 @@ class FirestoreRepository implements ScoutingRepository {
     await _firestore
         .collection('matches')
         .doc(match.id)
-        .set(_stampSource(prepared.toFirestore()), SetOptions(merge: true));
+        .set(_withTeamId(prepared.toFirestore()), SetOptions(merge: true));
   }
 
   @override
@@ -160,7 +154,7 @@ class FirestoreRepository implements ScoutingRepository {
     await _firestore
         .collection('matches')
         .doc(matchId)
-        .set(_stampSource({'isDeleted': true}), SetOptions(merge: true));
+        .set(_withTeamId({'isDeleted': true}), SetOptions(merge: true));
   }
 
   @override
@@ -168,7 +162,7 @@ class FirestoreRepository implements ScoutingRepository {
     await _firestore
         .collection('matches')
         .doc(matchId)
-        .set(_stampSource({'isDeleted': false}), SetOptions(merge: true));
+        .set(_withTeamId({'isDeleted': false}), SetOptions(merge: true));
   }
 
   @override
