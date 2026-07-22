@@ -1,7 +1,7 @@
 # SushiScout Simplification Roadmap (audit + Steps 2–4 handoff)
 
-- **Date:** 2026-07-21
-- **Status:** Step 1 shipped. Steps 2–4 not started.
+- **Date:** 2026-07-21 (Step 2 marked shipped 2026-07-21)
+- **Status:** Steps 1 and 2 shipped. Steps 3–4 not started.
 - **Purpose:** This is a **handoff document**, written so a future session (or teammate)
   can pick up Steps 2–4 without re-deriving the analysis. It records the audit evidence,
   the decisions already made, and the scope of each remaining step. It is deliberately

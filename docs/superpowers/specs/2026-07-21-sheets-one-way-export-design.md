@@ -1,7 +1,7 @@
 # Step 2 — Google Sheets as a one-way, per-team export (design)
 
 - **Date:** 2026-07-21
-- **Status:** Design approved, not implemented
+- **Status:** Shipped on branch `sheets-one-way` (see `docs/superpowers/plans/2026-07-21-sheets-one-way-export.md`)
 - **Roadmap:** Step 2 of [`2026-07-21-simplification-roadmap.md`](2026-07-21-simplification-roadmap.md)
 - **Depends on:** Step 1 (team isolation) — shipped
 - **Independent of:** Steps 3 and 4

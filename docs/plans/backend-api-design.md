@@ -1,7 +1,7 @@
 # Backend API Design
 
 **Date:** 2026-02-22
-**Status:** Pending
+**Status:** Superseded — the Sheets integration described here was bidirectional; it is now a one-way per-team export. See `docs/superpowers/specs/2026-07-21-sheets-one-way-export-design.md`. Kept as a historical record.
 
 ## Overview
 

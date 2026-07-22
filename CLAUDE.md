@@ -12,8 +12,8 @@ There is an in-progress simplification effort. **Before starting any refactor or
 "why is this so complex" work, read
 [`docs/superpowers/specs/2026-07-21-simplification-roadmap.md`](docs/superpowers/specs/2026-07-21-simplification-roadmap.md)** —
 it holds the audit evidence, the requirements already decided with the user, FRC prior-art
-research, and the scope of the remaining steps. Step 1 (team isolation) is shipped;
-Step 2 (Sheets one-way), Step 3 (collapse to a single offline store), and Step 4
+research, and the scope of the remaining steps. Step 1 (team isolation) and Step 2
+(Sheets one-way) are shipped; Step 3 (collapse to a single offline store) and Step 4
 (schema-driven forms) are not started. Each still needs its own brainstorm → spec → plan.
 
 ## Architecture
@@ -53,7 +53,7 @@ Step 2 (Sheets one-way), Step 3 (collapse to a single offline store), and Step 4
 ### Cloud Functions
 
 - `create_team` / `join_team` / `leave_team` — callables that own ALL membership mutation: validate server-side (invite code, already-member, last-admin), write membership with the Admin SDK, then set the `{teams: ...}` custom claim. See Auth & Team Isolation above.
-- `set_team_sheet` — callable that validates write access to a team-supplied spreadsheet (via a real write probe, not just a metadata read) and stores it as that team's `teamSettings/{teamId}.googleSheetId`
+- `set_team_sheet` — admin-only callable that validates write access to a team-supplied spreadsheet (via a real write probe, not just a metadata read) and stores it as that team's `teamSettings/{teamId}.googleSheetId`. **`googleSheetId` is server-authoritative**: rules deny every client write to it (create, update, and removal via `diff().affectedKeys()`), so this callable is the only write path. Never "simplify" it back to a client write — that would let any member silently redirect the team's export to a spreadsheet they control, with no admin check and no write probe.
 - `on_match_written` — Firestore trigger on `matches/{reportId}` that one-way exports creates/updates/deletes to the owning team's Google Sheet (no reverse path back into Firestore)
 - `backfill_event_to_sheets` — callable function to bulk-export an event's matches into its team's sheet; idempotent (row identity is resolved by looking the report id up in the sheet itself)
 - `fetch_event_schedule` (`tba_sync.py`) — callable that pulls FRC/FTC schedules from The Blue Alliance API (cached 24h in `tba_cache` collection)
