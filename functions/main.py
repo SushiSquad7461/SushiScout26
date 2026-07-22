@@ -411,7 +411,10 @@ def _is_team_admin(auth_token: dict | None, team_id: str) -> bool:
     """True if the caller's `teams` claim marks them admin of `team_id`."""
     if not auth_token or not team_id:
         return False
-    return (auth_token.get('teams') or {}).get(team_id) == 'admin'
+    teams = auth_token.get('teams')
+    if not isinstance(teams, dict):
+        return False
+    return teams.get(team_id) == 'admin'
 
 
 @https_fn.on_call(secrets=["GOOGLE_SHEETS_CREDENTIALS"])

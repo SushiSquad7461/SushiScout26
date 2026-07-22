@@ -80,20 +80,32 @@ class SheetsService:
         return self._service_account_email
 
     def verify_write_access(self, spreadsheet_id: str) -> bool:
-        """True if this service account can open the spreadsheet.
+        """True if this service account can actually WRITE to the spreadsheet.
 
-        The credentials carry the spreadsheets scope, so a successful
-        metadata read with that scope means the account has been granted
-        access to the file; a 403/404 means it has not."""
+        A metadata read only proves Viewer-level access, which is not
+        enough to sync match data. This reads the current title and writes
+        it straight back via batchUpdate — a real write that changes
+        nothing visible. Viewer shares get a 403 on the write; Editor
+        shares pass."""
         try:
-            self.service.spreadsheets().get(
+            meta = self.service.spreadsheets().get(
+                spreadsheetId=spreadsheet_id, fields='properties.title'
+            ).execute()
+            title = meta['properties']['title']
+
+            self.service.spreadsheets().batchUpdate(
                 spreadsheetId=spreadsheet_id,
-                fields='properties.title,sheets.properties'
+                body={'requests': [{
+                    'updateSpreadsheetProperties': {
+                        'properties': {'title': title},
+                        'fields': 'title',
+                    }
+                }]}
             ).execute()
             return True
         except HttpError as e:
             import logging
-            logging.warning(f"No access to spreadsheet {spreadsheet_id}: {e}")
+            logging.warning(f"No write access to spreadsheet {spreadsheet_id}: {e}")
             return False
 
     def get_headers(self, program_type: str = 'FRC') -> List[str]:

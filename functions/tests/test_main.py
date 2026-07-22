@@ -528,6 +528,19 @@ class TestSetTeamSheet(unittest.TestCase):
             ctx.exception.code, main.https_fn.FunctionsErrorCode.PERMISSION_DENIED
         )
 
+    def test_malformed_teams_claim_is_rejected_cleanly(self):
+        """A non-dict `teams` claim must fail closed as PERMISSION_DENIED,
+        not surface as an internal AttributeError."""
+        req = self._req()
+        req.auth.token = {'teams': ['not', 'a', 'dict']}
+
+        with self.assertRaises(main.https_fn.HttpsError) as ctx:
+            self._call(req)
+
+        self.assertEqual(
+            ctx.exception.code, main.https_fn.FunctionsErrorCode.PERMISSION_DENIED
+        )
+
     def test_unparseable_sheet_is_rejected(self):
         with self.assertRaises(main.https_fn.HttpsError) as ctx:
             self._call(self._req(sheet='not a sheet!'))

@@ -410,21 +410,46 @@ class TestVerifyWriteAccess(unittest.TestCase):
         svc.service = MagicMock()
         return svc
 
-    def test_true_when_metadata_readable_and_not_protected(self):
+    def test_true_when_title_read_and_rewritten_successfully(self):
         svc = self._service()
         svc.service.spreadsheets.return_value.get.return_value.execute.return_value = {
             'properties': {'title': 'Scouting'},
-            'sheets': [{'properties': {'title': 'Sheet1', 'sheetId': 0}}],
         }
+        batch_update = svc.service.spreadsheets.return_value.batchUpdate
 
         self.assertTrue(svc.verify_write_access('sheet-abc'))
 
-    def test_false_on_http_error(self):
+        batch_update.assert_called_once()
+        _, kwargs = batch_update.call_args
+        self.assertEqual(kwargs['spreadsheetId'], 'sheet-abc')
+        sent_title = kwargs['body']['requests'][0][
+            'updateSpreadsheetProperties'
+        ]['properties']['title']
+        self.assertEqual(sent_title, 'Scouting')
+
+    def test_false_on_http_error_from_initial_read(self):
         from googleapiclient.errors import HttpError
         svc = self._service()
         resp = MagicMock()
         resp.status = 403
         svc.service.spreadsheets.return_value.get.return_value.execute.side_effect = (
+            HttpError(resp, b'forbidden')
+        )
+
+        self.assertFalse(svc.verify_write_access('sheet-abc'))
+        svc.service.spreadsheets.return_value.batchUpdate.assert_not_called()
+
+    def test_false_on_http_error_from_write_viewer_share(self):
+        """Regression test: a Viewer-level share can read metadata but is
+        denied the write. This must fail against a read-only probe."""
+        from googleapiclient.errors import HttpError
+        svc = self._service()
+        svc.service.spreadsheets.return_value.get.return_value.execute.return_value = {
+            'properties': {'title': 'Scouting'},
+        }
+        resp = MagicMock()
+        resp.status = 403
+        svc.service.spreadsheets.return_value.batchUpdate.return_value.execute.side_effect = (
             HttpError(resp, b'forbidden')
         )
 
