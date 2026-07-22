@@ -71,10 +71,21 @@ service cloud.firestore {
     }
 
     match /teamSettings/{teamId} {
-      allow read, write: if isTeamMember(teamId);
+      allow read: if isTeamMember(teamId);
+
+      // googleSheetId is server-authoritative: only the set_team_sheet
+      // callable (Admin SDK, which bypasses rules) may write it, because
+      // it validates the sheet is actually reachable first. A client write
+      // would let any member silently redirect the team's export.
+      // `resource` is null on create, so guard before reading resource.data.
+      allow write: if isTeamMember(teamId)
+                   && (
+                        !request.resource.data.keys().hasAny(['googleSheetId'])
+                        || (resource != null
+                            && request.resource.data.googleSheetId == resource.data.googleSheetId)
+                      );
     }
 
-    match /sync_tracking/{doc} { allow read, write: if false; }
     match /tba_cache/{doc}     { allow read: if isSignedIn(); allow write: if false; }
     match /ftc_cache/{doc}     { allow read: if isSignedIn(); allow write: if false; }
     match /schedules/{doc}     { allow read: if isSignedIn(); allow write: if false; }
