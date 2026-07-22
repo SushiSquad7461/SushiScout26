@@ -171,8 +171,7 @@ sushiscout26/
 │   ├── tba_sync.py          # FRC schedule fetching (TBA API)
 │   ├── ftc_api.py           # FTC schedule fetching (FIRST Events API)
 │   ├── services/
-│   │   ├── sheets_service.py  # Google Sheets API wrapper
-│   │   └── sync_tracker.py    # Firestore↔Sheets row mapping
+│   │   └── sheets_service.py  # Google Sheets API wrapper (one-way export)
 │   └── tests/
 ├── firestore.rules          # Firestore security rules
 ├── firestore.indexes.json   # Composite index definitions
@@ -193,10 +192,9 @@ firebase deploy --only firestore:indexes  # Composite indexes
 ### Environment Secrets
 
 Cloud Functions use these secrets (configured via Firebase):
-- `GOOGLE_SHEETS_CREDENTIALS` — Service account for Sheets API
-- `MASTER_SPREADSHEET_ID` — Target spreadsheet
-- `SYNC_API_KEY` — HTTP endpoint authentication
-- `TBA_API_KEY` — The Blue Alliance API key
+- `GOOGLE_SHEETS_CREDENTIALS` — Service account for Sheets API (one-way export, per team)
+- `TBA_API_KEY` — The Blue Alliance API key (FRC schedules)
+- `FTC_API_USERNAME` / `FTC_API_KEY` — FIRST Events API credentials (FTC schedules)
 
 ## Questions?
 

@@ -5,7 +5,7 @@ const {
   assertFails,
   assertSucceeds,
 } = require('@firebase/rules-unit-testing');
-const { doc, getDoc, setDoc } = require('firebase/firestore');
+const { doc, getDoc, setDoc, updateDoc, deleteDoc, deleteField } = require('firebase/firestore');
 
 let testEnv;
 
@@ -166,4 +166,101 @@ test('member can read an EXISTING own-team event doc', async () => {
     });
   });
   await assertSucceeds(getDoc(doc(alice(), 'events/teamA_2026casf')));
+});
+
+// --- googleSheetId is server-authoritative: only the set_team_sheet
+// callable (Admin SDK) may write it, since it validates the sheet with a
+// write probe first. A client write would let any member silently redirect
+// the team's export.
+
+describe('teamSettings googleSheetId is server-authoritative', () => {
+  const memberOfTeamA = () =>
+    testEnv.authenticatedContext('carol', { teams: { teamA: 'member' } }).firestore();
+  const adminOfTeamA = () =>
+    testEnv.authenticatedContext('dave', { teams: { teamA: 'admin' } }).firestore();
+
+  test('member cannot set googleSheetId', async () => {
+    await assertFails(
+      setDoc(doc(memberOfTeamA(), 'teamSettings/teamA'), { googleSheetId: 'evil' }, { merge: true })
+    );
+  });
+
+  test('admin cannot set googleSheetId either', async () => {
+    await assertFails(
+      setDoc(doc(adminOfTeamA(), 'teamSettings/teamA'), { googleSheetId: 'evil' }, { merge: true })
+    );
+  });
+
+  test('member cannot overwrite an existing googleSheetId with same-looking write', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'teamSettings/teamA'), { googleSheetId: 'sheet-1' });
+    });
+    await assertFails(
+      setDoc(doc(memberOfTeamA(), 'teamSettings/teamA'), { googleSheetId: 'sheet-2' }, { merge: true })
+    );
+  });
+
+  test('member can still write defaultEventCode', async () => {
+    await assertSucceeds(
+      setDoc(doc(memberOfTeamA(), 'teamSettings/teamA'), { defaultEventCode: 'waore' }, { merge: true })
+    );
+  });
+
+  test('non-member cannot read teamSettings', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'teamSettings/teamA'), { defaultEventCode: 'waore' });
+    });
+    await assertFails(getDoc(doc(bob(), 'teamSettings/teamA')));
+  });
+
+  // --- Field-removal bypass: a plain "does the result contain the key"
+  // check is fooled by writes that make the key disappear entirely.
+
+  test('member cannot erase googleSheetId via non-merge setDoc', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'teamSettings/teamA'), {
+        googleSheetId: 'sheet-1',
+        defaultEventCode: 'waore',
+      });
+    });
+    // Non-merge setDoc: the resulting document has no googleSheetId key at
+    // all, which is a removal, not merely an absent-from-payload field.
+    await assertFails(
+      setDoc(doc(memberOfTeamA(), 'teamSettings/teamA'), { defaultEventCode: 'waore' })
+    );
+  });
+
+  test('member cannot erase googleSheetId via deleteField()', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'teamSettings/teamA'), {
+        googleSheetId: 'sheet-1',
+        defaultEventCode: 'waore',
+      });
+    });
+    await assertFails(
+      updateDoc(doc(memberOfTeamA(), 'teamSettings/teamA'), {
+        googleSheetId: deleteField(),
+      })
+    );
+  });
+
+  test('member cannot delete a teamSettings doc', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'teamSettings/teamA'), { googleSheetId: 'sheet-1' });
+    });
+    await assertFails(deleteDoc(doc(memberOfTeamA(), 'teamSettings/teamA')));
+  });
+
+  test('admin cannot delete a teamSettings doc either', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'teamSettings/teamA'), { googleSheetId: 'sheet-1' });
+    });
+    await assertFails(deleteDoc(doc(adminOfTeamA(), 'teamSettings/teamA')));
+  });
+
+  test('member can create a teamSettings doc without googleSheetId', async () => {
+    await assertSucceeds(
+      setDoc(doc(memberOfTeamA(), 'teamSettings/teamA'), { defaultEventCode: 'waore' })
+    );
+  });
 });

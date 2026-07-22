@@ -8,7 +8,7 @@ A cross-platform FRC & FTC scouting app built by [SushiSquad 7461](https://githu
 - **Offline-first** — Full functionality without internet; syncs when back online
 - **FRC + FTC** — Separate scouting forms tailored to each program
 - **Team isolation** — server-enforced: every team's events and matches are private to that team, so multiple teams can scout the same competition independently
-- **Live sync** — Match data syncs bidirectionally between Firestore and Google Sheets
+- **Sheets export** — Each team can connect its own Google Sheet; match data exports one-way from Firestore to that sheet for analysis
 - **Schedule import** — Pull match schedules from The Blue Alliance (FRC) and FIRST Events API (FTC)
 
 ## Architecture

@@ -12,6 +12,7 @@ import 'package:frontend/data/models/user_profile.dart' as _i3;
 import 'package:frontend/data/repositories/auth_repository.dart' as _i7;
 import 'package:frontend/data/repositories/team_repository.dart' as _i8;
 import 'package:mockito/mockito.dart' as _i1;
+import 'package:mockito/src/dummies.dart' as _i9;
 
 // ignore_for_file: type=lint
 // ignore_for_file: avoid_redundant_argument_values
@@ -327,19 +328,63 @@ class MockTeamRepository extends _i1.Mock implements _i8.TeamRepository {
   @override
   _i6.Future<void> updateTeamSettings({
     required String? teamId,
-    String? googleSheetId,
     String? defaultEventCode,
   }) =>
       (super.noSuchMethod(
             Invocation.method(#updateTeamSettings, [], {
               #teamId: teamId,
-              #googleSheetId: googleSheetId,
               #defaultEventCode: defaultEventCode,
             }),
             returnValue: _i6.Future<void>.value(),
             returnValueForMissingStub: _i6.Future<void>.value(),
           )
           as _i6.Future<void>);
+
+  @override
+  _i6.Future<String> setTeamSheet({
+    required String? teamId,
+    required String? sheetId,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(#setTeamSheet, [], {
+              #teamId: teamId,
+              #sheetId: sheetId,
+            }),
+            returnValue: _i6.Future<String>.value(
+              _i9.dummyValue<String>(
+                this,
+                Invocation.method(#setTeamSheet, [], {
+                  #teamId: teamId,
+                  #sheetId: sheetId,
+                }),
+              ),
+            ),
+            returnValueForMissingStub: _i6.Future<String>.value(
+              _i9.dummyValue<String>(
+                this,
+                Invocation.method(#setTeamSheet, [], {
+                  #teamId: teamId,
+                  #sheetId: sheetId,
+                }),
+              ),
+            ),
+          )
+          as _i6.Future<String>);
+
+  @override
+  _i6.Future<Map<String, dynamic>> backfillEventToSheets({
+    required String? eventId,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(#backfillEventToSheets, [], {#eventId: eventId}),
+            returnValue: _i6.Future<Map<String, dynamic>>.value(
+              <String, dynamic>{},
+            ),
+            returnValueForMissingStub: _i6.Future<Map<String, dynamic>>.value(
+              <String, dynamic>{},
+            ),
+          )
+          as _i6.Future<Map<String, dynamic>>);
 
   @override
   _i6.Future<void> regenerateInviteCode({

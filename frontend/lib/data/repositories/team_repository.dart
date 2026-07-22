@@ -125,22 +125,51 @@ class TeamRepository {
 
   Future<void> updateTeamSettings({
     required String teamId,
-    String? googleSheetId,
     String? defaultEventCode,
   }) async {
     final ref = _firestore.collection('teamSettings').doc(teamId);
 
     // Only include fields the caller actually provided. Previously this
     // wrote `null` for any unspecified field, silently overwriting the
-    // existing value — e.g. updating only googleSheetId would clear
-    // defaultEventCode.
+    // existing value.
     final data = <String, Object?>{
       'updatedAt': Timestamp.fromDate(DateTime.now()),
     };
-    if (googleSheetId != null) data['googleSheetId'] = googleSheetId;
     if (defaultEventCode != null) data['defaultEventCode'] = defaultEventCode;
 
     await ref.set(data, SetOptions(merge: true));
+  }
+
+  /// Point the team's Sheets export at [sheetId] (a full Sheets URL or a
+  /// bare id). Server-side only: rules deny client writes to googleSheetId.
+  ///
+  /// Errors are intentionally left unmapped: `set_team_sheet`'s
+  /// failed-precondition message names the exact service-account address
+  /// the user must share the sheet with, and callers surface `e.toString()`
+  /// verbatim. Routing this through `_mapFunctionsError` (written for the
+  /// team create/join/leave flows) would replace that message with an
+  /// unrelated generic one.
+  Future<String> setTeamSheet({
+    required String teamId,
+    required String sheetId,
+  }) async {
+    final callable = _functions.httpsCallable('set_team_sheet');
+    final result = await callable.call<Map<String, dynamic>>({
+      'teamId': teamId,
+      'sheetId': sheetId,
+    });
+    return result.data['googleSheetId'] as String;
+  }
+
+  /// Triggers a one-time backfill of an event's existing matches into the
+  /// team's connected sheet via the `backfill_event_to_sheets` callable.
+  Future<Map<String, dynamic>> backfillEventToSheets({
+    required String eventId,
+  }) async {
+    final callable = _functions.httpsCallable('backfill_event_to_sheets');
+    final result =
+        await callable.call<Map<String, dynamic>>({'eventId': eventId});
+    return result.data;
   }
 
   Future<void> regenerateInviteCode({

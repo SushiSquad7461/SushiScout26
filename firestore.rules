@@ -71,10 +71,25 @@ service cloud.firestore {
     }
 
     match /teamSettings/{teamId} {
-      allow read, write: if isTeamMember(teamId);
+      allow read: if isTeamMember(teamId);
+
+      // googleSheetId is server-authoritative: only the set_team_sheet callable
+      // (Admin SDK, which bypasses rules) may write it, because it validates the
+      // sheet is reachable and the caller is an admin first. Clients may write
+      // every other field. Note `diff().affectedKeys()` catches field REMOVAL as
+      // well as value changes — a plain key check does not.
+      allow create: if isTeamMember(teamId)
+                    && !request.resource.data.keys().hasAny(['googleSheetId']);
+
+      allow update: if isTeamMember(teamId)
+                    && !request.resource.data.diff(resource.data)
+                            .affectedKeys().hasAny(['googleSheetId']);
+
+      // Nothing in the app deletes team settings, and permitting it would allow
+      // delete-then-recreate to launder a client-chosen googleSheetId.
+      allow delete: if false;
     }
 
-    match /sync_tracking/{doc} { allow read, write: if false; }
     match /tba_cache/{doc}     { allow read: if isSignedIn(); allow write: if false; }
     match /ftc_cache/{doc}     { allow read: if isSignedIn(); allow write: if false; }
     match /schedules/{doc}     { allow read: if isSignedIn(); allow write: if false; }

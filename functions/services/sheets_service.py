@@ -4,11 +4,21 @@ import json
 import os
 from datetime import datetime
 from typing import List, Optional, Dict, Any
+from google.auth.exceptions import GoogleAuthError
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
+
+
+class SheetsCredentialsError(Exception):
+    """The service account's own credentials failed (expired, revoked, or
+    malformed key) — as distinct from the team's sheet not being shared.
+
+    These need opposite fixes: a sharing failure is the admin's to solve,
+    a credentials failure is the operator's. Conflating them tells the
+    admin to re-share a sheet they already shared correctly."""
 
 # Column headers for FRC match reports
 FRC_HEADERS = [
@@ -72,7 +82,53 @@ class SheetsService:
             creds_dict, scopes=SCOPES
         )
         self.service = build('sheets', 'v4', credentials=credentials)
-    
+        self._service_account_email = creds_dict.get('client_email', '')
+
+    @property
+    def service_account_email(self) -> str:
+        """The address a team must share their sheet with, as Editor."""
+        return self._service_account_email
+
+    def verify_write_access(self, spreadsheet_id: str) -> bool:
+        """True if this service account can actually WRITE to the spreadsheet.
+
+        A metadata read only proves Viewer-level access, which is not
+        enough to sync match data. This reads the current title and writes
+        it straight back via batchUpdate — a real write that changes
+        nothing visible. Viewer shares get a 403 on the write; Editor
+        shares pass.
+
+        Raises SheetsCredentialsError if OUR OWN credentials are the
+        problem — that is an operator fault the team cannot fix by
+        sharing the sheet, so it must not be reported as one."""
+        try:
+            meta = self.service.spreadsheets().get(
+                spreadsheetId=spreadsheet_id, fields='properties.title'
+            ).execute()
+            title = meta['properties']['title']
+
+            self.service.spreadsheets().batchUpdate(
+                spreadsheetId=spreadsheet_id,
+                body={'requests': [{
+                    'updateSpreadsheetProperties': {
+                        'properties': {'title': title},
+                        'fields': 'title',
+                    }
+                }]}
+            ).execute()
+            return True
+        except GoogleAuthError as e:
+            import logging
+            logging.error(
+                f"Sheets service-account credentials failed while probing "
+                f"{spreadsheet_id}: {e}"
+            )
+            raise SheetsCredentialsError(str(e)) from e
+        except HttpError as e:
+            import logging
+            logging.warning(f"No write access to spreadsheet {spreadsheet_id}: {e}")
+            return False
+
     def get_headers(self, program_type: str = 'FRC') -> List[str]:
         """Get column headers based on program type."""
         return FTC_HEADERS if program_type == 'FTC' else FRC_HEADERS
@@ -261,6 +317,21 @@ class SheetsService:
             import logging
             logging.warning(f"Could not set column widths: {e}")
     
+    def sheet_exists(self, spreadsheet_id: str, sheet_name: str) -> bool:
+        """True if a tab named `sheet_name` already exists in the workbook.
+
+        Read-only check — unlike get_or_create_sheet, this never creates
+        the tab. Callers that only want to look something up (e.g. a
+        delete) must not have the side effect of materializing a tab that
+        holds nothing."""
+        spreadsheet = self.service.spreadsheets().get(
+            spreadsheetId=spreadsheet_id, fields='sheets.properties.title'
+        ).execute()
+        return any(
+            sheet['properties']['title'] == sheet_name
+            for sheet in spreadsheet.get('sheets', [])
+        )
+
     def _get_sheet_id(self, spreadsheet_id: str, sheet_name: str) -> int:
         """Get numeric sheet ID from name."""
         spreadsheet = self.service.spreadsheets().get(
@@ -296,48 +367,6 @@ class SheetsService:
         row_number = int(''.join(c for c in after_bang.split(':')[0] if c.isdigit()))
         return row_number
 
-    def append_rows(self, spreadsheet_id: str, sheet_name: str, rows: List[List[Any]]) -> int:
-        """Append multiple rows at once. Returns starting row number (1-indexed)."""
-        if not rows:
-            return 0
-
-        last_col = _col_letter(len(rows[0]))
-        range_name = f"'{sheet_name}'!A:{last_col}"
-        body = {'values': rows}
-        
-        result = self.service.spreadsheets().values().append(
-            spreadsheetId=spreadsheet_id,
-            range=range_name,
-            valueInputOption='RAW',
-            insertDataOption='INSERT_ROWS',
-            body=body
-        ).execute()
-        
-        updated_range = result['updates']['updatedRange']
-        after_bang = updated_range.split('!')[-1]
-        row_number = int(''.join(c for c in after_bang.split(':')[0] if c.isdigit()))
-        return row_number
-
-    def update_rows(self, spreadsheet_id: str, sheet_name: str, 
-                    updates: List[tuple]) -> None:
-        """Update multiple rows at specific row numbers."""
-        if not updates:
-            return
-        
-        data = []
-        for row_number, row_data in updates:
-            last_col = _col_letter(len(row_data))
-            data.append({
-                'range': f"'{sheet_name}'!A{row_number}:{last_col}{row_number}",
-                'values': [row_data]
-            })
-        
-        body = {'valueInputOption': 'RAW', 'data': data}
-        self.service.spreadsheets().values().batchUpdate(
-            spreadsheetId=spreadsheet_id,
-            body=body
-        ).execute()
-    
     def update_row(self, spreadsheet_id: str, sheet_name: str, row_number: int, row_data: List[Any]):
         """Update an existing row."""
         last_col = _col_letter(len(row_data))

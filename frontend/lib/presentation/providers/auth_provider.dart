@@ -368,3 +368,19 @@ final currentTeamIdProvider = Provider<String?>((ref) {
 final isMasterTeamProvider = Provider<bool>((ref) {
   return ref.watch(authProvider).isMasterTeamMember;
 });
+
+/// Admin-ness comes from AuthState.teamMemberships (teamId -> role), which
+/// is populated from the `users/{uid}` Firestore doc's `teamMemberships`
+/// field (`profile.teamMemberships`) — NOT from the `teams` custom claim.
+/// That's fine, not a trust gap: both the claim and this Firestore field
+/// are written only by the create_team/join_team/leave_team Admin-SDK
+/// callables, and Firestore rules deny clients from writing this field
+/// directly. But keep the distinction straight — the claim is what
+/// Firestore rules trust for isolation; this field is what the UI reads
+/// for "is this user an admin of their active team".
+final isTeamAdminProvider = Provider<bool>((ref) {
+  final auth = ref.watch(authProvider);
+  final teamId = auth.currentTeamId;
+  if (teamId == null) return false;
+  return auth.teamMemberships[teamId] == 'admin';
+});

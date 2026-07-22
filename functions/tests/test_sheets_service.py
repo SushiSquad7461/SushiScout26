@@ -196,75 +196,6 @@ class TestSheetsService(unittest.TestCase):
         result = service.transform_match_report(report_data)
         self.assertEqual(result[12], 'Yes')  # Robot Died
 
-    def test_append_rows(self):
-        """Test appending multiple rows at once."""
-        with patch('services.sheets_service.build') as mock_build, \
-             patch('services.sheets_service.service_account.Credentials'):
-            mock_service = Mock()
-            mock_build.return_value = mock_service
-
-            mock_append_result = Mock()
-            mock_append_result.execute.return_value = {
-                'updates': {'updatedRange': "'2026test'!A5:S7"}
-            }
-            mock_service.spreadsheets().values().append.return_value = mock_append_result
-
-            service = SheetsService(self.mock_credentials)
-            rows = [
-                ['ts', 'qm1', 1, 254, 'Red', 'S', 5, 'No', 10, 'L1', '3/5', '4/5', 'No', 'No', 'No', 'No', 'No', 'No', ''],
-                ['ts', 'qm2', 2, 118, 'Blue', 'S', 3, 'No', 8, 'L2', '2/5', '3/5', 'No', 'No', 'No', 'No', 'No', 'No', ''],
-            ]
-
-            result = service.append_rows('spreadsheet_id', '2026test', rows)
-
-            self.assertEqual(result, 5)
-            mock_service.spreadsheets().values().append.assert_called_once()
-
-    def test_append_rows_empty(self):
-        """Test appending empty list returns 0."""
-        with patch('services.sheets_service.build'), \
-             patch('services.sheets_service.service_account.Credentials'):
-            service = SheetsService(self.mock_credentials)
-            result = service.append_rows('spreadsheet_id', '2026test', [])
-            self.assertEqual(result, 0)
-
-    def test_update_rows(self):
-        """Test updating multiple rows uses dynamic column range."""
-        with patch('services.sheets_service.build') as mock_build, \
-             patch('services.sheets_service.service_account.Credentials'):
-            mock_service = Mock()
-            mock_build.return_value = mock_service
-
-            mock_batch_update = Mock()
-            mock_batch_update.execute.return_value = {}
-            mock_service.spreadsheets().values().batchUpdate.return_value = mock_batch_update
-
-            service = SheetsService(self.mock_credentials)
-            # 19-column FRC rows
-            row = ['ts', 'qm1', 1, 254, 'Red', 'S', 5, 'No', 10, 'L1', '3/5', '4/5', 'No', 'No', 'No', 'No', 'No', 'No', 'comment']
-            updates = [(5, row), (10, row)]
-
-            service.update_rows('spreadsheet_id', '2026test', updates)
-
-            call_args = mock_service.spreadsheets().values().batchUpdate.call_args
-            data = call_args[1]['body']['data']
-            self.assertEqual(len(data), 2)
-            # Should use column S (19th) not O (15th)
-            self.assertIn('S5', data[0]['range'])
-            self.assertIn('S10', data[1]['range'])
-
-    def test_update_rows_empty(self):
-        """Test updating with empty list does nothing."""
-        with patch('services.sheets_service.build'), \
-             patch('services.sheets_service.service_account.Credentials'):
-            mock_service = Mock()
-            service = SheetsService(self.mock_credentials)
-            service.service = mock_service
-
-            service.update_rows('spreadsheet_id', '2026test', [])
-
-            mock_service.spreadsheets().values().batchUpdate.assert_not_called()
-
     def test_delete_row(self):
         """Test deleting a row from the sheet."""
         with patch('services.sheets_service.build') as mock_build, \
@@ -400,5 +331,112 @@ class TestGetSheetsService(unittest.TestCase):
         self.assertIn("GOOGLE_SHEETS_CREDENTIALS not set", str(context.exception))
 
 
+class TestVerifyWriteAccess(unittest.TestCase):
+    """The write probe is what turns a competition-day mystery into an
+    actionable 'share the sheet' message at configure time."""
+
+    def _service(self):
+        from services.sheets_service import SheetsService
+        svc = SheetsService.__new__(SheetsService)
+        svc.service = MagicMock()
+        return svc
+
+    def test_true_when_title_read_and_rewritten_successfully(self):
+        svc = self._service()
+        svc.service.spreadsheets.return_value.get.return_value.execute.return_value = {
+            'properties': {'title': 'Scouting'},
+        }
+        batch_update = svc.service.spreadsheets.return_value.batchUpdate
+
+        self.assertTrue(svc.verify_write_access('sheet-abc'))
+
+        batch_update.assert_called_once()
+        _, kwargs = batch_update.call_args
+        self.assertEqual(kwargs['spreadsheetId'], 'sheet-abc')
+        sent_title = kwargs['body']['requests'][0][
+            'updateSpreadsheetProperties'
+        ]['properties']['title']
+        self.assertEqual(sent_title, 'Scouting')
+
+    def test_false_on_http_error_from_initial_read(self):
+        from googleapiclient.errors import HttpError
+        svc = self._service()
+        resp = MagicMock()
+        resp.status = 403
+        svc.service.spreadsheets.return_value.get.return_value.execute.side_effect = (
+            HttpError(resp, b'forbidden')
+        )
+
+        self.assertFalse(svc.verify_write_access('sheet-abc'))
+        svc.service.spreadsheets.return_value.batchUpdate.assert_not_called()
+
+    def test_false_on_http_error_from_write_viewer_share(self):
+        """Regression test: a Viewer-level share can read metadata but is
+        denied the write. This must fail against a read-only probe."""
+        from googleapiclient.errors import HttpError
+        svc = self._service()
+        svc.service.spreadsheets.return_value.get.return_value.execute.return_value = {
+            'properties': {'title': 'Scouting'},
+        }
+        resp = MagicMock()
+        resp.status = 403
+        svc.service.spreadsheets.return_value.batchUpdate.return_value.execute.side_effect = (
+            HttpError(resp, b'forbidden')
+        )
+
+        self.assertFalse(svc.verify_write_access('sheet-abc'))
+
+
 if __name__ == '__main__':
     unittest.main()
+
+
+class TestVerifyWriteAccessCredentialFailures(unittest.TestCase):
+    """A bad/rotated service-account credential is an OPERATOR problem, not a
+    sharing problem. It must not be reported as 'share your sheet' — that
+    sends the admin chasing a setting they already got right."""
+
+    def _service(self):
+        from services.sheets_service import SheetsService
+        svc = SheetsService.__new__(SheetsService)
+        svc.service = MagicMock()
+        return svc
+
+    def test_raises_credentials_error_when_read_auth_fails(self):
+        from google.auth.exceptions import RefreshError
+        from services.sheets_service import SheetsCredentialsError
+
+        svc = self._service()
+        svc.service.spreadsheets.return_value.get.return_value.execute.side_effect = (
+            RefreshError('invalid_grant')
+        )
+
+        with self.assertRaises(SheetsCredentialsError):
+            svc.verify_write_access('sheet-abc')
+
+    def test_raises_credentials_error_when_write_auth_fails(self):
+        from google.auth.exceptions import RefreshError
+        from services.sheets_service import SheetsCredentialsError
+
+        svc = self._service()
+        svc.service.spreadsheets.return_value.get.return_value.execute.return_value = {
+            'properties': {'title': 'Scouting'},
+        }
+        svc.service.spreadsheets.return_value.batchUpdate.return_value.execute.side_effect = (
+            RefreshError('invalid_grant')
+        )
+
+        with self.assertRaises(SheetsCredentialsError):
+            svc.verify_write_access('sheet-abc')
+
+    def test_http_error_still_returns_false_not_raises(self):
+        """The sharing path must be unaffected by the credentials handling."""
+        from googleapiclient.errors import HttpError
+        svc = self._service()
+        resp = MagicMock()
+        resp.status = 403
+        svc.service.spreadsheets.return_value.get.return_value.execute.side_effect = (
+            HttpError(resp, b'forbidden')
+        )
+
+        self.assertFalse(svc.verify_write_access('sheet-abc'))

@@ -1,11 +1,9 @@
 """Main entry point for Firebase Cloud Functions."""
 
-import os
+import re
 import secrets
 from firebase_functions import https_fn, firestore_fn, logger, options
-from firebase_functions.options import CorsOptions
 from firebase_admin import initialize_app, firestore, auth as fb_auth
-from flask import jsonify, Request, Response
 
 # Initialize Firebase Admin
 initialize_app()
@@ -23,11 +21,6 @@ def get_db():
     if _db is None:
         _db = firestore.client()
     return _db
-
-
-def get_master_spreadsheet_id() -> str:
-    """Get master spreadsheet ID from environment."""
-    return os.environ.get('MASTER_SPREADSHEET_ID') or ''
 
 
 def _is_team_member(auth_token: dict | None, team_id: str) -> bool:
@@ -60,107 +53,153 @@ def _resolve_event_program_type(event_id: str, report_data: dict | None = None) 
     return 'FRC'
 
 
-def _delete_sheet_row_for_report(event_id: str, report_id: str) -> None:
-    """Remove a report's row from Sheets and clear its sync record.
+def _resolve_team_id(event_id: str, report_data: dict | None = None) -> str:
+    """Resolve the owning teamId for a match. The match doc normally
+    carries it, but legacy and externally-written docs may not — fall back
+    to the event doc, which Step 1 (team isolation) made authoritative."""
+    if report_data and report_data.get('teamId'):
+        return report_data['teamId']
+
+    try:
+        event_doc = get_db().collection('events').document(event_id).get()
+        if event_doc.exists:
+            return (event_doc.to_dict() or {}).get('teamId') or ''
+    except Exception as e:
+        logger.warn(f"Failed to read event {event_id} for teamId: {e}")
+
+    return ''
+
+
+def _team_id_from_claim(event_id: str, auth_token: dict | None) -> str:
+    """Best-effort team id for an event that has no `events` doc yet.
+
+    Event docs are created lazily on first match write, so a brand-new
+    team can have a valid eventId with nothing in `events/` — resolving
+    team-ness solely from that doc makes a legitimate first-run backfill
+    look like "no sheet configured". Event ids are composite
+    `{teamId}_{eventCode}`, so fall back to the prefix — but trust it only
+    when it matches one of the CALLER's own claimed teams, never blindly,
+    so an unresolvable event can't be used to read another team's data."""
+    claimed_teams = (auth_token or {}).get('teams') or {}
+    for team_id in claimed_teams:
+        if event_id.startswith(f"{team_id}_"):
+            return team_id
+    return ''
+
+
+def _get_team_sheet_id(team_id: str) -> str:
+    """The team's own spreadsheet id, or '' when export isn't configured.
+
+    Sheets export is opt-in: an unset id is a normal state, not an error."""
+    if not team_id:
+        return ''
+
+    try:
+        doc = get_db().collection('teamSettings').document(team_id).get()
+        if doc.exists:
+            return (doc.to_dict() or {}).get('googleSheetId') or ''
+    except Exception as e:
+        logger.warn(f"Failed to read teamSettings/{team_id}: {e}")
+
+    return ''
+
+
+def _event_tab_name(event_id: str, team_id: str) -> str:
+    """Tab name for an event inside a team's workbook.
+
+    Event ids are composite `{teamId}_{eventCode}`. The workbook already
+    belongs to one team, so the prefix is redundant noise in the tab name."""
+    prefix = f"{team_id}_"
+    if team_id and event_id.startswith(prefix):
+        return event_id[len(prefix):]
+    return event_id
+
+
+def _delete_sheet_row_for_report(
+    event_id: str, report_id: str, report_data: dict | None = None
+) -> None:
+    """Remove a report's row from its team's sheet.
     Used for hard deletes and for soft-delete transitions."""
     from services.sheets_service import get_sheets_service
-    from services.sync_tracker import SyncTracker
 
-    sheets_service = get_sheets_service()
-    spreadsheet_id = get_master_spreadsheet_id()
+    team_id = _resolve_team_id(event_id, report_data)
+    spreadsheet_id = _get_team_sheet_id(team_id)
 
     if not spreadsheet_id:
-        logger.error("MASTER_SPREADSHEET_ID not configured")
+        logger.debug(
+            f"No sheet configured for team {team_id!r}; skipping delete of {report_id}"
+        )
         return
 
-    sync_record = SyncTracker.get_sync_record(event_id, report_id)
+    tab = _event_tab_name(event_id, team_id)
+    sheets_service = get_sheets_service()
 
-    if sync_record and sync_record.get('rowNumber') and sync_record.get('sheetName'):
-        row_number = sync_record['rowNumber']
-        sheet_name = sync_record['sheetName']
+    # A team that connects a sheet mid-competition can be asked to delete a
+    # match that predates the tab's existence. Unlike sync_report_to_sheets,
+    # this path must not create the tab just to look inside it — a missing
+    # tab means there is nothing to delete, not an error.
+    if not sheets_service.sheet_exists(spreadsheet_id, tab):
+        logger.debug(
+            f"Sheet tab {tab!r} does not exist; nothing to delete for {report_id}"
+        )
+        return
 
-        success = sheets_service.delete_row(spreadsheet_id, sheet_name, row_number)
+    row_number = sheets_service.find_row_by_report_id(spreadsheet_id, tab, report_id)
 
-        if success:
-            logger.info(f"Deleted row {row_number} for report {report_id}")
-        else:
-            logger.warn(f"Failed to delete row for report {report_id}, trying to find and delete")
-            found_row = sheets_service.find_row_by_report_id(spreadsheet_id, sheet_name, report_id)
-            if found_row:
-                sheets_service.delete_row(spreadsheet_id, sheet_name, found_row)
-                logger.info(f"Found and deleted row {found_row} for report {report_id}")
+    if row_number is None:
+        logger.info(f"Report {report_id} not present in sheet tab {tab}; nothing to delete")
+        return
 
-    SyncTracker.delete_sync_record(event_id, report_id)
-    logger.info(f"Deleted sync record for report {report_id}")
+    if sheets_service.delete_row(spreadsheet_id, tab, row_number):
+        logger.info(f"Deleted row {row_number} for report {report_id}")
+    else:
+        logger.warn(f"Failed to delete row {row_number} for report {report_id}")
 
 
-def sync_report_to_sheets(event_id: str, report_id: str, report_data: dict, is_update: bool = False):
-    """Sync a single match report to Google Sheets."""
+def sync_report_to_sheets(event_id: str, report_id: str, report_data: dict) -> None:
+    """Push a single match report to its team's spreadsheet.
+
+    Row identity is resolved against the sheet itself rather than a tracker
+    collection: the sheet is the only record of what is in the sheet, so
+    there is no second store that can drift out of agreement with it."""
     from services.sheets_service import get_sheets_service
-    from services.sync_tracker import SyncTracker
-    
+
+    team_id = _resolve_team_id(event_id, report_data)
+    spreadsheet_id = _get_team_sheet_id(team_id)
+
+    if not spreadsheet_id:
+        logger.debug(
+            f"No sheet configured for team {team_id!r}; skipping sync of {report_id}"
+        )
+        return
+
+    tab = _event_tab_name(event_id, team_id)
+
+    # The event doc is authoritative for programType — the match doc's field
+    # may be missing (legacy writes, external admin writes) which used to
+    # silently force the sheet to FRC columns on first sync of an FTC event.
+    program_type = _resolve_event_program_type(event_id, report_data)
+
     try:
         sheets_service = get_sheets_service()
-        spreadsheet_id = get_master_spreadsheet_id()
-        
-        if not spreadsheet_id:
-            logger.error("MASTER_SPREADSHEET_ID not configured")
-            return
+        sheets_service.get_or_create_sheet(spreadsheet_id, tab, program_type)
 
-        # The event doc is authoritative for programType — the match doc's
-        # field may be missing (legacy writes, reverse-sync from Sheets,
-        # external admin writes) which used to silently force the sheet to
-        # FRC columns on first sync of an FTC event.
-        program_type = _resolve_event_program_type(event_id, report_data)
-
-        sheet_name = event_id
-        sheets_service.get_or_create_sheet(spreadsheet_id, sheet_name, program_type)
-        
         row_data = sheets_service.transform_match_report(report_data)
-        
-        sync_record = SyncTracker.get_sync_record(event_id, report_id)
-        
-        if sync_record and sync_record.get('rowNumber'):
-            row_number = sync_record['rowNumber']
-            sheets_service.update_row(spreadsheet_id, sheet_name, row_number, row_data)
+        row_number = sheets_service.find_row_by_report_id(spreadsheet_id, tab, report_id)
+
+        if row_number is not None:
+            sheets_service.update_row(spreadsheet_id, tab, row_number, row_data)
             logger.info(f"Updated report {report_id} in row {row_number}")
-            
-            SyncTracker.record_sync(
-                event_id=event_id,
-                report_id=report_id,
-                spreadsheet_id=spreadsheet_id,
-                sheet_name=sheet_name,
-                row_number=row_number,
-                status='updated'
-            )
         else:
-            row_number = sheets_service.append_row(spreadsheet_id, sheet_name, row_data)
+            row_number = sheets_service.append_row(spreadsheet_id, tab, row_data)
             logger.info(f"Appended report {report_id} to row {row_number}")
-            
-            SyncTracker.record_sync(
-                event_id=event_id,
-                report_id=report_id,
-                spreadsheet_id=spreadsheet_id,
-                sheet_name=sheet_name,
-                row_number=row_number,
-                status='success'
-            )
-            
+
     except Exception as e:
         logger.error(f"Failed to sync report {report_id}: {str(e)}")
-        SyncTracker.record_sync(
-            event_id=event_id,
-            report_id=report_id,
-            spreadsheet_id=get_master_spreadsheet_id() or 'unknown',
-            sheet_name=event_id,
-            row_number=0,
-            status='failed',
-            error_message=str(e)
-        )
         raise
 
 
-@firestore_fn.on_document_written(document="matches/{reportId}", secrets=["GOOGLE_SHEETS_CREDENTIALS", "MASTER_SPREADSHEET_ID"])
+@firestore_fn.on_document_written(document="matches/{reportId}", secrets=["GOOGLE_SHEETS_CREDENTIALS"])
 def on_match_written(event: firestore_fn.Event):
     """Trigger when a match report is created, updated, or deleted in Firestore."""
     report_id = event.params['reportId']
@@ -192,7 +231,7 @@ def on_match_written(event: firestore_fn.Event):
     if data_before and not data_after:
         logger.info(f"Processing hard-deleted match report: {report_id} for event {event_id}")
         try:
-            _delete_sheet_row_for_report(event_id, report_id)
+            _delete_sheet_row_for_report(event_id, report_id, data_before)
         except Exception as e:
             logger.error(f"Failed to sync delete for report {report_id}: {str(e)}")
     elif not data_before and data_after:
@@ -203,42 +242,17 @@ def on_match_written(event: firestore_fn.Event):
             return
 
         logger.info(f"Processing new match report: {report_id} for event {event_id}")
-
-        from services.sync_tracker import SyncTracker
-        existing = SyncTracker.get_sync_record(event_id, report_id)
-        if existing and existing.get('status') == 'success':
-            logger.info(f"Report {report_id} already synced, skipping")
-            return
-
-        sync_report_to_sheets(event_id, report_id, data_after, is_update=False)
+        sync_report_to_sheets(event_id, report_id, data_after)
     elif data_before and data_after:
         was_deleted = bool(data_before.get('isDeleted'))
         is_deleted = bool(data_after.get('isDeleted'))
-
-        # Echo guard: if this update came from the Sheets → Firestore path
-        # (update_match_from_sheets / sync_from_sheets_http stamp
-        # lastSyncSource='sheets'), don't push the same data back to Sheets.
-        # App-originated writes stamp lastSyncSource='app' explicitly, so
-        # the after-value alone tells us the origin — we don't need to
-        # compare against before. (The earlier "transition-only" guard
-        # echoed on the SECOND consecutive sheets edit because before was
-        # also 'sheets'.) was_deleted == is_deleted ensures soft deletes
-        # initiated from Sheets still propagate to the trash path below.
-        if (
-            data_after.get('lastSyncSource') == 'sheets'
-            and was_deleted == is_deleted
-        ):
-            logger.info(
-                f"Skipping echo sync for {report_id}: write originated in Sheets"
-            )
-            return
 
         if is_deleted and not was_deleted:
             # Soft delete (trash): remove the row from Sheets so trashed
             # matches don't keep showing up in analysis views.
             logger.info(f"Processing soft-deleted match report: {report_id} for event {event_id}")
             try:
-                _delete_sheet_row_for_report(event_id, report_id)
+                _delete_sheet_row_for_report(event_id, report_id, data_after)
             except Exception as e:
                 logger.error(f"Failed to sync soft delete for report {report_id}: {str(e)}")
             return
@@ -249,10 +263,10 @@ def on_match_written(event: firestore_fn.Event):
             logger.info(f"Ignoring update to soft-deleted match {report_id}")
             return
 
-        # Restore (was_deleted -> not is_deleted) is handled here too: the
-        # sync record was cleared on trash, so this re-appends a new row.
+        # Restore (was_deleted -> not is_deleted) lands here too: the row was
+        # removed on trash, so find_row_by_report_id misses and re-appends.
         logger.info(f"Processing updated match report: {report_id} for event {event_id}")
-        sync_report_to_sheets(event_id, report_id, data_after, is_update=True)
+        sync_report_to_sheets(event_id, report_id, data_after)
 
 
 def _generate_invite_code() -> str:
@@ -399,9 +413,112 @@ def leave_team(req: https_fn.CallableRequest) -> dict:
     return {'success': True, 'currentTeamId': new_current}
 
 
-@https_fn.on_call(secrets=["GOOGLE_SHEETS_CREDENTIALS", "MASTER_SPREADSHEET_ID"])
+_SHEET_URL_RE = re.compile(r'/spreadsheets/d/([a-zA-Z0-9-_]+)')
+_SHEET_ID_RE = re.compile(r'^[a-zA-Z0-9-_]+$')
+
+
+def _extract_sheet_id(value: str) -> str:
+    """Accept a full Sheets URL or a bare id; return '' if neither."""
+    value = (value or '').strip()
+    if not value:
+        return ''
+
+    url_match = _SHEET_URL_RE.search(value)
+    if url_match:
+        return url_match.group(1)
+
+    if _SHEET_ID_RE.match(value):
+        return value
+
+    return ''
+
+
+def _is_team_admin(auth_token: dict | None, team_id: str) -> bool:
+    """True if the caller's `teams` claim marks them admin of `team_id`."""
+    if not auth_token or not team_id:
+        return False
+    teams = auth_token.get('teams')
+    if not isinstance(teams, dict):
+        return False
+    return teams.get(team_id) == 'admin'
+
+
+@https_fn.on_call(secrets=["GOOGLE_SHEETS_CREDENTIALS"])
+def set_team_sheet(req: https_fn.CallableRequest) -> dict:
+    """Point a team's Sheets export at a spreadsheet the team owns.
+
+    Validated server-side and stored with the Admin SDK: rules deny client
+    writes to googleSheetId, the same server-authoritative pattern used for
+    team membership."""
+    if not req.auth:
+        raise https_fn.HttpsError(
+            code=https_fn.FunctionsErrorCode.UNAUTHENTICATED,
+            message="Must be authenticated"
+        )
+
+    team_id = (req.data or {}).get('teamId') or ''
+    raw_sheet = (req.data or {}).get('sheetId') or ''
+
+    if not _is_team_admin(req.auth.token, team_id):
+        raise https_fn.HttpsError(
+            code=https_fn.FunctionsErrorCode.PERMISSION_DENIED,
+            message="Only a team admin can configure the team's Google Sheet"
+        )
+
+    sheet_id = _extract_sheet_id(raw_sheet)
+    if not sheet_id:
+        raise https_fn.HttpsError(
+            code=https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            message="That doesn't look like a Google Sheets link or id"
+        )
+
+    from services.sheets_service import (
+        SheetsCredentialsError,
+        get_sheets_service,
+    )
+    sheets_service = get_sheets_service()
+
+    try:
+        has_write_access = sheets_service.verify_write_access(sheet_id)
+    except SheetsCredentialsError:
+        # Our credentials, not their sheet. Saying "share it as Editor"
+        # here would send the admin to re-check a setting that is fine.
+        raise https_fn.HttpsError(
+            code=https_fn.FunctionsErrorCode.INTERNAL,
+            message=(
+                "Sheets export is misconfigured on the server, so we couldn't "
+                "check your sheet. This isn't a problem with your spreadsheet "
+                "— contact whoever maintains this app."
+            )
+        )
+
+    if not has_write_access:
+        raise https_fn.HttpsError(
+            code=https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
+            message=(
+                "Can't open that sheet. Share it as Editor with "
+                f"{sheets_service.service_account_email}, then try again."
+            )
+        )
+
+    get_db().collection('teamSettings').document(team_id).set(
+        {
+            'googleSheetId': sheet_id,
+            'updatedAt': firestore.SERVER_TIMESTAMP,
+        },
+        merge=True,
+    )
+
+    logger.info(f"Team {team_id} sheet set to {sheet_id} by {req.auth.uid}")
+    return {'success': True, 'googleSheetId': sheet_id}
+
+
+@https_fn.on_call(secrets=["GOOGLE_SHEETS_CREDENTIALS"])
 def backfill_event_to_sheets(req: https_fn.CallableRequest) -> dict:
-    """Backfill all match reports for an event to Google Sheets."""
+    """Backfill all live match reports for an event into the team's sheet.
+
+    Idempotent: sync_report_to_sheets updates a row in place when the report
+    is already present, so re-running never duplicates rows."""
     try:
         if not req.auth:
             raise https_fn.HttpsError(
@@ -418,49 +535,46 @@ def backfill_event_to_sheets(req: https_fn.CallableRequest) -> dict:
 
         logger.info(f"Starting backfill for event: {event_id}")
 
-        from services.sheets_service import get_sheets_service
-        from services.sync_tracker import SyncTracker
-
-        sheets_service = get_sheets_service()
-        spreadsheet_id = get_master_spreadsheet_id()
-
-        if not spreadsheet_id:
-            raise https_fn.HttpsError(
-                code=https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
-                message="MASTER_SPREADSHEET_ID not configured"
-            )
-
-        # Get program type from event and verify the caller owns the team
-        # this event belongs to. Cloud Functions use the Admin SDK and
-        # bypass Firestore rules, so we must enforce isolation here.
+        # Cloud Functions use the Admin SDK and bypass Firestore rules, so
+        # we must enforce team isolation here.
         db = get_db()
         event_doc = db.collection('events').document(event_id).get()
-        program_type = 'FRC'
-        event_team_id = ''
-        if event_doc.exists:
-            event_data = event_doc.to_dict()
-            program_type = event_data.get('programType', 'FRC')
-            event_team_id = event_data.get('teamId', '') or ''
 
-        if event_team_id and not _is_team_member(req.auth.token, event_team_id):
+        # The event doc is authoritative when it has a teamId. Otherwise
+        # (no doc yet — created lazily on first match write — or a doc
+        # missing teamId) resolve from the caller's own claim instead of
+        # treating "team unknown" as "no sheet configured", which was
+        # reported to the admin as a false diagnosis.
+        event_team_id = ((event_doc.to_dict() or {}).get('teamId') if event_doc.exists else '') or ''
+        if not event_team_id:
+            event_team_id = _team_id_from_claim(event_id, req.auth.token)
+
+        if not event_team_id:
             raise https_fn.HttpsError(
                 code=https_fn.FunctionsErrorCode.PERMISSION_DENIED,
                 message="Caller is not a member of the team that owns this event"
             )
 
-        sheet_name = event_id
-        sheets_service.get_or_create_sheet(spreadsheet_id, sheet_name, program_type)
-        
-        db = get_db()
+        if not _is_team_member(req.auth.token, event_team_id):
+            raise https_fn.HttpsError(
+                code=https_fn.FunctionsErrorCode.PERMISSION_DENIED,
+                message="Caller is not a member of the team that owns this event"
+            )
+
+        if not _get_team_sheet_id(event_team_id):
+            raise https_fn.HttpsError(
+                code=https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
+                message="This team has no Google Sheet configured"
+            )
+
         reports_ref = db.collection('matches').where('eventId', '==', event_id)
         if event_team_id:
             reports_ref = reports_ref.where('teamId', '==', event_team_id)
-        reports = list(reports_ref.stream())
-        
+
         synced_count = 0
         failed_count = 0
-        
-        for report_doc in reports:
+
+        for report_doc in reports_ref.stream():
             report_id = report_doc.id
             report_data = report_doc.to_dict()
 
@@ -469,56 +583,27 @@ def backfill_event_to_sheets(req: https_fn.CallableRequest) -> dict:
 
             # Skip legacy schedule-shaped docs the same way on_match_written
             # does. TBA/FTC sync used to write schedule entries into /matches
-            # (now moved to /schedules); old data may still be there and
-            # would otherwise show up as garbage rows in the sheet.
+            # (now /schedules); old data would otherwise appear as garbage rows.
             if report_data.get('compLevel') and not report_data.get('scouterName'):
                 logger.info(f"Skipping schedule-shaped doc {report_id} during backfill")
                 continue
 
             try:
-                existing = SyncTracker.get_sync_record(event_id, report_id)
-                if existing and existing.get('status') == 'success':
-                    logger.info(f"Skipping already synced report: {report_id}")
-                    continue
-                
-                row_data = sheets_service.transform_match_report(report_data)
-                row_number = sheets_service.append_row(spreadsheet_id, sheet_name, row_data)
-                
-                SyncTracker.record_sync(
-                    event_id=event_id,
-                    report_id=report_id,
-                    spreadsheet_id=spreadsheet_id,
-                    sheet_name=sheet_name,
-                    row_number=row_number,
-                    status='success'
-                )
-                
+                sync_report_to_sheets(event_id, report_id, report_data)
                 synced_count += 1
-                logger.info(f"Synced report {report_id} to row {row_number}")
-                
             except Exception as e:
                 failed_count += 1
                 logger.error(f"Failed to sync report {report_id}: {str(e)}")
-                
-                SyncTracker.record_sync(
-                    event_id=event_id,
-                    report_id=report_id,
-                    spreadsheet_id=spreadsheet_id,
-                    sheet_name=sheet_name,
-                    row_number=0,
-                    status='failed',
-                    error_message=str(e)
-                )
-        
+
         logger.info(f"Backfill complete. Synced: {synced_count}, Failed: {failed_count}")
-        
+
         return {
             'success': True,
             'eventId': event_id,
             'syncedCount': synced_count,
             'failedCount': failed_count
         }
-        
+
     except https_fn.HttpsError:
         raise
     except Exception as e:
@@ -527,157 +612,3 @@ def backfill_event_to_sheets(req: https_fn.CallableRequest) -> dict:
             code=https_fn.FunctionsErrorCode.INTERNAL,
             message=f"Backfill failed: {str(e)}"
         )
-
-
-@https_fn.on_call(secrets=["GOOGLE_SHEETS_CREDENTIALS", "MASTER_SPREADSHEET_ID"])
-def update_match_from_sheets(req: https_fn.CallableRequest) -> dict:
-    """Receive match updates from Google Sheets via Apps Script.
-    
-    Called by Apps Script when a row is edited in Sheets.
-    """
-    try:
-        if not req.auth:
-            raise https_fn.HttpsError(
-                code=https_fn.FunctionsErrorCode.UNAUTHENTICATED,
-                message="Must be authenticated"
-            )
-
-        event_id = req.data.get('eventId')
-        report_id = req.data.get('reportId')
-        match_data = req.data.get('data', {})
-
-        if not event_id or not report_id:
-            raise https_fn.HttpsError(
-                code=https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
-                message="Missing eventId or reportId"
-            )
-
-        logger.info(f"Updating match from Sheets: {event_id}/{report_id}")
-
-        db = get_db()
-        doc_ref = db.collection('matches').document(report_id)
-
-        # Verify event match AND team membership. Admin SDK bypasses Firestore
-        # rules, so without this any signed-in user could mutate any team's
-        # match if they learned a (reportId, eventId) pair.
-        existing = doc_ref.get()
-        if not existing.exists:
-            raise https_fn.HttpsError(
-                code=https_fn.FunctionsErrorCode.NOT_FOUND,
-                message="Match does not exist"
-            )
-
-        existing_data = existing.to_dict() or {}
-        if existing_data.get('eventId') and existing_data['eventId'] != event_id:
-            raise https_fn.HttpsError(
-                code=https_fn.FunctionsErrorCode.PERMISSION_DENIED,
-                message="Match does not belong to the specified event"
-            )
-
-        existing_team_id = existing_data.get('teamId', '') or ''
-        if existing_team_id and not _is_team_member(req.auth.token, existing_team_id):
-            raise https_fn.HttpsError(
-                code=https_fn.FunctionsErrorCode.PERMISSION_DENIED,
-                message="Caller is not a member of the team that owns this match"
-            )
-
-        # Force eventId and teamId — never let the client overwrite these
-        # from the Sheets payload, which would let a caller move a match
-        # between teams or events.
-        match_data['eventId'] = event_id
-        if existing_team_id:
-            match_data['teamId'] = existing_team_id
-
-        # Tag the source so on_match_written can skip the echo write back
-        # to Sheets. Without this, every Sheets-side edit fires a redundant
-        # Sheets API update and risks silently rewriting the user's cell
-        # with transform_match_report's reformatted values.
-        match_data['lastSyncSource'] = 'sheets'
-
-        # Merge update with existing data
-        doc_ref.set(match_data, merge=True)
-
-        logger.info(f"Successfully updated {report_id} in Firestore from Sheets")
-
-        return {
-            'success': True,
-            'eventId': event_id,
-            'reportId': report_id
-        }
-
-    except https_fn.HttpsError:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to update match from Sheets: {str(e)}")
-        raise https_fn.HttpsError(
-            code=https_fn.FunctionsErrorCode.INTERNAL,
-            message=f"Failed to update match: {str(e)}"
-        )
-
-
-@https_fn.on_request(
-    secrets=["GOOGLE_SHEETS_CREDENTIALS", "MASTER_SPREADSHEET_ID"],
-    cors=options.CorsOptions(cors_origins="*", cors_methods=["get", "post"])
-)
-def sync_from_sheets_http(req: Request) -> Response:
-    """HTTP endpoint for Sheets to Firestore sync.
-    
-    Use: POST with JSON body {eventId, reportId, data}
-    Requires X-API-Key header for authentication.
-    """
-    # Check API key
-    api_key = req.headers.get('X-API-Key')
-    expected_key = os.environ.get('SYNC_API_KEY')
-    if not expected_key:
-        return jsonify({'error': 'SYNC_API_KEY not configured'}), 500
-    
-    if api_key != expected_key:
-        return jsonify({'error': 'Unauthorized'}), 401
-    
-    try:
-        req_data = req.get_json(silent=True) or {}
-        
-        event_id = req_data.get('eventId')
-        report_id = req_data.get('reportId')
-        match_data = req_data.get('data', {})
-        
-        if not event_id or not report_id:
-            return jsonify({'error': 'Missing eventId or reportId'}), 400
-        
-        logger.info(f"HTTP: Updating match from Sheets: {event_id}/{report_id}")
-        
-        db = get_db()
-        doc_ref = db.collection('matches').document(report_id)
-
-        existing = doc_ref.get()
-        if not existing.exists:
-            return jsonify({'error': 'Match does not exist'}), 404
-
-        existing_data = existing.to_dict() or {}
-        if existing_data.get('eventId') and existing_data['eventId'] != event_id:
-            return jsonify({'error': 'Match does not belong to the specified event'}), 403
-
-        # Force eventId and teamId — never trust the client payload for
-        # these, otherwise a compromised Apps Script could move matches
-        # between teams or events.
-        match_data['eventId'] = event_id
-        if existing_data.get('teamId'):
-            match_data['teamId'] = existing_data['teamId']
-
-        # Tag the source so on_match_written can skip the echo write back
-        # to Sheets — see update_match_from_sheets for the rationale.
-        match_data['lastSyncSource'] = 'sheets'
-
-        doc_ref.set(match_data, merge=True)
-        
-        logger.info(f"Successfully updated {report_id} in Firestore from Sheets")
-        
-        return jsonify({
-            'success': True,
-            'eventId': event_id,
-            'reportId': report_id
-        })
-        
-    except Exception as e:
-        logger.error(f"HTTP: Failed to update match from Sheets: {str(e)}")
-        return jsonify({'error': str(e)}), 500
