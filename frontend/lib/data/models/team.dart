@@ -103,8 +103,15 @@ class TeamSettings {
   }
 
   Map<String, dynamic> toFirestore() {
+    // googleSheetId is deliberately NOT emitted here: it is server-authoritative
+    // and written only by the set_team_sheet callable (Admin SDK). Emitting
+    // it as `googleSheetId: null` here (when a client's own copy doesn't
+    // have it) used to be a landmine — the teamSettings update rule denies
+    // any write that even touches this key, and null vs. an existing string
+    // still shows up in diff().affectedKeys(). Any future
+    // `set(settings.toFirestore(), merge: true)` from a client would be
+    // denied outright. Omitting the key entirely avoids that.
     return {
-      'googleSheetId': googleSheetId,
       'defaultEventCode': defaultEventCode,
       'customFormConfig': customFormConfig,
       'createdBy': createdBy,
