@@ -400,5 +400,36 @@ class TestGetSheetsService(unittest.TestCase):
         self.assertIn("GOOGLE_SHEETS_CREDENTIALS not set", str(context.exception))
 
 
+class TestVerifyWriteAccess(unittest.TestCase):
+    """The write probe is what turns a competition-day mystery into an
+    actionable 'share the sheet' message at configure time."""
+
+    def _service(self):
+        from services.sheets_service import SheetsService
+        svc = SheetsService.__new__(SheetsService)
+        svc.service = MagicMock()
+        return svc
+
+    def test_true_when_metadata_readable_and_not_protected(self):
+        svc = self._service()
+        svc.service.spreadsheets.return_value.get.return_value.execute.return_value = {
+            'properties': {'title': 'Scouting'},
+            'sheets': [{'properties': {'title': 'Sheet1', 'sheetId': 0}}],
+        }
+
+        self.assertTrue(svc.verify_write_access('sheet-abc'))
+
+    def test_false_on_http_error(self):
+        from googleapiclient.errors import HttpError
+        svc = self._service()
+        resp = MagicMock()
+        resp.status = 403
+        svc.service.spreadsheets.return_value.get.return_value.execute.side_effect = (
+            HttpError(resp, b'forbidden')
+        )
+
+        self.assertFalse(svc.verify_write_access('sheet-abc'))
+
+
 if __name__ == '__main__':
     unittest.main()

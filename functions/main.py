@@ -1,6 +1,7 @@
 """Main entry point for Firebase Cloud Functions."""
 
 import os
+import re
 import secrets
 from firebase_functions import https_fn, firestore_fn, logger, options
 from firebase_admin import initialize_app, firestore, auth as fb_auth
@@ -384,6 +385,86 @@ def leave_team(req: https_fn.CallableRequest) -> dict:
 
     _set_team_claims(uid, memberships)
     return {'success': True, 'currentTeamId': new_current}
+
+
+_SHEET_URL_RE = re.compile(r'/spreadsheets/d/([a-zA-Z0-9-_]+)')
+_SHEET_ID_RE = re.compile(r'^[a-zA-Z0-9-_]+$')
+
+
+def _extract_sheet_id(value: str) -> str:
+    """Accept a full Sheets URL or a bare id; return '' if neither."""
+    value = (value or '').strip()
+    if not value:
+        return ''
+
+    url_match = _SHEET_URL_RE.search(value)
+    if url_match:
+        return url_match.group(1)
+
+    if _SHEET_ID_RE.match(value):
+        return value
+
+    return ''
+
+
+def _is_team_admin(auth_token: dict | None, team_id: str) -> bool:
+    """True if the caller's `teams` claim marks them admin of `team_id`."""
+    if not auth_token or not team_id:
+        return False
+    return (auth_token.get('teams') or {}).get(team_id) == 'admin'
+
+
+@https_fn.on_call(secrets=["GOOGLE_SHEETS_CREDENTIALS"])
+def set_team_sheet(req: https_fn.CallableRequest) -> dict:
+    """Point a team's Sheets export at a spreadsheet the team owns.
+
+    Validated server-side and stored with the Admin SDK: rules deny client
+    writes to googleSheetId, the same server-authoritative pattern used for
+    team membership."""
+    if not req.auth:
+        raise https_fn.HttpsError(
+            code=https_fn.FunctionsErrorCode.UNAUTHENTICATED,
+            message="Must be authenticated"
+        )
+
+    team_id = (req.data or {}).get('teamId') or ''
+    raw_sheet = (req.data or {}).get('sheetId') or ''
+
+    if not _is_team_admin(req.auth.token, team_id):
+        raise https_fn.HttpsError(
+            code=https_fn.FunctionsErrorCode.PERMISSION_DENIED,
+            message="Only a team admin can configure the team's Google Sheet"
+        )
+
+    sheet_id = _extract_sheet_id(raw_sheet)
+    if not sheet_id:
+        raise https_fn.HttpsError(
+            code=https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            message="That doesn't look like a Google Sheets link or id"
+        )
+
+    from services.sheets_service import get_sheets_service
+    sheets_service = get_sheets_service()
+
+    if not sheets_service.verify_write_access(sheet_id):
+        raise https_fn.HttpsError(
+            code=https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
+            message=(
+                "Can't open that sheet. Share it as Editor with "
+                f"{sheets_service.service_account_email}, then try again."
+            )
+        )
+
+    get_db().collection('teamSettings').document(team_id).set(
+        {
+            'googleSheetId': sheet_id,
+            'updatedAt': firestore.SERVER_TIMESTAMP,
+        },
+        merge=True,
+    )
+
+    logger.info(f"Team {team_id} sheet set to {sheet_id} by {req.auth.uid}")
+    return {'success': True, 'googleSheetId': sheet_id}
 
 
 @https_fn.on_call(secrets=["GOOGLE_SHEETS_CREDENTIALS"])

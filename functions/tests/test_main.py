@@ -461,5 +461,113 @@ class TestBackfillEventToSheets(unittest.TestCase):
         )
 
 
+class TestExtractSheetId(unittest.TestCase):
+    """People paste the URL, not the id."""
+
+    def test_extracts_from_full_url(self):
+        url = 'https://docs.google.com/spreadsheets/d/1AbC-dEf_123/edit#gid=0'
+        self.assertEqual(main._extract_sheet_id(url), '1AbC-dEf_123')
+
+    def test_extracts_from_url_without_fragment(self):
+        url = 'https://docs.google.com/spreadsheets/d/1AbC-dEf_123'
+        self.assertEqual(main._extract_sheet_id(url), '1AbC-dEf_123')
+
+    def test_passes_through_bare_id(self):
+        self.assertEqual(main._extract_sheet_id('1AbC-dEf_123'), '1AbC-dEf_123')
+
+    def test_strips_surrounding_whitespace(self):
+        self.assertEqual(main._extract_sheet_id('  1AbC-dEf_123  '), '1AbC-dEf_123')
+
+    def test_returns_empty_for_garbage(self):
+        self.assertEqual(main._extract_sheet_id('not a sheet!'), '')
+
+    def test_returns_empty_for_empty_input(self):
+        self.assertEqual(main._extract_sheet_id(''), '')
+
+
+class TestSetTeamSheet(unittest.TestCase):
+
+    def _req(self, role='admin', sheet='1AbC-dEf_123'):
+        req = Mock()
+        req.auth = Mock()
+        req.auth.uid = 'u1'
+        req.auth.token = {'teams': {'t1': role}}
+        req.data = {'teamId': 't1', 'sheetId': sheet}
+        return req
+
+    def _call(self, req):
+        return main.set_team_sheet.__wrapped__.__wrapped__(req)
+
+    def test_unauthenticated_is_rejected(self):
+        req = self._req()
+        req.auth = None
+
+        with self.assertRaises(main.https_fn.HttpsError) as ctx:
+            self._call(req)
+
+        self.assertEqual(
+            ctx.exception.code, main.https_fn.FunctionsErrorCode.UNAUTHENTICATED
+        )
+
+    def test_non_admin_member_is_rejected(self):
+        with self.assertRaises(main.https_fn.HttpsError) as ctx:
+            self._call(self._req(role='member'))
+
+        self.assertEqual(
+            ctx.exception.code, main.https_fn.FunctionsErrorCode.PERMISSION_DENIED
+        )
+
+    def test_non_member_is_rejected(self):
+        req = self._req()
+        req.auth.token = {'teams': {'other': 'admin'}}
+
+        with self.assertRaises(main.https_fn.HttpsError) as ctx:
+            self._call(req)
+
+        self.assertEqual(
+            ctx.exception.code, main.https_fn.FunctionsErrorCode.PERMISSION_DENIED
+        )
+
+    def test_unparseable_sheet_is_rejected(self):
+        with self.assertRaises(main.https_fn.HttpsError) as ctx:
+            self._call(self._req(sheet='not a sheet!'))
+
+        self.assertEqual(
+            ctx.exception.code, main.https_fn.FunctionsErrorCode.INVALID_ARGUMENT
+        )
+
+    @patch('services.sheets_service.get_sheets_service')
+    @patch.object(main, 'get_db')
+    def test_unshared_sheet_reports_service_account_email(self, mock_get_db, mock_get_svc):
+        svc = mock_get_svc.return_value
+        svc.verify_write_access.return_value = False
+        svc.service_account_email = 'scout@proj.iam.gserviceaccount.com'
+
+        with self.assertRaises(main.https_fn.HttpsError) as ctx:
+            self._call(self._req())
+
+        self.assertEqual(
+            ctx.exception.code, main.https_fn.FunctionsErrorCode.FAILED_PRECONDITION
+        )
+        self.assertIn('scout@proj.iam.gserviceaccount.com', ctx.exception.message)
+        mock_get_db.return_value.collection.return_value.document.return_value.set.assert_not_called()
+
+    @patch('services.sheets_service.get_sheets_service')
+    @patch.object(main, 'get_db')
+    def test_valid_sheet_is_persisted(self, mock_get_db, mock_get_svc):
+        svc = mock_get_svc.return_value
+        svc.verify_write_access.return_value = True
+
+        url = 'https://docs.google.com/spreadsheets/d/1AbC-dEf_123/edit'
+        result = self._call(self._req(sheet=url))
+
+        self.assertEqual(result, {'success': True, 'googleSheetId': '1AbC-dEf_123'})
+        svc.verify_write_access.assert_called_once_with('1AbC-dEf_123')
+
+        doc_ref = mock_get_db.return_value.collection.return_value.document.return_value
+        written = doc_ref.set.call_args[0][0]
+        self.assertEqual(written['googleSheetId'], '1AbC-dEf_123')
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -72,7 +72,30 @@ class SheetsService:
             creds_dict, scopes=SCOPES
         )
         self.service = build('sheets', 'v4', credentials=credentials)
-    
+        self._service_account_email = creds_dict.get('client_email', '')
+
+    @property
+    def service_account_email(self) -> str:
+        """The address a team must share their sheet with, as Editor."""
+        return self._service_account_email
+
+    def verify_write_access(self, spreadsheet_id: str) -> bool:
+        """True if this service account can open the spreadsheet.
+
+        The credentials carry the spreadsheets scope, so a successful
+        metadata read with that scope means the account has been granted
+        access to the file; a 403/404 means it has not."""
+        try:
+            self.service.spreadsheets().get(
+                spreadsheetId=spreadsheet_id,
+                fields='properties.title,sheets.properties'
+            ).execute()
+            return True
+        except HttpError as e:
+            import logging
+            logging.warning(f"No access to spreadsheet {spreadsheet_id}: {e}")
+            return False
+
     def get_headers(self, program_type: str = 'FRC') -> List[str]:
         """Get column headers based on program type."""
         return FTC_HEADERS if program_type == 'FTC' else FRC_HEADERS
