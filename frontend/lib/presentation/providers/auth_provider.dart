@@ -368,3 +368,12 @@ final currentTeamIdProvider = Provider<String?>((ref) {
 final isMasterTeamProvider = Provider<bool>((ref) {
   return ref.watch(authProvider).isMasterTeamMember;
 });
+
+/// Admin-ness comes from the `teams` custom claim already mirrored into
+/// AuthState.teamMemberships (teamId -> role), so this needs no fetch.
+final isTeamAdminProvider = Provider<bool>((ref) {
+  final auth = ref.watch(authProvider);
+  final teamId = auth.currentTeamId;
+  if (teamId == null) return false;
+  return auth.teamMemberships[teamId] == 'admin';
+});

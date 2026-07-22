@@ -1,7 +1,10 @@
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/validation/form_validators.dart';
 import '../../data/local/preferences.dart';
+import '../providers/auth_provider.dart';
+import '../providers/event_providers.dart';
 import '../theme/app_theme.dart';
 
 /// Material 3 settings bottom sheet
@@ -15,6 +18,11 @@ class SettingsSheet extends ConsumerStatefulWidget {
 class _SettingsSheetState extends ConsumerState<SettingsSheet> {
   final _scouterNameCtrl = TextEditingController();
   final _eventCodeCtrl = TextEditingController();
+  final _sheetCtrl = TextEditingController();
+  String? _sheetId;
+  String? _sheetError;
+  bool _saving = false;
+  bool _backfilling = false;
 
   @override
   void initState() {
@@ -22,12 +30,79 @@ class _SettingsSheetState extends ConsumerState<SettingsSheet> {
     final settings = ref.read(settingsProvider);
     _scouterNameCtrl.text = settings[PrefKeys.scouterName] ?? '';
     _eventCodeCtrl.text = settings[PrefKeys.eventCode] ?? '';
+    _loadTeamSheet();
+  }
+
+  void _loadTeamSheet() {
+    try {
+      final teamId = ref.read(currentTeamIdProvider);
+      if (teamId == null) return;
+      ref.read(teamRepositoryProvider).getTeamSettings(teamId).then((settings) {
+        if (!mounted) return;
+        setState(() {
+          _sheetId = settings?.googleSheetId;
+          _sheetCtrl.text = _sheetId ?? '';
+        });
+      });
+    } catch (_) {
+      // Auth/team providers may not be ready yet (e.g. no signed-in user) —
+      // leave the export section in its "not configured" state.
+    }
+  }
+
+  Future<void> _saveSheet() async {
+    final teamId = ref.read(currentTeamIdProvider);
+    if (teamId == null) return;
+
+    setState(() {
+      _saving = true;
+      _sheetError = null;
+    });
+
+    try {
+      final stored = await ref.read(teamRepositoryProvider).setTeamSheet(
+            teamId: teamId,
+            sheetId: _sheetCtrl.text,
+          );
+      if (!mounted) return;
+      setState(() => _sheetId = stored);
+    } catch (e) {
+      // The callable's failed-precondition message names the service
+      // account to share the sheet with — surface it verbatim.
+      if (!mounted) return;
+      setState(() => _sheetError = e.toString());
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _backfillEvent() async {
+    final eventId = ref.read(currentEventIdProvider);
+
+    setState(() => _backfilling = true);
+    try {
+      await FirebaseFunctions.instance
+          .httpsCallable('backfill_event_to_sheets')
+          .call<Map<String, dynamic>>({'eventId': eventId});
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Backfill complete")),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Backfill failed: $e")),
+      );
+    } finally {
+      if (mounted) setState(() => _backfilling = false);
+    }
   }
 
   @override
   void dispose() {
     _scouterNameCtrl.dispose();
     _eventCodeCtrl.dispose();
+    _sheetCtrl.dispose();
     super.dispose();
   }
 
@@ -136,6 +211,46 @@ class _SettingsSheetState extends ConsumerState<SettingsSheet> {
             ),
             const SizedBox(height: AppTheme.spacingSm),
             _buildColorSelector(context),
+
+            if (ref.watch(isTeamAdminProvider)) ...[
+              const SizedBox(height: AppTheme.spacingXl),
+              Text(
+                "Sheets export",
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: AppTheme.spacingSm),
+              Text(
+                _sheetId == null || _sheetId!.isEmpty
+                    ? "Not configured — matches aren't being exported."
+                    : "Connected",
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              const SizedBox(height: AppTheme.spacingSm),
+              TextField(
+                controller: _sheetCtrl,
+                decoration: InputDecoration(
+                  labelText: "Google Sheet link or id",
+                  errorText: _sheetError,
+                  border: const OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: AppTheme.spacingSm),
+              Row(
+                children: [
+                  FilledButton(
+                    onPressed: _saving ? null : _saveSheet,
+                    child: Text(_saving ? "Saving…" : "Save"),
+                  ),
+                  const SizedBox(width: AppTheme.spacingSm),
+                  OutlinedButton(
+                    onPressed: (_sheetId == null || _sheetId!.isEmpty || _backfilling)
+                        ? null
+                        : _backfillEvent,
+                    child: Text(_backfilling ? "Backfilling…" : "Backfill this event"),
+                  ),
+                ],
+              ),
+            ],
 
             const SizedBox(height: AppTheme.spacingXl),
 
