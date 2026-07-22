@@ -1,4 +1,4 @@
-"""Script to clear sync tracking and create fresh test data.
+"""Script to clear existing test matches and create fresh test data.
 
 Writes to the top-level `matches` collection (with eventId field), which is
 what the app reads from after the subcollection→top-level refactor.
@@ -24,17 +24,6 @@ else:
     firebase_admin.initialize_app()
 
 db = firestore.client()
-
-# Clear sync tracking for EVENT_ID
-print(f"Clearing sync tracking for {EVENT_ID}...")
-sync_ref = db.collection("sync_tracking")
-docs = sync_ref.stream()
-count = 0
-for doc in docs:
-    if EVENT_ID in doc.id:
-        doc.reference.delete()
-        count += 1
-print(f"Deleted {count} sync records")
 
 # Delete existing top-level matches for this event
 print(f"\nDeleting existing matches for event {EVENT_ID}...")
