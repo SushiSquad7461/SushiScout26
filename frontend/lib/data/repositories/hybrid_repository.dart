@@ -11,6 +11,7 @@ import '../repositories/scouting_repository.dart';
 import '../repositories/firestore_repository.dart';
 import '../local/database/app_database.dart';
 import '../local/sync/sync_manager.dart';
+import 'providers.dart';
 
 /// Provider for the hybrid repository. When a dependency rebuilds (e.g.,
 /// team switch), Riverpod tears down the old instance — register dispose()

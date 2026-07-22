@@ -10,6 +10,7 @@ import '../../../core/network/retry.dart';
 import '../../models/match_report.dart';
 import '../database/app_database.dart';
 import '../../repositories/firestore_repository.dart';
+import '../../repositories/providers.dart';
 
 final _logger = Logger('SyncManager');
 
@@ -51,15 +52,6 @@ final appDatabaseProvider = Provider<AppDatabase?>((ref) {
 /// Provider for whether local database is available
 final isLocalDbAvailableProvider = Provider<bool>((ref) {
   return ref.watch(appDatabaseProvider) != null;
-});
-
-/// Provider for the active team ID — overridden from auth state in main.dart
-final activeTeamIdProvider = Provider<String?>((ref) => null);
-
-/// Provider for Firestore repository
-final firestoreRepositoryProvider = Provider<FirestoreRepository>((ref) {
-  // This should be initialized with proper Firebase instance
-  throw UnimplementedError('Initialize with proper Firebase instance');
 });
 
 /// Provider for connectivity status
