@@ -565,7 +565,7 @@ Expected: 335 tests passing.
 
 ```bash
 cd frontend && git add lib/data/repositories/providers.dart lib/data/local/sync/sync_manager.dart lib/main.dart test/data/repositories/providers_test.dart
-git commit -m "refactor(frontend): move providers out of sync manager"
+git commit -m "refactor(frontend): move providers out of sync"
 ```
 
 ---
@@ -626,7 +626,7 @@ Expected: `No issues found!` and 335 tests passing.
 
 ```bash
 cd frontend && git add lib/presentation/screens/
-git commit -m "refactor(frontend): point ui at firestore repository"
+git commit -m "refactor(frontend): point ui at firestore repo"
 ```
 
 ---
