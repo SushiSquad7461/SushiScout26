@@ -472,10 +472,27 @@ def set_team_sheet(req: https_fn.CallableRequest) -> dict:
             message="That doesn't look like a Google Sheets link or id"
         )
 
-    from services.sheets_service import get_sheets_service
+    from services.sheets_service import (
+        SheetsCredentialsError,
+        get_sheets_service,
+    )
     sheets_service = get_sheets_service()
 
-    if not sheets_service.verify_write_access(sheet_id):
+    try:
+        has_write_access = sheets_service.verify_write_access(sheet_id)
+    except SheetsCredentialsError:
+        # Our credentials, not their sheet. Saying "share it as Editor"
+        # here would send the admin to re-check a setting that is fine.
+        raise https_fn.HttpsError(
+            code=https_fn.FunctionsErrorCode.INTERNAL,
+            message=(
+                "Sheets export is misconfigured on the server, so we couldn't "
+                "check your sheet. This isn't a problem with your spreadsheet "
+                "— contact whoever maintains this app."
+            )
+        )
+
+    if not has_write_access:
         raise https_fn.HttpsError(
             code=https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
             message=(

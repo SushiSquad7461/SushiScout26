@@ -707,3 +707,37 @@ class TestSetTeamSheet(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class TestSetTeamSheetCredentialFailure(unittest.TestCase):
+    """A server-side credentials fault must not masquerade as a sharing
+    problem: telling an admin to re-share a sheet they shared correctly
+    sends them chasing the wrong thing."""
+
+    def _req(self):
+        req = Mock()
+        req.auth = Mock()
+        req.auth.uid = 'u1'
+        req.auth.token = {'teams': {'t1': 'admin'}}
+        req.data = {'teamId': 't1', 'sheetId': '1AbC-dEf_123'}
+        return req
+
+    @patch('services.sheets_service.get_sheets_service')
+    @patch.object(main, 'get_db')
+    def test_credentials_failure_is_not_reported_as_a_sharing_problem(
+        self, mock_get_db, mock_get_svc
+    ):
+        from services.sheets_service import SheetsCredentialsError
+
+        svc = mock_get_svc.return_value
+        svc.verify_write_access.side_effect = SheetsCredentialsError('bad creds')
+        svc.service_account_email = 'scout@proj.iam.gserviceaccount.com'
+
+        with self.assertRaises(main.https_fn.HttpsError) as ctx:
+            main.set_team_sheet.__wrapped__.__wrapped__(self._req())
+
+        self.assertEqual(
+            ctx.exception.code, main.https_fn.FunctionsErrorCode.INTERNAL
+        )
+        self.assertNotIn('Share it as Editor', ctx.exception.message)
+        mock_get_db.return_value.collection.return_value.document.return_value.set.assert_not_called()

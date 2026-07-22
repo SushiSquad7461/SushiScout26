@@ -389,3 +389,54 @@ class TestVerifyWriteAccess(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class TestVerifyWriteAccessCredentialFailures(unittest.TestCase):
+    """A bad/rotated service-account credential is an OPERATOR problem, not a
+    sharing problem. It must not be reported as 'share your sheet' — that
+    sends the admin chasing a setting they already got right."""
+
+    def _service(self):
+        from services.sheets_service import SheetsService
+        svc = SheetsService.__new__(SheetsService)
+        svc.service = MagicMock()
+        return svc
+
+    def test_raises_credentials_error_when_read_auth_fails(self):
+        from google.auth.exceptions import RefreshError
+        from services.sheets_service import SheetsCredentialsError
+
+        svc = self._service()
+        svc.service.spreadsheets.return_value.get.return_value.execute.side_effect = (
+            RefreshError('invalid_grant')
+        )
+
+        with self.assertRaises(SheetsCredentialsError):
+            svc.verify_write_access('sheet-abc')
+
+    def test_raises_credentials_error_when_write_auth_fails(self):
+        from google.auth.exceptions import RefreshError
+        from services.sheets_service import SheetsCredentialsError
+
+        svc = self._service()
+        svc.service.spreadsheets.return_value.get.return_value.execute.return_value = {
+            'properties': {'title': 'Scouting'},
+        }
+        svc.service.spreadsheets.return_value.batchUpdate.return_value.execute.side_effect = (
+            RefreshError('invalid_grant')
+        )
+
+        with self.assertRaises(SheetsCredentialsError):
+            svc.verify_write_access('sheet-abc')
+
+    def test_http_error_still_returns_false_not_raises(self):
+        """The sharing path must be unaffected by the credentials handling."""
+        from googleapiclient.errors import HttpError
+        svc = self._service()
+        resp = MagicMock()
+        resp.status = 403
+        svc.service.spreadsheets.return_value.get.return_value.execute.side_effect = (
+            HttpError(resp, b'forbidden')
+        )
+
+        self.assertFalse(svc.verify_write_access('sheet-abc'))

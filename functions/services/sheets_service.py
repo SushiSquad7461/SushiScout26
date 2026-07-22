@@ -4,11 +4,21 @@ import json
 import os
 from datetime import datetime
 from typing import List, Optional, Dict, Any
+from google.auth.exceptions import GoogleAuthError
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
+
+
+class SheetsCredentialsError(Exception):
+    """The service account's own credentials failed (expired, revoked, or
+    malformed key) — as distinct from the team's sheet not being shared.
+
+    These need opposite fixes: a sharing failure is the admin's to solve,
+    a credentials failure is the operator's. Conflating them tells the
+    admin to re-share a sheet they already shared correctly."""
 
 # Column headers for FRC match reports
 FRC_HEADERS = [
@@ -86,7 +96,11 @@ class SheetsService:
         enough to sync match data. This reads the current title and writes
         it straight back via batchUpdate — a real write that changes
         nothing visible. Viewer shares get a 403 on the write; Editor
-        shares pass."""
+        shares pass.
+
+        Raises SheetsCredentialsError if OUR OWN credentials are the
+        problem — that is an operator fault the team cannot fix by
+        sharing the sheet, so it must not be reported as one."""
         try:
             meta = self.service.spreadsheets().get(
                 spreadsheetId=spreadsheet_id, fields='properties.title'
@@ -103,6 +117,13 @@ class SheetsService:
                 }]}
             ).execute()
             return True
+        except GoogleAuthError as e:
+            import logging
+            logging.error(
+                f"Sheets service-account credentials failed while probing "
+                f"{spreadsheet_id}: {e}"
+            )
+            raise SheetsCredentialsError(str(e)) from e
         except HttpError as e:
             import logging
             logging.warning(f"No write access to spreadsheet {spreadsheet_id}: {e}")
