@@ -5,7 +5,7 @@ import 'package:share_plus/share_plus.dart';
 import 'dart:io';
 import '../../core/animations.dart';
 import '../../data/local/preferences.dart';
-import '../../data/repositories/hybrid_repository.dart';
+import '../../data/repositories/providers.dart';
 import '../../data/models/match_report.dart';
 import '../../data/models/event.dart';
 import 'match_details.dart';
@@ -36,7 +36,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   void initState() {
     super.initState();
     final eventId = ref.read(currentEventIdProvider);
-    _matchesStream = ref.read(hybridRepositoryProvider).watchMatches(eventId);
+    _matchesStream = ref.read(firestoreRepositoryProvider).watchMatches(eventId);
   }
 
   void _openSettings(BuildContext context) {
@@ -48,14 +48,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     ).then((_) {
       final eventId = ref.read(currentEventIdProvider);
       setState(() {
-        _matchesStream = ref.read(hybridRepositoryProvider).watchMatches(eventId);
+        _matchesStream = ref.read(firestoreRepositoryProvider).watchMatches(eventId);
       });
     });
   }
 
   Future<void> _showExportOptions(BuildContext context, WidgetRef ref) async {
     final eventId = ref.read(currentEventIdProvider);
-    final matches = await ref.read(hybridRepositoryProvider).getMatches(eventId);
+    final matches = await ref.read(firestoreRepositoryProvider).getMatches(eventId);
 
     if (!context.mounted) return;
 
@@ -104,7 +104,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
   Future<void> _exportCsv(BuildContext context, WidgetRef ref) async {
     final eventId = ref.read(currentEventIdProvider);
-    final matches = await ref.read(hybridRepositoryProvider).getMatches(eventId);
+    final matches = await ref.read(firestoreRepositoryProvider).getMatches(eventId);
 
     if (!context.mounted) return;
 
@@ -191,7 +191,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final eventId = ref.read(currentEventIdProvider);
     // Force refresh by re-creating the stream
     setState(() {
-      _matchesStream = ref.read(hybridRepositoryProvider).watchMatches(eventId);
+      _matchesStream = ref.read(firestoreRepositoryProvider).watchMatches(eventId);
     });
     // Wait a moment for the stream to update
     await Future.delayed(const Duration(milliseconds: 500));
@@ -232,7 +232,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 tooltip: "Search Matches",
                 onPressed: () async {
                   final eventId = ref.read(currentEventIdProvider);
-                  final matches = await ref.read(hybridRepositoryProvider).getMatches(eventId);
+                  final matches = await ref.read(firestoreRepositoryProvider).getMatches(eventId);
                   if (context.mounted) {
                     showSearch(
                       context: context,
@@ -284,54 +284,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         await ref.read(authProvider.notifier).signOut();
                       }
                       break;
-                    case 'clear_local':
-                      final confirmed = await showDialog<bool>(
-                        context: context,
-                        builder: (context) => AlertDialog(
-                          title: const Text('Clear Local Data?'),
-                          content: const Text(
-                            'This will delete all locally stored matches, events, and sync queue. '
-                            'This action cannot be undone. Firebase data will not be affected.',
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.of(context).pop(false),
-                              child: const Text('Cancel'),
-                            ),
-                            FilledButton(
-                              onPressed: () => Navigator.of(context).pop(true),
-                              style: FilledButton.styleFrom(
-                                backgroundColor: Theme.of(context).colorScheme.error,
-                              ),
-                              child: const Text('Clear'),
-                            ),
-                          ],
-                        ),
-                      );
-
-                      if (confirmed == true && context.mounted) {
-                        try {
-                          await ref.read(hybridRepositoryProvider).clearAllLocalData();
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: const Text('Local data cleared successfully'),
-                                backgroundColor: Theme.of(context).colorScheme.primary,
-                              ),
-                            );
-                          }
-                        } catch (e) {
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('Error clearing data: $e'),
-                                backgroundColor: Theme.of(context).colorScheme.error,
-                              ),
-                            );
-                          }
-                        }
-                      }
-                      break;
                   }
                 },
                 itemBuilder: (context) => [
@@ -349,15 +301,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     child: ListTile(
                       leading: Icon(Icons.settings_outlined),
                       title: Text("Settings"),
-                      contentPadding: EdgeInsets.zero,
-                      visualDensity: VisualDensity.compact,
-                    ),
-                  ),
-                  PopupMenuItem(
-                    value: 'clear_local',
-                    child: ListTile(
-                      leading: Icon(Icons.delete_forever_outlined, color: Theme.of(context).colorScheme.error),
-                      title: Text("Clear Local Data", style: TextStyle(color: Theme.of(context).colorScheme.error)),
                       contentPadding: EdgeInsets.zero,
                       visualDensity: VisualDensity.compact,
                     ),
@@ -532,7 +475,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   ref.read(settingsProvider)[PrefKeys.programType] ?? "FRC";
 
               // Timeout prevents hanging when Firestore is slow/offline
-              final event = await ref.read(hybridRepositoryProvider)
+              final event = await ref.read(firestoreRepositoryProvider)
                   .getEvent(eventId)
                   .timeout(const Duration(seconds: 5), onTimeout: () => null);
 
@@ -826,7 +769,7 @@ class _MatchCard extends ConsumerWidget {
     if (eventId.isEmpty) return;
 
     try {
-      final repo = ref.read(hybridRepositoryProvider);
+      final repo = ref.read(firestoreRepositoryProvider);
       await repo.trashMatch(eventId, match.id);
 
       if (context.mounted) {
