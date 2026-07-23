@@ -50,6 +50,16 @@ void main() {
       currentTeamIdProvider.overrideWith((ref) => 'team1'),
       currentEventIdProvider.overrideWith((ref) => 'team1_2026test'),
       teamRepositoryProvider.overrideWith((ref) => mockTeamRepository),
+      userTeamsProvider.overrideWith((ref) async => [
+            Team(
+              id: 'team1',
+              name: 'Team One',
+              inviteCode: 'ABC123',
+              createdBy: 'alice',
+              createdAt: DateTime(2026, 1, 1),
+              memberCount: 4,
+            ),
+          ]),
     ];
   }
 
@@ -59,6 +69,19 @@ void main() {
     await tester.pumpWidget(wrap([
       sharedPreferencesProvider.overrideWith((ref) => prefs),
       isTeamAdminProvider.overrideWith((ref) => true),
+      currentTeamIdProvider.overrideWith((ref) => 'team1'),
+      currentEventIdProvider.overrideWith((ref) => 'team1_2026test'),
+      teamRepositoryProvider.overrideWith((ref) => mockTeamRepository),
+      userTeamsProvider.overrideWith((ref) async => [
+            Team(
+              id: 'team1',
+              name: 'Team One',
+              inviteCode: 'ABC123',
+              createdBy: 'alice',
+              createdAt: DateTime(2026, 1, 1),
+              memberCount: 4,
+            ),
+          ]),
     ]));
     await tester.pumpAndSettle();
 
@@ -71,6 +94,19 @@ void main() {
     await tester.pumpWidget(wrap([
       sharedPreferencesProvider.overrideWith((ref) => prefs),
       isTeamAdminProvider.overrideWith((ref) => false),
+      currentTeamIdProvider.overrideWith((ref) => 'team1'),
+      currentEventIdProvider.overrideWith((ref) => 'team1_2026test'),
+      teamRepositoryProvider.overrideWith((ref) => mockTeamRepository),
+      userTeamsProvider.overrideWith((ref) async => [
+            Team(
+              id: 'team1',
+              name: 'Team One',
+              inviteCode: 'ABC123',
+              createdBy: 'alice',
+              createdAt: DateTime(2026, 1, 1),
+              memberCount: 4,
+            ),
+          ]),
     ]));
     await tester.pumpAndSettle();
 
@@ -259,5 +295,16 @@ void main() {
     expect(find.text("Couldn't check export status"), findsOneWidget);
     expect(find.text("Not configured — matches aren't being exported."),
         findsNothing);
+  });
+
+  testWidgets('shows the Team section', (tester) async {
+    await growViewport(tester);
+    when(mockTeamRepository.getUserTeams(any)).thenAnswer((_) async => []);
+
+    await tester.pumpWidget(wrap(await baseOverrides()));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Team'), findsOneWidget);
+    expect(find.textContaining('ABC123'), findsOneWidget);
   });
 }
