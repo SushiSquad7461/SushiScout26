@@ -12,7 +12,36 @@
           "package_name": "com.sushiscout.frontend"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "80003441956-irmbgnfvtd9amg810ekn4sbpshjb4u5g.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.sushiscout.frontend",
+            "certificate_hash": "602bea4c866a605ca1905b70a905acc532e3a7ee"
+          }
+        },
+        {
+          "client_id": "80003441956-qgvqphr8kte3ab2aaj7sa2k9840ck58p.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.sushiscout.frontend",
+            "certificate_hash": "11fd61a7061ba09fca23dec254423b4d8194598c"
+          }
+        },
+        {
+          "client_id": "80003441956-v2a1erd98thqiqpdjbqm4563gtb6ngec.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.sushiscout.frontend",
+            "certificate_hash": "7080688eb867a654fd0fc3d1a24be0e45920c06f"
+          }
+        },
+        {
+          "client_id": "80003441956-3hc9o86bnegg0kj9i04cj84hoq70eiqa.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyAttKTvyC0zREXX5wlHngi5w-Q5Ed02m2c"
@@ -20,7 +49,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "80003441956-3hc9o86bnegg0kj9i04cj84hoq70eiqa.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "80003441956-hn702qp94ri24qn9iglhl89vf08r2i5n.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.sushiscout.frontend"
+              }
+            }
+          ]
         }
       }
     }
