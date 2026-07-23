@@ -5,7 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/errors/app_error.dart';
 import '../../core/validation/form_validators.dart';
 import '../../data/models/match_report.dart';
-import '../../data/repositories/hybrid_repository.dart';
+import '../../data/repositories/providers.dart';
 import '../widgets/scouting_form_widget.dart';
 import '../widgets/match_timer.dart';
 import '../widgets/counter_card.dart';
@@ -794,7 +794,7 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm>
     );
 
     try {
-      await ref.read(hybridRepositoryProvider).createMatch(widget.eventId, report);
+      await ref.read(firestoreRepositoryProvider).createMatch(widget.eventId, report);
       if (mounted) {
         ScaffoldMessenger.of(
           context,

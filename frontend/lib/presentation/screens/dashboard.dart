@@ -5,14 +5,14 @@ import 'package:share_plus/share_plus.dart';
 import 'dart:io';
 import '../../core/animations.dart';
 import '../../data/local/preferences.dart';
-import '../../data/repositories/hybrid_repository.dart';
+import '../../data/repositories/providers.dart';
 import '../../data/models/match_report.dart';
 import '../../data/models/event.dart';
 import 'match_details.dart';
 import 'trash_screen.dart';
 import '../factories/scouting_form_factory.dart';
 import '../theme/app_theme.dart';
-import '../widgets/sync_status_indicator.dart';
+import '../widgets/connection_status.dart';
 import '../widgets/settings_sheet.dart';
 
 import '../widgets/match_search_delegate.dart';
@@ -30,32 +30,17 @@ class DashboardScreen extends ConsumerStatefulWidget {
 }
 
 class _DashboardScreenState extends ConsumerState<DashboardScreen> {
-  late Stream<List<MatchReport>> _matchesStream;
-
-  @override
-  void initState() {
-    super.initState();
-    final eventId = ref.read(currentEventIdProvider);
-    _matchesStream = ref.read(hybridRepositoryProvider).watchMatches(eventId);
-  }
-
   void _openSettings(BuildContext context) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
       builder: (context) => const SettingsSheet(),
-    ).then((_) {
-      final eventId = ref.read(currentEventIdProvider);
-      setState(() {
-        _matchesStream = ref.read(hybridRepositoryProvider).watchMatches(eventId);
-      });
-    });
+    );
   }
 
   Future<void> _showExportOptions(BuildContext context, WidgetRef ref) async {
-    final eventId = ref.read(currentEventIdProvider);
-    final matches = await ref.read(hybridRepositoryProvider).getMatches(eventId);
+    final matches = ref.read(matchesViewProvider).value?.matches ?? const <MatchReport>[];
 
     if (!context.mounted) return;
 
@@ -103,8 +88,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   }
 
   Future<void> _exportCsv(BuildContext context, WidgetRef ref) async {
-    final eventId = ref.read(currentEventIdProvider);
-    final matches = await ref.read(hybridRepositoryProvider).getMatches(eventId);
+    final matches = ref.read(matchesViewProvider).value?.matches ?? const <MatchReport>[];
 
     if (!context.mounted) return;
 
@@ -188,13 +172,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
   Future<void> _onRefresh() async {
     AppHaptics.medium();
-    final eventId = ref.read(currentEventIdProvider);
-    // Force refresh by re-creating the stream
-    setState(() {
-      _matchesStream = ref.read(hybridRepositoryProvider).watchMatches(eventId);
-    });
-    // Wait a moment for the stream to update
-    await Future.delayed(const Duration(milliseconds: 500));
+    // Await the re-subscribed stream's first emission so the RefreshIndicator
+    // spinner stays up until fresh data actually arrives, rather than
+    // collapsing the instant invalidate() returns.
+    ref.invalidate(matchesViewProvider);
+    await ref.read(matchesViewProvider.future);
   }
 
   @override
@@ -203,11 +185,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final eventCode = settings[PrefKeys.eventCode] ?? "Unknown Event";
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final matchesAsync = ref.watch(matchesViewProvider);
 
     return Scaffold(
       body: Column(
         children: [
-          const SyncStatusBar(),
+          const ConnectionStatusBar(),
           Expanded(
             child: RefreshIndicator(
               onRefresh: _onRefresh,
@@ -224,21 +207,18 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               // Sync status indicator
               const Padding(
                 padding: EdgeInsets.only(right: 8),
-                child: Center(child: SyncStatusIndicator(compact: true)),
+                child: Center(child: ConnectionStatusChip(compact: true)),
               ),
               // Search button
               IconButton(
                 icon: const Icon(Icons.search),
                 tooltip: "Search Matches",
-                onPressed: () async {
-                  final eventId = ref.read(currentEventIdProvider);
-                  final matches = await ref.read(hybridRepositoryProvider).getMatches(eventId);
-                  if (context.mounted) {
-                    showSearch(
-                      context: context,
-                      delegate: MatchSearchDelegate(matches),
-                    );
-                  }
+                onPressed: () {
+                  final matches = ref.read(matchesViewProvider).value?.matches ?? const <MatchReport>[];
+                  showSearch(
+                    context: context,
+                    delegate: MatchSearchDelegate(matches),
+                  );
                 },
               ),
               // Export button
@@ -284,54 +264,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         await ref.read(authProvider.notifier).signOut();
                       }
                       break;
-                    case 'clear_local':
-                      final confirmed = await showDialog<bool>(
-                        context: context,
-                        builder: (context) => AlertDialog(
-                          title: const Text('Clear Local Data?'),
-                          content: const Text(
-                            'This will delete all locally stored matches, events, and sync queue. '
-                            'This action cannot be undone. Firebase data will not be affected.',
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.of(context).pop(false),
-                              child: const Text('Cancel'),
-                            ),
-                            FilledButton(
-                              onPressed: () => Navigator.of(context).pop(true),
-                              style: FilledButton.styleFrom(
-                                backgroundColor: Theme.of(context).colorScheme.error,
-                              ),
-                              child: const Text('Clear'),
-                            ),
-                          ],
-                        ),
-                      );
-
-                      if (confirmed == true && context.mounted) {
-                        try {
-                          await ref.read(hybridRepositoryProvider).clearAllLocalData();
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: const Text('Local data cleared successfully'),
-                                backgroundColor: Theme.of(context).colorScheme.primary,
-                              ),
-                            );
-                          }
-                        } catch (e) {
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('Error clearing data: $e'),
-                                backgroundColor: Theme.of(context).colorScheme.error,
-                              ),
-                            );
-                          }
-                        }
-                      }
-                      break;
                   }
                 },
                 itemBuilder: (context) => [
@@ -349,15 +281,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     child: ListTile(
                       leading: Icon(Icons.settings_outlined),
                       title: Text("Settings"),
-                      contentPadding: EdgeInsets.zero,
-                      visualDensity: VisualDensity.compact,
-                    ),
-                  ),
-                  PopupMenuItem(
-                    value: 'clear_local',
-                    child: ListTile(
-                      leading: Icon(Icons.delete_forever_outlined, color: Theme.of(context).colorScheme.error),
-                      title: Text("Clear Local Data", style: TextStyle(color: Theme.of(context).colorScheme.error)),
                       contentPadding: EdgeInsets.zero,
                       visualDensity: VisualDensity.compact,
                     ),
@@ -402,115 +325,37 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           ),
 
           // Match list
-          StreamBuilder<List<MatchReport>>(
-            stream: _matchesStream,
-            builder: (context, snapshot) {
-              if (snapshot.hasError) {
-                return SliverFillRemaining(
-                  child: Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.error_outline,
-                          size: 64,
-                          color: colorScheme.error,
-                        ),
-                        const SizedBox(height: AppTheme.spacingMd),
-                        Text(
-                          "Error loading matches",
-                          style: theme.textTheme.titleMedium,
-                        ),
-                        const SizedBox(height: AppTheme.spacingSm),
-                        Text(
-                          "${snapshot.error}",
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
+          matchesAsync.when(
+            data: (view) => _buildMatchList(context, view.matches),
+            loading: () => const SliverFillRemaining(
+              child: Center(child: CircularProgressIndicator()),
+            ),
+            error: (error, _) => SliverFillRemaining(
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.error_outline,
+                      size: 64,
+                      color: colorScheme.error,
                     ),
-                  ),
-                );
-              }
-
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const SliverFillRemaining(
-                  child: Center(child: CircularProgressIndicator()),
-                );
-              }
-
-              final matches = snapshot.data ?? [];
-
-              if (matches.isEmpty) {
-                return SliverFillRemaining(
-                  child: Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(24),
-                          decoration: BoxDecoration(
-                            color: colorScheme.primaryContainer.withValues(
-                              alpha: 0.3,
-                            ),
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(
-                            Icons.ramen_dining_rounded,
-                            size: 64,
-                            color: colorScheme.primary,
-                          ),
-                        ),
-                        const SizedBox(height: AppTheme.spacingLg),
-                        Text(
-                          "No matches scouted yet",
-                          style: theme.textTheme.titleLarge?.copyWith(
-                            color: colorScheme.onSurface,
-                          ),
-                        ),
-                        const SizedBox(height: AppTheme.spacingSm),
-                        Text(
-                          "Tap the button below to scout your first match",
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
+                    const SizedBox(height: AppTheme.spacingMd),
+                    Text(
+                      "Error loading matches",
+                      style: theme.textTheme.titleMedium,
                     ),
-                  ),
-                );
-              }
-
-              return SliverPadding(
-                padding: const EdgeInsets.all(AppTheme.spacingMd),
-                sliver: SliverList(
-                  delegate: SliverChildBuilderDelegate(
-                    (context, index) => TweenAnimationBuilder<double>(
-                      tween: Tween(begin: 0.0, end: 1.0),
-                      duration: const Duration(milliseconds: 300),
-                      curve: Curves.easeOut,
-                      child: Padding(
-                        padding: const EdgeInsets.only(
-                          bottom: AppTheme.spacingSm,
-                        ),
-                        child: _MatchCard(match: matches[index]),
+                    const SizedBox(height: AppTheme.spacingSm),
+                    Text(
+                      "$error",
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
                       ),
-                      builder: (context, value, child) {
-                        return Opacity(
-                          opacity: value,
-                          child: Transform.translate(
-                            offset: Offset(0, (1 - value) * 20),
-                            child: child,
-                          ),
-                        );
-                      },
                     ),
-                    childCount: matches.length,
-                  ),
+                  ],
                 ),
-              );
-            },
+              ),
+            ),
           ),
 
           // Bottom padding for FAB
@@ -532,7 +377,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   ref.read(settingsProvider)[PrefKeys.programType] ?? "FRC";
 
               // Timeout prevents hanging when Firestore is slow/offline
-              final event = await ref.read(hybridRepositoryProvider)
+              final event = await ref.read(firestoreRepositoryProvider)
                   .getEvent(eventId)
                   .timeout(const Duration(seconds: 5), onTimeout: () => null);
 
@@ -584,6 +429,80 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           },
           icon: const Icon(Icons.add_rounded),
           label: const Text("Scout Match"),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMatchList(BuildContext context, List<MatchReport> matches) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    if (matches.isEmpty) {
+      return SliverFillRemaining(
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: colorScheme.primaryContainer.withValues(
+                    alpha: 0.3,
+                  ),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.ramen_dining_rounded,
+                  size: 64,
+                  color: colorScheme.primary,
+                ),
+              ),
+              const SizedBox(height: AppTheme.spacingLg),
+              Text(
+                "No matches scouted yet",
+                style: theme.textTheme.titleLarge?.copyWith(
+                  color: colorScheme.onSurface,
+                ),
+              ),
+              const SizedBox(height: AppTheme.spacingSm),
+              Text(
+                "Tap the button below to scout your first match",
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return SliverPadding(
+      padding: const EdgeInsets.all(AppTheme.spacingMd),
+      sliver: SliverList(
+        delegate: SliverChildBuilderDelegate(
+          (context, index) => TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0.0, end: 1.0),
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOut,
+            child: Padding(
+              padding: const EdgeInsets.only(
+                bottom: AppTheme.spacingSm,
+              ),
+              child: _MatchCard(match: matches[index]),
+            ),
+            builder: (context, value, child) {
+              return Opacity(
+                opacity: value,
+                child: Transform.translate(
+                  offset: Offset(0, (1 - value) * 20),
+                  child: child,
+                ),
+              );
+            },
+          ),
+          childCount: matches.length,
         ),
       ),
     );
@@ -826,7 +745,7 @@ class _MatchCard extends ConsumerWidget {
     if (eventId.isEmpty) return;
 
     try {
-      final repo = ref.read(hybridRepositoryProvider);
+      final repo = ref.read(firestoreRepositoryProvider);
       await repo.trashMatch(eventId, match.id);
 
       if (context.mounted) {

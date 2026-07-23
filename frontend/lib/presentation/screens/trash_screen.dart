@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/models/match_report.dart';
 import '../theme/app_theme.dart';
 
-import '../../data/repositories/hybrid_repository.dart';
+import '../../data/repositories/providers.dart';
 import '../providers/event_providers.dart';
 
 /// Material 3 styled trash/recovery screen.
@@ -22,7 +22,7 @@ class _TrashScreenState extends ConsumerState<TrashScreen> {
   void initState() {
     super.initState();
     final eventId = ref.read(currentEventIdProvider);
-    _trashStream = ref.read(hybridRepositoryProvider).watchTrash(eventId);
+    _trashStream = ref.read(firestoreRepositoryProvider).watchTrash(eventId);
   }
 
   Future<void> _restore(MatchReport match) async {
@@ -53,7 +53,7 @@ class _TrashScreenState extends ConsumerState<TrashScreen> {
     setState(() => _loading = true);
     try {
       final eventId = ref.read(currentEventIdProvider);
-      final repo = ref.read(hybridRepositoryProvider);
+      final repo = ref.read(firestoreRepositoryProvider);
       await repo.restoreMatch(eventId, match.id);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -103,7 +103,7 @@ class _TrashScreenState extends ConsumerState<TrashScreen> {
 
     setState(() => _loading = true);
     try {
-      await ref.read(hybridRepositoryProvider).deleteMatch(eventId, match.id);
+      await ref.read(firestoreRepositoryProvider).deleteMatch(eventId, match.id);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("Permanently deleted match.")),

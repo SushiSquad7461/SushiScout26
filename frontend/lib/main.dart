@@ -6,7 +6,7 @@ import 'firebase_options.dart';
 import 'data/repositories/firestore_repository.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'data/local/preferences.dart';
-import 'data/local/sync/sync_manager.dart';
+import 'data/repositories/providers.dart';
 import 'presentation/providers/auth_provider.dart';
 import 'presentation/widgets/auth_wrapper.dart';
 import 'presentation/theme/app_theme.dart';
