@@ -7,6 +7,7 @@ import '../../core/auth/auth_service.dart';
 import '../../core/auth/auth_state.dart';
 import '../../core/auth/auth_exceptions.dart';
 import '../../core/auth/claims_refresher.dart';
+import '../../data/models/team.dart';
 import '../../data/repositories/auth_repository.dart';
 import '../../data/repositories/team_repository.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -316,30 +317,72 @@ class AuthNotifier extends Notifier<AuthState> {
     }
   }
 
+  /// Switches the active team. Persists the new `currentTeamId` to Firestore
+  /// so it survives restarts. NOTE: this deliberately does NOT catch failures
+  /// into a global `AuthStatus.error` — its only callers are the in-app team
+  /// flows (`joinTeamInApp`/`createTeamInApp` and the settings section), which
+  /// surface errors inline and must not tear the settings modal down via a
+  /// global status flip. On failure the exception propagates and state is left
+  /// unchanged (identity + previous active team preserved).
   Future<void> switchTeam(String teamId) async {
-    try {
-      final userId = state.userId;
-      if (userId == null) return;
+    final userId = state.userId;
+    if (userId == null) return;
 
-      final teamRepo = ref.read(teamRepositoryProvider);
-      final team = await teamRepo.getTeam(teamId);
+    final teamRepo = ref.read(teamRepositoryProvider);
+    final team = await teamRepo.getTeam(teamId);
 
-      // Persist to Firestore so it survives app restarts
-      final authRepo = ref.read(authRepositoryProvider);
-      await authRepo.updateCurrentTeamId(teamId);
+    // Persist to Firestore so it survives app restarts.
+    final authRepo = ref.read(authRepositoryProvider);
+    await authRepo.updateCurrentTeamId(teamId);
 
-      state = state.copyWith(
-        currentTeamId: teamId,
-        isMasterTeamMember: team?.isMasterTeam ?? false,
-      );
-    } catch (e) {
-      // Preserve identity — switch failed so the user is still on the
-      // previous team.
-      state = state.copyWith(
-        status: AuthStatus.error,
-        errorMessage: e.toString(),
-      );
-    }
+    state = state.copyWith(
+      currentTeamId: teamId,
+      isMasterTeamMember: team?.isMasterTeam ?? false,
+    );
+  }
+
+  /// Joins a team from inside the authenticated app. Same work as [joinTeam]
+  /// (callable -> wait for claim -> reload profile) but deliberately never
+  /// sets `status = loading`/`error`: the caller is the settings sheet, a
+  /// modal over the dashboard, and AuthWrapper swaps the whole screen to a
+  /// spinner whenever status is loading — which would tear the sheet down.
+  /// Reports failure by throwing so the section can show it inline. Auto-
+  /// switches the active team to the joined one on success.
+  Future<void> joinTeamInApp(String inviteCode) async {
+    final userId = state.userId;
+    if (userId == null) throw const AuthException('Not signed in');
+
+    final teamRepo = ref.read(teamRepositoryProvider);
+    final team = await teamRepo.joinTeamByCode(
+      inviteCode: inviteCode,
+      userId: userId,
+    );
+    if (team == null) throw const AuthException('Could not join team');
+
+    await waitForTeamClaim(
+      fetchClaims: ref.read(authServiceProvider).forceRefreshClaims,
+      expectedTeamId: team.id,
+    );
+    await _loadUserProfile();
+    await switchTeam(team.id);
+  }
+
+  /// Creates a team from inside the authenticated app. See [joinTeamInApp]
+  /// for why this avoids the global loading/error status. Auto-switches to
+  /// the new team on success.
+  Future<void> createTeamInApp(String name) async {
+    final userId = state.userId;
+    if (userId == null) throw const AuthException('Not signed in');
+
+    final teamRepo = ref.read(teamRepositoryProvider);
+    final team = await teamRepo.createTeam(name: name, createdBy: userId);
+
+    await waitForTeamClaim(
+      fetchClaims: ref.read(authServiceProvider).forceRefreshClaims,
+      expectedTeamId: team.id,
+    );
+    await _loadUserProfile();
+    await switchTeam(team.id);
   }
 
   void clearError() {
@@ -383,4 +426,15 @@ final isTeamAdminProvider = Provider<bool>((ref) {
   final teamId = auth.currentTeamId;
   if (teamId == null) return false;
   return auth.teamMemberships[teamId] == 'admin';
+});
+
+/// Every team the signed-in user belongs to, for the Team settings section.
+/// Re-runs when the active team changes (join/create/switch) so the list and
+/// the active highlight stay in sync. autoDispose so it refetches each time
+/// the settings sheet reopens.
+final userTeamsProvider = FutureProvider.autoDispose<List<Team>>((ref) async {
+  final userId = ref.watch(authProvider).userId;
+  if (userId == null) return const <Team>[];
+  ref.watch(currentTeamIdProvider); // refresh when the active team changes
+  return ref.read(teamRepositoryProvider).getUserTeams(userId);
 });

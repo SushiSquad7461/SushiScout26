@@ -6,6 +6,7 @@ import '../../data/local/preferences.dart';
 import '../providers/auth_provider.dart';
 import '../providers/event_providers.dart';
 import '../theme/app_theme.dart';
+import 'team_settings_section.dart';
 
 /// Material 3 settings bottom sheet
 class SettingsSheet extends ConsumerStatefulWidget {
@@ -226,6 +227,11 @@ class _SettingsSheetState extends ConsumerState<SettingsSheet> {
             ),
             const SizedBox(height: AppTheme.spacingSm),
             _buildColorSelector(context),
+
+            const SizedBox(height: AppTheme.spacingXl),
+
+            // Team section (current team, invite code, switch/join/create).
+            const TeamSettingsSection(),
 
             if (ref.watch(isTeamAdminProvider)) ...[
               const SizedBox(height: AppTheme.spacingXl),
