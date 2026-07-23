@@ -146,6 +146,14 @@ class FirestoreRepository implements ScoutingRepository {
   Future<String> _getOrCreateEvent(String eventId, {String fallbackProgramType = 'FRC', String? teamId}) async {
     try {
       final eventDoc = _firestore.collection('events').doc(eventId);
+      // This read is the one remaining place a write path can block on the
+      // network. In clean airplane mode a default get() falls back to cache
+      // instantly, and the event doc is almost always already cached (the
+      // scout loaded its matches), so a cache hit needs no network even on a
+      // captive-portal/black-hole network. The residual hang is only the
+      // narrow cache-miss-on-portal case (first match to a brand-new event,
+      // never loaded online, on a network that swallows the socket). Left as a
+      // known limitation — see the roadmap §8 captive-portal note.
       final docSnapshot = await eventDoc.get();
 
       if (docSnapshot.exists) {
