@@ -1,7 +1,8 @@
 # SushiScout Simplification Roadmap (audit + Steps 2–4 handoff)
 
-- **Date:** 2026-07-21 (Step 2 marked shipped 2026-07-21)
-- **Status:** Steps 1 and 2 shipped. Steps 3–4 not started.
+- **Date:** 2026-07-21 (Step 2 shipped 2026-07-21; Step 3 implemented 2026-07-22)
+- **Status:** Steps 1 and 2 shipped. Step 3 implemented on branch `single-offline-store`, not yet
+  merged/deployed (awaits a human-present session). Step 4 not started.
 - **Purpose:** This is a **handoff document**, written so a future session (or teammate)
   can pick up Steps 2–4 without re-deriving the analysis. It records the audit evidence,
   the decisions already made, and the scope of each remaining step. It is deliberately
@@ -133,28 +134,43 @@ peer. That bidirectionality is the single largest source of backend complexity a
 
 **Risk:** low. Nothing in the app reads from Sheets.
 
-## 6. Step 3 — Collapse to a single offline store (the big cut)
+## 6. Step 3 — Collapse to a single offline store — **DONE (implemented 2026-07-22)**
 
-**Why:** this is the ~40–50% code reduction and the fix for the churn in §2.
+Design: [`2026-07-22-single-offline-store-design.md`](2026-07-22-single-offline-store-design.md).
+Plan: [`../plans/2026-07-22-single-offline-store.md`](../plans/2026-07-22-single-offline-store.md).
+Branch `single-offline-store`, 8 tasks, each reviewed. **Not deployed** — merge/deploy pending a
+human-present session (nothing is in prod, so no migration was needed; the Drift DB was deleted
+outright).
 
-**Delete:**
-- `data/local/sync/sync_manager.dart` (665 lines) — queue, retry/backoff, connectivity listener
-- `SyncQueue` + `SyncConflicts` Drift tables (the latter already dead)
-- Drift/SQLite entirely, *or* demote it to a pure read-cache (see below)
-- The **web/native fork** in `hybrid_repository.dart` — every method is currently written twice
-- The reconciliation defenses that only exist because two stores disagree:
-  `_pendingMatchIdsForEvent` skip filters, the requeue-on-startup routine
+**Shape chosen: 1 (Firestore-only).** Drift, `SyncManager`, and `HybridRepository` deleted; Firestore's
+own on-disk persistence is the single offline store. The read-cache hedge (shape 2) was rejected for
+three reasons captured in the design §2: Drift is equally empty on a cold start (its only edge was
+surviving cache eviction, which `CACHE_SIZE_UNLIMITED` already covers); a future QR escape hatch can
+enumerate unsynced docs via `Source.cache` + `hasPendingWrites` without keeping the table; and a "pure
+read-cache" is one refactor away from re-growing an outbox and the two-store skew bugs that caused the
+churn.
 
-**Two viable shapes — needs a brainstorm to choose:**
-1. **Firestore-only** (recommended by the audit): delete Drift + SyncManager; rely on Firestore
-   offline persistence. Web already proves this works. Biggest reduction.
-2. **Drift as a pure read-cache**: writes go straight to Firestore; local DB is filled
-   one-directionally and never pushes competing truth. Keeps cold-start offline reads at the
-   cost of keeping the table.
+**Actual reduction: ~42% of total lines, but ~22% of hand-written lines.** The headline 40–50% counted
+the 4,117-line generated Drift file (`app_database.g.dart`). The net diff was ≈ −7,600 lines. Still the
+largest cut available and it landed exactly on the churn hotspot, but hand-maintained code shrank by
+about a fifth, not a half — recorded so the next reader isn't misled by the original estimate.
 
-**Do not skip:** whatever survives needs tests. Today the most complex, most-churned code
-(`hybrid_repository`, `sync_manager`) has **essentially no test coverage** — that is why the
-same area kept regressing.
+**Two live defects were found in the code being deleted** (not regressions — pre-existing):
+- `connectivity_plus` treated access-point association as internet reachability, so on a captive portal
+  (the actual venue failure mode) the app reported "online" and fired sync into a wall. Connection status
+  now derives from Firestore snapshot metadata (`isFromCache`/`hasPendingWrites`) instead.
+- `sync_manager.dart` broke its batch after 5 failures with `_processSyncOperation`'s exponential backoff
+  nested inside, inside a 5-minute periodic timer — machinery reimplementing, less reliably, what the
+  Firestore SDK does underneath it.
+
+**Process note for Step 4:** across Steps 2 and 3, *seven* Critical/Important defects originated in the
+plan's own sample code versus zero from implementers. Treat code in a plan as pseudocode to be reviewed,
+never as pre-validated. Running a live probe of any new test dependency during planning (as Step 3 did with
+`fake_cloud_firestore`) is what kept the test tasks themselves clean. The empty-DB first-run path got its
+own named test file — it had produced bugs three times before and produced none this time.
+
+**What survived and is now tested** (25 repository tests where there were zero): `FirestoreRepository`,
+covering CRUD, team-scoped reads, trash lifecycle, and the empty-DB first-run path, via `fake_cloud_firestore`.
 
 ## 7. Step 4 — Schema-driven scouting forms
 
@@ -193,11 +209,26 @@ Validated the design against both camps of FRC scouting apps.
 **Interop standard:** The Purple Standard, a community scouting-data schema:
 https://www.chiefdelphi.com/t/the-purple-standard-a-unified-and-community-driven-standard-for-frc-scouting-data/449394
 
-**The one open strategic question:** every battle-tested offline system treats venue
-connectivity as **absent**, not intermittent, and moves data peer-to-central via QR/Bluetooth.
-Our "cloud live-sync at the venue" model is the road less traveled. The stated requirement
-(§3) permits it, but if real competition use proves flaky, a **QR aggregation escape hatch**
-is the community's proven answer. Worth its own brainstorm before Step 3 locks in a transport.
+**The one open strategic question — RESOLVED 2026-07-22.** Every battle-tested offline system treats
+venue connectivity as **absent**, not intermittent, and moves data peer-to-central via QR/Bluetooth.
+Our "cloud live-sync at the venue" model is the road less traveled.
+
+The user characterized the real conditions: venue wifi is almost always technically present, but it is
+high-school wifi the team does not control, failing in three ways — (a) gated behind a captive-portal
+login we lack, (b) throttled under competition-day traffic, (c) random outages. All three are "the socket
+does not work," which Firestore's on-disk persistence handles by design (durable write queue, no retry cap,
+flush on stream recovery). Step 3 committed to cloud-live-sync rather than building QR transport now.
+
+**Trip-wire (the escape hatch, deferred not discarded):** if a competition produces reports that never
+land, or scouts cannot authenticate past a portal, QR aggregation gets its own brainstorm — with real data
+on which of (a)/(b)/(c) actually bit. A QR exporter is buildable on the Firestore-only app: query with
+`Source.cache` and filter on `snapshot.metadata.hasPendingWrites` to enumerate exactly the unsynced set.
+So the option stays open without keeping any code alive for it.
+
+**Operational precondition (cannot be solved in software):** a fresh install in the venue parking lot
+cannot authenticate if the portal blocks login, and no storage choice changes that. Firebase Auth persists
+sessions locally, so scouts who sign in before leaving stay signed in. "Install and sign in before we leave
+for the competition" is an operational rule the team must enforce, not something the app can guarantee.
 
 ## 9. Suggested order
 

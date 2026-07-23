@@ -13,8 +13,9 @@ There is an in-progress simplification effort. **Before starting any refactor or
 [`docs/superpowers/specs/2026-07-21-simplification-roadmap.md`](docs/superpowers/specs/2026-07-21-simplification-roadmap.md)** —
 it holds the audit evidence, the requirements already decided with the user, FRC prior-art
 research, and the scope of the remaining steps. Step 1 (team isolation) and Step 2
-(Sheets one-way) are shipped; Step 3 (collapse to a single offline store) and Step 4
-(schema-driven forms) are not started. Each still needs its own brainstorm → spec → plan.
+(Sheets one-way) are shipped; Step 3 (collapse to a single offline store) is implemented on
+branch `single-offline-store` (reviewed, not yet merged/deployed); Step 4 (schema-driven forms)
+is not started. Step 4 still needs its own brainstorm → spec → plan.
 
 ## Architecture
 
@@ -22,9 +23,9 @@ research, and the scope of the remaining steps. Step 1 (team isolation) and Step
 
 **Backend** (`functions/`): Python 3.11 Firebase Cloud Functions. One-way exports Firestore match data to each team's own Google Sheet (Firestore -> Sheets only; there is no reverse path).
 
-### Frontend Architecture (offline-first)
+### Frontend Architecture (single store)
 
-- **Offline-first pattern**: Local Drift/SQLite DB is the source of truth for reads. Firestore syncs in background. App works fully offline.
+- **Single store**: Firestore is the only data store, with its own on-disk persistence (`persistenceEnabled`, `CACHE_SIZE_UNLIMITED`, set in `main.dart`) providing offline support. There is no local SQLite database and no sync queue — writes go straight to Firestore, which queues them durably on disk when the network is unreachable and flushes when the stream recovers. The UI reads through `firestoreRepositoryProvider` (`data/repositories/providers.dart`); `matchesViewProvider` is the single live matches subscription shared by the list and the connection-status widgets.
 
 ### Firestore Collections
 
@@ -63,12 +64,10 @@ Subject: imperative mood, no capitalization, no trailing period, max 50 chars.
 
 ## Key Technical Details
 
-- Drift database requires code generation — run `dart run build_runner build --delete-conflicting-outputs` after changing `tables.dart` or `app_database.dart`
 - Firebase secrets used: `GOOGLE_SHEETS_CREDENTIALS`, `TBA_API_KEY`, `FTC_API_USERNAME`, `FTC_API_KEY`
-- Firestore persistence is enabled with unlimited cache for offline-first reliability
+- Firestore persistence is enabled with unlimited cache; it is the ONLY offline store (no Drift/SQLite)
 - The `gameData` field on MatchReport is a flexible `Map<String, dynamic>` that varies by program type (FRC vs FTC)
-- Drift SQLite has 4 tables: LocalMatchReports, LocalEvents, SyncQueue, SyncConflicts
-- SyncManager runs periodic sync every 5 minutes with exponential backoff retry (max 5 attempts)
+- **Connection status comes from Firestore snapshot metadata** (`isFromCache`, `hasPendingWrites`), never from `connectivity_plus` (removed). Link-layer state reports "wifi" on a captive portal that blocks all traffic — the venue failure mode we actually face — so it lies exactly when it matters. `MatchReport.isSynced == !doc.metadata.hasPendingWrites`; the connection widget also surfaces a distinct error state on stream failure rather than silently claiming "all uploaded".
 - `core/result/result.dart` provides a sealed `Result<T, E>` type used throughout data layer
 - After merging branches, check for duplicate dependencies in `pubspec.yaml` and leftover conflict markers (`>>>>>>>`)
 - Generated files (`*.g.dart`, `*.mocks.dart`) must never be hand-edited — run codegen or mockito instead
@@ -81,7 +80,7 @@ Subject: imperative mood, no capitalization, no trailing period, max 50 chars.
 
 ## Testing
 
-- Run `flutter test` from `frontend/` for the full Dart suite (currently 292 tests).
+- Run `flutter test` from `frontend/` for the full Dart suite (currently 340 tests). Repository tests use `fake_cloud_firestore`.
 - Run `./venv/bin/python -m pytest tests/` from `functions/` for the Python suite (currently 56 tests).
 - Firestore rules have an automated isolation suite (16 tests): `firebase emulators:exec --only firestore "cd test/firestore-rules && ./node_modules/.bin/jest --runInBand"` (run from repo root; `npm test` inside `emulators:exec` hits a shell-quoting bug on Linux — call the jest binary directly). Emulator is pinned to port 8099 so it doesn't collide with a local app server on 8080.
 - Generated files (`*.g.dart`, `*.mocks.dart`, `*.freezed.dart`) are excluded from `flutter analyze` via `analysis_options.yaml`.
