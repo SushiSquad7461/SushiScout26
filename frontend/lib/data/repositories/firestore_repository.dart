@@ -80,13 +80,12 @@ class FirestoreRepository implements ScoutingRepository {
   }
 
   @override
-  Future<void> createMatch(String eventId, MatchReport match, {String? teamIdOverride}) async {
+  Future<void> createMatch(String eventId, MatchReport match) async {
     _logger.d('Writing match to: matches/${match.id}');
 
-    final effectiveTeamId = teamIdOverride ?? teamId;
-    final programType = await _getOrCreateEvent(eventId, fallbackProgramType: match.programType, teamId: effectiveTeamId);
+    final programType = await _getOrCreateEvent(eventId, fallbackProgramType: match.programType, teamId: teamId);
 
-    final prepared = _prepareForFirestore(match, eventId, programType, teamId: effectiveTeamId);
+    final prepared = _prepareForFirestore(match, eventId, programType, teamId: teamId);
     await _firestore
         .collection('matches')
         .doc(match.id)
@@ -153,13 +152,12 @@ class FirestoreRepository implements ScoutingRepository {
   }
 
   @override
-  Future<void> updateMatch(String eventId, MatchReport match, {String? teamIdOverride}) async {
+  Future<void> updateMatch(String eventId, MatchReport match) async {
     _logger.d('Updating match at: matches/${match.id}');
 
-    final effectiveTeamId = teamIdOverride ?? teamId;
-    final programType = await _getOrCreateEvent(eventId, fallbackProgramType: match.programType, teamId: effectiveTeamId);
+    final programType = await _getOrCreateEvent(eventId, fallbackProgramType: match.programType, teamId: teamId);
 
-    final prepared = _prepareForFirestore(match, eventId, programType, teamId: effectiveTeamId);
+    final prepared = _prepareForFirestore(match, eventId, programType, teamId: teamId);
     await _firestore
         .collection('matches')
         .doc(match.id)
