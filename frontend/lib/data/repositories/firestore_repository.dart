@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../core/logger.dart';
 import '../models/event.dart';
@@ -22,6 +24,25 @@ class FirestoreRepository implements ScoutingRepository {
   final Logger _logger = const Logger('FIRESTORE');
 
   FirestoreRepository(this._firestore, {this.teamId});
+
+  /// Issues a Firestore write WITHOUT blocking on the server acknowledgement.
+  ///
+  /// Firestore applies a mutation to its on-disk cache synchronously, so the
+  /// data is durable the instant `set`/`delete` is called and local listeners
+  /// fire right away. The returned Future only completes when the SERVER acks
+  /// the write — which never happens while offline — so `await`-ing it hangs
+  /// the UI forever (the scouting form's "Saving…" spinner never stops at a
+  /// venue with no connectivity). We fire the write and log any eventual
+  /// failure instead. This is the offline-first contract the deleted
+  /// SyncManager used to provide with its local queue; without it, collapsing
+  /// to Firestore-only would regress offline saves. Verified on-device
+  /// (airplane mode) because no mock can reproduce the offline-never-resolves
+  /// behaviour — fake_cloud_firestore always resolves writes immediately.
+  void _fireWrite(Future<void> write) {
+    unawaited(write.catchError((Object e) {
+      _logger.w('Deferred Firestore write failed', error: e);
+    }));
+  }
 
   /// Builds a base query on the matches collection, filtered by eventId and
   /// optionally by teamId if one was provided at construction time.
@@ -86,10 +107,10 @@ class FirestoreRepository implements ScoutingRepository {
     final programType = await _getOrCreateEvent(eventId, fallbackProgramType: match.programType, teamId: teamId);
 
     final prepared = _prepareForFirestore(match, eventId, programType, teamId: teamId);
-    await _firestore
+    _fireWrite(_firestore
         .collection('matches')
         .doc(match.id)
-        .set(_withTeamId(prepared.toFirestore()), SetOptions(merge: true));
+        .set(_withTeamId(prepared.toFirestore()), SetOptions(merge: true)));
   }
 
   /// Backfill teamId when it isn't already in the payload, so trash/restore
@@ -135,7 +156,7 @@ class FirestoreRepository implements ScoutingRepository {
       final rawCode = (teamId != null && teamId.isNotEmpty && eventId.startsWith('${teamId}_'))
           ? eventId.substring(teamId.length + 1)
           : eventId;
-      await eventDoc.set({
+      _fireWrite(eventDoc.set({
         'name': rawCode,
         'programType': fallbackProgramType,
         'tbaKey': rawCode,
@@ -143,7 +164,7 @@ class FirestoreRepository implements ScoutingRepository {
         'createdAt': Timestamp.fromDate(DateTime.now()),
         'teamId': teamId ?? '',
         'autoCreated': true,
-      }, SetOptions(merge: true));
+      }, SetOptions(merge: true)));
       return fallbackProgramType;
     } catch (e, stackTrace) {
       _logger.e('Failed to get or create event', error: e, stackTrace: stackTrace);
@@ -158,10 +179,10 @@ class FirestoreRepository implements ScoutingRepository {
     final programType = await _getOrCreateEvent(eventId, fallbackProgramType: match.programType, teamId: teamId);
 
     final prepared = _prepareForFirestore(match, eventId, programType, teamId: teamId);
-    await _firestore
+    _fireWrite(_firestore
         .collection('matches')
         .doc(match.id)
-        .set(_withTeamId(prepared.toFirestore()), SetOptions(merge: true));
+        .set(_withTeamId(prepared.toFirestore()), SetOptions(merge: true)));
   }
 
   @override
@@ -171,26 +192,26 @@ class FirestoreRepository implements ScoutingRepository {
     // op hasn't synced yet (offline queue) or when another client just
     // hard-deleted the doc. The on_match_written trigger keys off
     // isDeleted, so a self-healing re-creation here is acceptable.
-    await _firestore
+    _fireWrite(_firestore
         .collection('matches')
         .doc(matchId)
-        .set(_withTeamId({'isDeleted': true}), SetOptions(merge: true));
+        .set(_withTeamId({'isDeleted': true}), SetOptions(merge: true)));
   }
 
   @override
   Future<void> restoreMatch(String eventId, String matchId) async {
-    await _firestore
+    _fireWrite(_firestore
         .collection('matches')
         .doc(matchId)
-        .set(_withTeamId({'isDeleted': false}), SetOptions(merge: true));
+        .set(_withTeamId({'isDeleted': false}), SetOptions(merge: true)));
   }
 
   @override
   Future<void> deleteMatch(String eventId, String matchId) async {
-    await _firestore
+    _fireWrite(_firestore
         .collection('matches')
         .doc(matchId)
-        .delete();
+        .delete());
   }
 
   @override
