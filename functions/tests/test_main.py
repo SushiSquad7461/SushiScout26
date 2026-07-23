@@ -705,6 +705,83 @@ class TestSetTeamSheet(unittest.TestCase):
         self.assertEqual(written['googleSheetId'], '1AbC-dEf_123')
 
 
+class TestTransientRetry(unittest.TestCase):
+    """The Sheets export self-heals transient network/SSL errors in-code
+    (retry=True isn't available on Firestore triggers in firebase-functions
+    0.6.0). Idempotency makes retrying safe."""
+
+    def test_ssl_error_is_transient(self):
+        import ssl
+        self.assertTrue(main._is_transient(ssl.SSLError('bad record mac')))
+
+    def test_connection_and_timeout_errors_are_transient(self):
+        self.assertTrue(main._is_transient(ConnectionResetError()))
+        self.assertTrue(main._is_transient(TimeoutError()))
+
+    def test_5xx_and_429_http_errors_are_transient(self):
+        from googleapiclient.errors import HttpError
+        for status in (429, 500, 503):
+            err = HttpError(Mock(status=status), b'busy')
+            self.assertTrue(main._is_transient(err), f'{status} should retry')
+
+    def test_4xx_http_error_is_not_transient(self):
+        from googleapiclient.errors import HttpError
+        # 403 (sheet not shared) can't be fixed by retrying — fail fast.
+        self.assertFalse(main._is_transient(HttpError(Mock(status=403), b'denied')))
+
+    def test_value_error_is_not_transient(self):
+        self.assertFalse(main._is_transient(ValueError('nope')))
+
+    @patch('main.time.sleep', return_value=None)
+    def test_retry_returns_on_first_success(self, _sleep):
+        fn = Mock(return_value='ok')
+        self.assertEqual(main._retry_transient(fn), 'ok')
+        fn.assert_called_once()
+        _sleep.assert_not_called()
+
+    @patch('main.time.sleep', return_value=None)
+    def test_retry_recovers_after_transient_then_succeeds(self, _sleep):
+        import ssl
+        fn = Mock(side_effect=[ssl.SSLError('boom'), 'ok'])
+        self.assertEqual(main._retry_transient(fn), 'ok')
+        self.assertEqual(fn.call_count, 2)
+        _sleep.assert_called_once()
+
+    @patch('main.time.sleep', return_value=None)
+    def test_retry_reraises_non_transient_immediately(self, _sleep):
+        fn = Mock(side_effect=ValueError('permanent'))
+        with self.assertRaises(ValueError):
+            main._retry_transient(fn)
+        fn.assert_called_once()  # no retry on a non-transient error
+        _sleep.assert_not_called()
+
+    @patch('main.time.sleep', return_value=None)
+    def test_retry_gives_up_after_exhausting_attempts(self, _sleep):
+        import ssl
+        fn = Mock(side_effect=ssl.SSLError('always'))
+        with self.assertRaises(ssl.SSLError):
+            main._retry_transient(fn, attempts=3)
+        self.assertEqual(fn.call_count, 3)
+
+    @patch('main.time.sleep', return_value=None)
+    @patch('services.sheets_service.get_sheets_service')
+    @patch.object(main, '_resolve_event_program_type', return_value='FRC')
+    @patch.object(main, '_get_team_sheet_id', return_value='sheet1')
+    @patch.object(main, '_resolve_team_id', return_value='t1')
+    def test_sync_retries_transient_append_then_appends_once(
+        self, _team, _sheet, _pt, mock_get_svc, _sleep
+    ):
+        import ssl
+        svc = mock_get_svc.return_value
+        svc.find_row_by_report_id.return_value = None
+        # First append raises a transient SSL error; the retry succeeds.
+        svc.append_row.side_effect = [ssl.SSLError('bad record mac'), 5]
+
+        main.sync_report_to_sheets('t1_e1', 'rep1', {'eventId': 't1_e1', 'teamId': 't1'})
+
+        self.assertEqual(svc.append_row.call_count, 2)
+
+
 if __name__ == '__main__':
     unittest.main()
 

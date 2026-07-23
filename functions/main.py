@@ -1,12 +1,60 @@
 """Main entry point for Firebase Cloud Functions."""
 
+import http.client as _http_client
 import re
 import secrets
+import ssl
+import time
 from firebase_functions import https_fn, firestore_fn, logger, options
 from firebase_admin import initialize_app, firestore, auth as fb_auth
+from googleapiclient.errors import HttpError
 
 # Initialize Firebase Admin
 initialize_app()
+
+# Lower-level network failures that a retry usually clears. `retry=True` on the
+# Firestore trigger would be the natural home for this, but firebase-functions
+# 0.6.0 doesn't expose it for firestore_fn, so we self-heal in-code instead.
+# Safe because every sheet operation is idempotent: row identity is resolved by
+# looking the report id up in the sheet on each attempt, so a retry updates the
+# existing row rather than appending a duplicate.
+_TRANSIENT_EXCEPTIONS = (
+    ssl.SSLError,
+    ConnectionError,
+    TimeoutError,
+    _http_client.RemoteDisconnected,
+    _http_client.IncompleteRead,
+)
+_RETRYABLE_HTTP_STATUS = {429, 500, 502, 503, 504}
+
+
+def _is_transient(exc: Exception) -> bool:
+    """True for network/SSL/5xx errors worth retrying (vs. a permanent failure
+    like bad credentials or an unshared sheet, which a retry can't fix)."""
+    if isinstance(exc, _TRANSIENT_EXCEPTIONS):
+        return True
+    if isinstance(exc, HttpError):
+        return getattr(exc.resp, "status", None) in _RETRYABLE_HTTP_STATUS
+    return False
+
+
+def _retry_transient(fn, *, attempts: int = 3, base_delay: float = 0.5):
+    """Run fn(), retrying on transient errors with exponential backoff.
+
+    Re-raises immediately for non-transient errors and after the final attempt.
+    """
+    for attempt in range(1, attempts + 1):
+        try:
+            return fn()
+        except Exception as e:  # noqa: BLE001 — classified by _is_transient
+            if attempt >= attempts or not _is_transient(e):
+                raise
+            delay = base_delay * (2 ** (attempt - 1))
+            logger.warn(
+                f"Transient Sheets API error (attempt {attempt}/{attempts}), "
+                f"retrying in {delay:.1f}s: {e}"
+            )
+            time.sleep(delay)
 
 # Import tba_sync so its Cloud Functions are discoverable by the Firebase runtime
 from tba_sync import fetch_event_schedule  # noqa: E402, F401
@@ -180,7 +228,7 @@ def sync_report_to_sheets(event_id: str, report_id: str, report_data: dict) -> N
     # silently force the sheet to FRC columns on first sync of an FTC event.
     program_type = _resolve_event_program_type(event_id, report_data)
 
-    try:
+    def _do_sync():
         sheets_service = get_sheets_service()
         sheets_service.get_or_create_sheet(spreadsheet_id, tab, program_type)
 
@@ -194,6 +242,8 @@ def sync_report_to_sheets(event_id: str, report_id: str, report_data: dict) -> N
             row_number = sheets_service.append_row(spreadsheet_id, tab, row_data)
             logger.info(f"Appended report {report_id} to row {row_number}")
 
+    try:
+        _retry_transient(_do_sync)
     except Exception as e:
         logger.error(f"Failed to sync report {report_id}: {str(e)}")
         raise
@@ -208,6 +258,16 @@ def sync_report_to_sheets(event_id: str, report_id: str, report_data: dict) -> N
     # instance at once (concurrency=80). 512 MiB gives headroom; still well
     # inside the free tier at scouting volumes.
     memory=options.MemoryOption.MB_512,
+    # Serialize to one request per instance. The Sheets client is a module-
+    # global singleton wrapping a single httplib2 connection, which is NOT
+    # thread-safe. At the gen2 default concurrency (80), an offline batch
+    # flush lands multiple triggers on one warm instance on separate threads;
+    # their TLS streams interleave over the shared socket and corrupt each
+    # other (observed: `SSL: DECRYPTION_FAILED_OR_BAD_RECORD_MAC`, dropping a
+    # row from the sheet). concurrency=1 means only one thread ever touches
+    # the connection; Firebase scales OUT to more instances for parallel load,
+    # each with its own process and its own connection.
+    concurrency=1,
 )
 def on_match_written(event: firestore_fn.Event):
     """Trigger when a match report is created, updated, or deleted in Firestore."""
