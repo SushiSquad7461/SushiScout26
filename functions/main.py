@@ -199,7 +199,16 @@ def sync_report_to_sheets(event_id: str, report_id: str, report_data: dict) -> N
         raise
 
 
-@firestore_fn.on_document_written(document="matches/{reportId}", secrets=["GOOGLE_SHEETS_CREDENTIALS"])
+@firestore_fn.on_document_written(
+    document="matches/{reportId}",
+    secrets=["GOOGLE_SHEETS_CREDENTIALS"],
+    # The google-api-python-client Sheets stack peaks ~260-272 MiB, over the
+    # 256 MiB gen2 default — so the container was OOM-killed mid-append,
+    # especially when an offline batch flushed multiple writes onto one
+    # instance at once (concurrency=80). 512 MiB gives headroom; still well
+    # inside the free tier at scouting volumes.
+    memory=options.MemoryOption.MB_512,
+)
 def on_match_written(event: firestore_fn.Event):
     """Trigger when a match report is created, updated, or deleted in Firestore."""
     report_id = event.params['reportId']
@@ -513,7 +522,14 @@ def set_team_sheet(req: https_fn.CallableRequest) -> dict:
     return {'success': True, 'googleSheetId': sheet_id}
 
 
-@https_fn.on_call(secrets=["GOOGLE_SHEETS_CREDENTIALS"])
+@https_fn.on_call(
+    secrets=["GOOGLE_SHEETS_CREDENTIALS"],
+    # Bulk-exports every match for an event through the same heavy
+    # google-api-python-client Sheets stack that OOMs on_match_written at the
+    # 256 MiB gen2 default — and this one processes many rows at once, so it is
+    # more exposed. Match the 512 MiB bump.
+    memory=options.MemoryOption.MB_512,
+)
 def backfill_event_to_sheets(req: https_fn.CallableRequest) -> dict:
     """Backfill all live match reports for an event into the team's sheet.
 
