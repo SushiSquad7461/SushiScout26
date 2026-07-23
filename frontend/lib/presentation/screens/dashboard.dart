@@ -30,32 +30,17 @@ class DashboardScreen extends ConsumerStatefulWidget {
 }
 
 class _DashboardScreenState extends ConsumerState<DashboardScreen> {
-  late Stream<List<MatchReport>> _matchesStream;
-
-  @override
-  void initState() {
-    super.initState();
-    final eventId = ref.read(currentEventIdProvider);
-    _matchesStream = ref.read(firestoreRepositoryProvider).watchMatches(eventId);
-  }
-
   void _openSettings(BuildContext context) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
       builder: (context) => const SettingsSheet(),
-    ).then((_) {
-      final eventId = ref.read(currentEventIdProvider);
-      setState(() {
-        _matchesStream = ref.read(firestoreRepositoryProvider).watchMatches(eventId);
-      });
-    });
+    );
   }
 
   Future<void> _showExportOptions(BuildContext context, WidgetRef ref) async {
-    final eventId = ref.read(currentEventIdProvider);
-    final matches = await ref.read(firestoreRepositoryProvider).getMatches(eventId);
+    final matches = ref.read(matchesViewProvider).value?.matches ?? const <MatchReport>[];
 
     if (!context.mounted) return;
 
@@ -103,8 +88,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   }
 
   Future<void> _exportCsv(BuildContext context, WidgetRef ref) async {
-    final eventId = ref.read(currentEventIdProvider);
-    final matches = await ref.read(firestoreRepositoryProvider).getMatches(eventId);
+    final matches = ref.read(matchesViewProvider).value?.matches ?? const <MatchReport>[];
 
     if (!context.mounted) return;
 
@@ -188,13 +172,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
   Future<void> _onRefresh() async {
     AppHaptics.medium();
-    final eventId = ref.read(currentEventIdProvider);
-    // Force refresh by re-creating the stream
-    setState(() {
-      _matchesStream = ref.read(firestoreRepositoryProvider).watchMatches(eventId);
-    });
-    // Wait a moment for the stream to update
-    await Future.delayed(const Duration(milliseconds: 500));
+    ref.invalidate(matchesViewProvider);
   }
 
   @override
@@ -203,6 +181,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final eventCode = settings[PrefKeys.eventCode] ?? "Unknown Event";
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final matchesAsync = ref.watch(matchesViewProvider);
 
     return Scaffold(
       body: Column(
@@ -230,15 +209,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               IconButton(
                 icon: const Icon(Icons.search),
                 tooltip: "Search Matches",
-                onPressed: () async {
-                  final eventId = ref.read(currentEventIdProvider);
-                  final matches = await ref.read(firestoreRepositoryProvider).getMatches(eventId);
-                  if (context.mounted) {
-                    showSearch(
-                      context: context,
-                      delegate: MatchSearchDelegate(matches),
-                    );
-                  }
+                onPressed: () {
+                  final matches = ref.read(matchesViewProvider).value?.matches ?? const <MatchReport>[];
+                  showSearch(
+                    context: context,
+                    delegate: MatchSearchDelegate(matches),
+                  );
                 },
               ),
               // Export button
@@ -345,115 +321,37 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           ),
 
           // Match list
-          StreamBuilder<List<MatchReport>>(
-            stream: _matchesStream,
-            builder: (context, snapshot) {
-              if (snapshot.hasError) {
-                return SliverFillRemaining(
-                  child: Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.error_outline,
-                          size: 64,
-                          color: colorScheme.error,
-                        ),
-                        const SizedBox(height: AppTheme.spacingMd),
-                        Text(
-                          "Error loading matches",
-                          style: theme.textTheme.titleMedium,
-                        ),
-                        const SizedBox(height: AppTheme.spacingSm),
-                        Text(
-                          "${snapshot.error}",
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
+          matchesAsync.when(
+            data: (view) => _buildMatchList(context, view.matches),
+            loading: () => const SliverFillRemaining(
+              child: Center(child: CircularProgressIndicator()),
+            ),
+            error: (error, _) => SliverFillRemaining(
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.error_outline,
+                      size: 64,
+                      color: colorScheme.error,
                     ),
-                  ),
-                );
-              }
-
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const SliverFillRemaining(
-                  child: Center(child: CircularProgressIndicator()),
-                );
-              }
-
-              final matches = snapshot.data ?? [];
-
-              if (matches.isEmpty) {
-                return SliverFillRemaining(
-                  child: Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(24),
-                          decoration: BoxDecoration(
-                            color: colorScheme.primaryContainer.withValues(
-                              alpha: 0.3,
-                            ),
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(
-                            Icons.ramen_dining_rounded,
-                            size: 64,
-                            color: colorScheme.primary,
-                          ),
-                        ),
-                        const SizedBox(height: AppTheme.spacingLg),
-                        Text(
-                          "No matches scouted yet",
-                          style: theme.textTheme.titleLarge?.copyWith(
-                            color: colorScheme.onSurface,
-                          ),
-                        ),
-                        const SizedBox(height: AppTheme.spacingSm),
-                        Text(
-                          "Tap the button below to scout your first match",
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
+                    const SizedBox(height: AppTheme.spacingMd),
+                    Text(
+                      "Error loading matches",
+                      style: theme.textTheme.titleMedium,
                     ),
-                  ),
-                );
-              }
-
-              return SliverPadding(
-                padding: const EdgeInsets.all(AppTheme.spacingMd),
-                sliver: SliverList(
-                  delegate: SliverChildBuilderDelegate(
-                    (context, index) => TweenAnimationBuilder<double>(
-                      tween: Tween(begin: 0.0, end: 1.0),
-                      duration: const Duration(milliseconds: 300),
-                      curve: Curves.easeOut,
-                      child: Padding(
-                        padding: const EdgeInsets.only(
-                          bottom: AppTheme.spacingSm,
-                        ),
-                        child: _MatchCard(match: matches[index]),
+                    const SizedBox(height: AppTheme.spacingSm),
+                    Text(
+                      "$error",
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
                       ),
-                      builder: (context, value, child) {
-                        return Opacity(
-                          opacity: value,
-                          child: Transform.translate(
-                            offset: Offset(0, (1 - value) * 20),
-                            child: child,
-                          ),
-                        );
-                      },
                     ),
-                    childCount: matches.length,
-                  ),
+                  ],
                 ),
-              );
-            },
+              ),
+            ),
           ),
 
           // Bottom padding for FAB
@@ -527,6 +425,80 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           },
           icon: const Icon(Icons.add_rounded),
           label: const Text("Scout Match"),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMatchList(BuildContext context, List<MatchReport> matches) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    if (matches.isEmpty) {
+      return SliverFillRemaining(
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: colorScheme.primaryContainer.withValues(
+                    alpha: 0.3,
+                  ),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.ramen_dining_rounded,
+                  size: 64,
+                  color: colorScheme.primary,
+                ),
+              ),
+              const SizedBox(height: AppTheme.spacingLg),
+              Text(
+                "No matches scouted yet",
+                style: theme.textTheme.titleLarge?.copyWith(
+                  color: colorScheme.onSurface,
+                ),
+              ),
+              const SizedBox(height: AppTheme.spacingSm),
+              Text(
+                "Tap the button below to scout your first match",
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return SliverPadding(
+      padding: const EdgeInsets.all(AppTheme.spacingMd),
+      sliver: SliverList(
+        delegate: SliverChildBuilderDelegate(
+          (context, index) => TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0.0, end: 1.0),
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOut,
+            child: Padding(
+              padding: const EdgeInsets.only(
+                bottom: AppTheme.spacingSm,
+              ),
+              child: _MatchCard(match: matches[index]),
+            ),
+            builder: (context, value, child) {
+              return Opacity(
+                opacity: value,
+                child: Transform.translate(
+                  offset: Offset(0, (1 - value) * 20),
+                  child: child,
+                ),
+              );
+            },
+          ),
+          childCount: matches.length,
         ),
       ),
     );
