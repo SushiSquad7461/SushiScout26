@@ -194,4 +194,23 @@ void main() {
     expect(find.textContaining('invalid code'), findsOneWidget);
     expect(c.read(authProvider).status, AuthStatus.authenticated);
   });
+
+  testWidgets('a failed switch shows an inline error, not a screen swap',
+      (tester) async {
+    await grow(tester);
+    when(mockTeamRepository.getUserTeams('alice'))
+        .thenAnswer((_) async => [team('teamA'), team('teamB')]);
+    when(mockTeamRepository.getTeam('teamB')).thenThrow(Exception('offline'));
+
+    final c = authedContainer(current: 'teamA');
+    await tester.pumpWidget(wrap(c));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Team teamB'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('offline'), findsOneWidget);
+    expect(c.read(authProvider).status, AuthStatus.authenticated);
+    expect(c.read(authProvider).currentTeamId, 'teamA');
+  });
 }

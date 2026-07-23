@@ -317,30 +317,28 @@ class AuthNotifier extends Notifier<AuthState> {
     }
   }
 
+  /// Switches the active team. Persists the new `currentTeamId` to Firestore
+  /// so it survives restarts. NOTE: this deliberately does NOT catch failures
+  /// into a global `AuthStatus.error` — its only callers are the in-app team
+  /// flows (`joinTeamInApp`/`createTeamInApp` and the settings section), which
+  /// surface errors inline and must not tear the settings modal down via a
+  /// global status flip. On failure the exception propagates and state is left
+  /// unchanged (identity + previous active team preserved).
   Future<void> switchTeam(String teamId) async {
-    try {
-      final userId = state.userId;
-      if (userId == null) return;
+    final userId = state.userId;
+    if (userId == null) return;
 
-      final teamRepo = ref.read(teamRepositoryProvider);
-      final team = await teamRepo.getTeam(teamId);
+    final teamRepo = ref.read(teamRepositoryProvider);
+    final team = await teamRepo.getTeam(teamId);
 
-      // Persist to Firestore so it survives app restarts
-      final authRepo = ref.read(authRepositoryProvider);
-      await authRepo.updateCurrentTeamId(teamId);
+    // Persist to Firestore so it survives app restarts.
+    final authRepo = ref.read(authRepositoryProvider);
+    await authRepo.updateCurrentTeamId(teamId);
 
-      state = state.copyWith(
-        currentTeamId: teamId,
-        isMasterTeamMember: team?.isMasterTeam ?? false,
-      );
-    } catch (e) {
-      // Preserve identity — switch failed so the user is still on the
-      // previous team.
-      state = state.copyWith(
-        status: AuthStatus.error,
-        errorMessage: e.toString(),
-      );
-    }
+    state = state.copyWith(
+      currentTeamId: teamId,
+      isMasterTeamMember: team?.isMasterTeam ?? false,
+    );
   }
 
   /// Joins a team from inside the authenticated app. Same work as [joinTeam]

@@ -133,4 +133,17 @@ void main() {
       expect(seen.contains(AuthStatus.error), isFalse);
     });
   });
+
+  test('switchTeam rethrows on failure and does not set status = error',
+      () async {
+    when(mockTeamRepository.getTeam('teamB')).thenThrow(Exception('offline'));
+    seedAuthed();
+
+    await expectLater(
+      container.read(authProvider.notifier).switchTeam('teamB'),
+      throwsA(isA<Exception>()),
+    );
+    expect(container.read(authProvider).status, AuthStatus.authenticated);
+    expect(container.read(authProvider).currentTeamId, 'teamA');
+  });
 }
