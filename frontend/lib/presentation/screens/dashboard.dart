@@ -172,7 +172,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
   Future<void> _onRefresh() async {
     AppHaptics.medium();
+    // Await the re-subscribed stream's first emission so the RefreshIndicator
+    // spinner stays up until fresh data actually arrives, rather than
+    // collapsing the instant invalidate() returns.
     ref.invalidate(matchesViewProvider);
+    await ref.read(matchesViewProvider.future);
   }
 
   @override
