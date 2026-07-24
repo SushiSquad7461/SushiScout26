@@ -213,4 +213,55 @@ void main() {
     expect(c.read(authProvider).status, AuthStatus.authenticated);
     expect(c.read(authProvider).currentTeamId, 'teamA');
   });
+
+  testWidgets('create rejects a non-numeric team name inline and does not '
+      'call createTeam', (tester) async {
+    await grow(tester);
+    when(mockTeamRepository.getUserTeams('alice'))
+        .thenAnswer((_) async => [team('teamA')]);
+
+    final c = authedContainer(current: 'teamA');
+    await tester.pumpWidget(wrap(c));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+        find.widgetWithText(TextField, 'New team name'), 'Sushi Robotics');
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Create'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Team number must be 1-5 digits'), findsOneWidget);
+    verifyNever(mockTeamRepository.createTeam(
+      name: anyNamed('name'),
+      createdBy: anyNamed('createdBy'),
+      isMasterTeam: anyNamed('isMasterTeam'),
+    ));
+  });
+
+  testWidgets('create accepts a valid team number and calls createTeam',
+      (tester) async {
+    await grow(tester);
+    when(mockTeamRepository.getUserTeams('alice'))
+        .thenAnswer((_) async => [team('teamA')]);
+    when(mockTeamRepository.createTeam(
+      name: anyNamed('name'),
+      createdBy: anyNamed('createdBy'),
+      isMasterTeam: anyNamed('isMasterTeam'),
+    )).thenAnswer((_) async => team('teamB'));
+    when(mockTeamRepository.getTeam('teamB'))
+        .thenAnswer((_) async => team('teamB'));
+
+    final c = authedContainer(current: 'teamA');
+    await tester.pumpWidget(wrap(c));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+        find.widgetWithText(TextField, 'New team name'), '254');
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Create'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Team number must be 1-5 digits'), findsNothing);
+    verify(mockTeamRepository.createTeam(
+      name: '254', createdBy: 'alice', isMasterTeam: false,
+    )).called(1);
+  });
 }
