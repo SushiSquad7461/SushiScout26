@@ -46,6 +46,20 @@ class FormValidators {
     return number(value, min: 1, max: 99999, fieldName: 'Team number');
   }
 
+  /// Validates a team name for team CREATION: must be a team number,
+  /// 1-5 digits, no leading zeros (1-99999). Stricter than [teamNumber]
+  /// (which allows leading zeros for match-report entry) because a created
+  /// team's number is canonical and will later be matched against the
+  /// registered-team list.
+  static String? teamName(String? value) {
+    final trimmed = (value ?? '').trim();
+    if (trimmed.isEmpty) return 'Team number is required';
+    if (!RegExp(r'^[1-9]\d{0,4}$').hasMatch(trimmed)) {
+      return 'Team number must be 1-5 digits';
+    }
+    return null;
+  }
+
   /// Validates event code format (alphanumeric, 4-20 chars)
   static String? eventCode(String? value) {
     if (value == null || value.trim().isEmpty) {
