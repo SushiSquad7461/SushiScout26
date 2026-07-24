@@ -22,7 +22,7 @@ class TestCreateTeam(unittest.TestCase):
 
     def test_unauthenticated_raises(self):
         with self.assertRaises(https_fn.HttpsError):
-            main.create_team.__wrapped__.__wrapped__(_req(None, {'name': 'Alpha'}))
+            main.create_team.__wrapped__.__wrapped__(_req(None, {'name': '254'}))
 
     @patch('main._set_team_claims')
     @patch('main._generate_invite_code', return_value='ABC123')
@@ -41,12 +41,28 @@ class TestCreateTeam(unittest.TestCase):
         db.collection.return_value.document.side_effect = lambda *a: team_ref if not a else user_ref
         db.batch.return_value = MagicMock()
 
-        result = main.create_team.__wrapped__.__wrapped__(_req('uid1', {'name': 'Alpha'}))
+        result = main.create_team.__wrapped__.__wrapped__(_req('uid1', {'name': '254'}))
 
         # The caller's claim must include the new team as admin.
         mock_claims.assert_called_once_with('uid1', {'team_new': 'admin'})
         self.assertEqual(result['teamId'], 'team_new')
         self.assertEqual(result['inviteCode'], 'ABC123')
+
+    def test_rejects_non_numeric_name(self):
+        with self.assertRaises(https_fn.HttpsError):
+            main.create_team.__wrapped__.__wrapped__(_req('uid1', {'name': 'Alpha'}))
+
+    def test_rejects_too_long_name(self):
+        with self.assertRaises(https_fn.HttpsError):
+            main.create_team.__wrapped__.__wrapped__(_req('uid1', {'name': '123456'}))
+
+    def test_rejects_leading_zero_name(self):
+        with self.assertRaises(https_fn.HttpsError):
+            main.create_team.__wrapped__.__wrapped__(_req('uid1', {'name': '00042'}))
+
+    def test_rejects_empty_name(self):
+        with self.assertRaises(https_fn.HttpsError):
+            main.create_team.__wrapped__.__wrapped__(_req('uid1', {'name': ''}))
 
 
 class TestJoinTeam(unittest.TestCase):
