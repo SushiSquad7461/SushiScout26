@@ -102,14 +102,21 @@ class CounterCard extends StatelessWidget {
                     child: Semantics(
                       liveRegion: true,
                       label: '$label: $value',
-                      child: Text(
-                        value.toString(),
-                        style: theme.textTheme.displayMedium?.copyWith(
-                          color: accentColor ?? colorScheme.onSurface,
-                          fontWeight: FontWeight.bold,
-                          fontFeatures: const [FontFeature.tabularFigures()],
+                      // Scale the number down to fit the fixed slot so 3-digit
+                      // values (100+) stay on a single row instead of wrapping,
+                      // even under large accessibility text scaling.
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          value.toString(),
+                          maxLines: 1,
+                          softWrap: false,
+                          style: theme.textTheme.displayMedium?.copyWith(
+                            color: accentColor ?? colorScheme.onSurface,
+                            fontWeight: FontWeight.bold,
+                            fontFeatures: const [FontFeature.tabularFigures()],
+                          ),
                         ),
-                        textAlign: TextAlign.center,
                       ),
                     ),
                   ),
