@@ -49,20 +49,40 @@ class TestCreateTeam(unittest.TestCase):
         self.assertEqual(result['inviteCode'], 'ABC123')
 
     def test_rejects_non_numeric_name(self):
-        with self.assertRaises(https_fn.HttpsError):
+        with self.assertRaises(https_fn.HttpsError) as cm:
             main.create_team.__wrapped__.__wrapped__(_req('uid1', {'name': 'Alpha'}))
+        self.assertEqual(cm.exception.code,
+                         https_fn.FunctionsErrorCode.INVALID_ARGUMENT)
 
     def test_rejects_too_long_name(self):
-        with self.assertRaises(https_fn.HttpsError):
+        with self.assertRaises(https_fn.HttpsError) as cm:
             main.create_team.__wrapped__.__wrapped__(_req('uid1', {'name': '123456'}))
+        self.assertEqual(cm.exception.code,
+                         https_fn.FunctionsErrorCode.INVALID_ARGUMENT)
 
     def test_rejects_leading_zero_name(self):
-        with self.assertRaises(https_fn.HttpsError):
+        with self.assertRaises(https_fn.HttpsError) as cm:
             main.create_team.__wrapped__.__wrapped__(_req('uid1', {'name': '00042'}))
+        self.assertEqual(cm.exception.code,
+                         https_fn.FunctionsErrorCode.INVALID_ARGUMENT)
 
     def test_rejects_empty_name(self):
-        with self.assertRaises(https_fn.HttpsError):
+        with self.assertRaises(https_fn.HttpsError) as cm:
             main.create_team.__wrapped__.__wrapped__(_req('uid1', {'name': ''}))
+        self.assertEqual(cm.exception.code,
+                         https_fn.FunctionsErrorCode.INVALID_ARGUMENT)
+
+    def test_rejects_unicode_digit_name(self):
+        with self.assertRaises(https_fn.HttpsError) as cm:
+            main.create_team.__wrapped__.__wrapped__(_req('uid1', {'name': '2٥5'}))
+        self.assertEqual(cm.exception.code,
+                         https_fn.FunctionsErrorCode.INVALID_ARGUMENT)
+
+    def test_rejects_non_string_name(self):
+        with self.assertRaises(https_fn.HttpsError) as cm:
+            main.create_team.__wrapped__.__wrapped__(_req('uid1', {'name': ['254']}))
+        self.assertEqual(cm.exception.code,
+                         https_fn.FunctionsErrorCode.INVALID_ARGUMENT)
 
 
 class TestJoinTeam(unittest.TestCase):

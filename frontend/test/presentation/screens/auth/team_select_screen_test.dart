@@ -64,7 +64,7 @@ void main() {
     await openCreateTab(tester);
 
     await tester.enterText(
-        find.widgetWithText(TextField, 'Team Name'), 'Sushi Robotics');
+        find.widgetWithText(TextField, 'Team Number'), 'Sushi Robotics');
     await tester.tap(find.widgetWithText(FilledButton, 'Create Team'));
     await tester.pumpAndSettle();
 

@@ -63,7 +63,6 @@ class _TeamSettingsSectionState extends ConsumerState<TeamSettingsSection> {
 
   Future<void> _create() async {
     final name = _createCtrl.text.trim();
-    if (name.isEmpty) return;
     final validationError = FormValidators.teamName(name);
     if (validationError != null) {
       setState(() => _error = validationError);
@@ -281,8 +280,9 @@ class _TeamSettingsSectionState extends ConsumerState<TeamSettingsSection> {
             Expanded(
               child: TextField(
                 controller: _createCtrl,
+                keyboardType: TextInputType.number,
                 decoration: const InputDecoration(
-                  labelText: 'New team name',
+                  labelText: 'New team number',
                   isDense: true,
                 ),
               ),

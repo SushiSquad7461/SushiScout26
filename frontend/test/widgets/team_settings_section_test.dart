@@ -225,7 +225,7 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.enterText(
-        find.widgetWithText(TextField, 'New team name'), 'Sushi Robotics');
+        find.widgetWithText(TextField, 'New team number'), 'Sushi Robotics');
     await tester.tap(find.widgetWithText(OutlinedButton, 'Create'));
     await tester.pumpAndSettle();
 
@@ -255,7 +255,7 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.enterText(
-        find.widgetWithText(TextField, 'New team name'), '254');
+        find.widgetWithText(TextField, 'New team number'), '254');
     await tester.tap(find.widgetWithText(OutlinedButton, 'Create'));
     await tester.pumpAndSettle();
 

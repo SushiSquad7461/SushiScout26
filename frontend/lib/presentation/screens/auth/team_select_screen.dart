@@ -138,9 +138,10 @@ class _TeamSelectScreenState extends ConsumerState<TeamSelectScreen>
           
           TextField(
             controller: _teamNameController,
+            keyboardType: TextInputType.number,
             decoration: const InputDecoration(
-              labelText: 'Team Name',
-              hintText: 'e.g., Sushi Robotics',
+              labelText: 'Team Number',
+              hintText: 'e.g., 254',
               prefixIcon: Icon(Icons.group),
               border: OutlineInputBorder(),
             ),
