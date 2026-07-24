@@ -50,3 +50,4 @@ frontend/.pub/
 .superpowers/
 .opencode/
 test/firestore-rules/package-lock.json
+/releases/
