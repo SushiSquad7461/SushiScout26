@@ -363,9 +363,11 @@ def create_team(req: https_fn.CallableRequest) -> dict:
     if not req.auth:
         raise https_fn.HttpsError(https_fn.FunctionsErrorCode.UNAUTHENTICATED, "Must be authenticated")
     data = req.data or {}
-    name = data.get('name')
-    if not name:
-        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Missing team name")
+    name = str(data.get('name') or '').strip()
+    if not re.fullmatch(r'[1-9][0-9]{0,4}', name):
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            "Team number must be 1-5 digits")
     is_master = bool(data.get('isMasterTeam'))
     uid = req.auth.uid
     db = get_db()

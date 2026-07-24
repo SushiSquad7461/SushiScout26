@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/models/team.dart';
+import '../../core/validation/form_validators.dart';
 import '../providers/auth_provider.dart';
 import '../theme/app_theme.dart';
 
@@ -62,7 +63,11 @@ class _TeamSettingsSectionState extends ConsumerState<TeamSettingsSection> {
 
   Future<void> _create() async {
     final name = _createCtrl.text.trim();
-    if (name.isEmpty) return;
+    final validationError = FormValidators.teamName(name);
+    if (validationError != null) {
+      setState(() => _error = validationError);
+      return;
+    }
     setState(() {
       _creating = true;
       _error = null;
@@ -275,8 +280,9 @@ class _TeamSettingsSectionState extends ConsumerState<TeamSettingsSection> {
             Expanded(
               child: TextField(
                 controller: _createCtrl,
+                keyboardType: TextInputType.number,
                 decoration: const InputDecoration(
-                  labelText: 'New team name',
+                  labelText: 'New team number',
                   isDense: true,
                 ),
               ),

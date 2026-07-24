@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/auth/auth_state.dart';
+import '../../../core/validation/form_validators.dart';
 import '../../providers/auth_provider.dart';
 import '../../theme/app_theme.dart';
 
@@ -16,6 +17,7 @@ class _TeamSelectScreenState extends ConsumerState<TeamSelectScreen>
   late TabController _tabController;
   final _inviteCodeController = TextEditingController();
   final _teamNameController = TextEditingController();
+  String? _createError;
 
   @override
   void initState() {
@@ -136,16 +138,32 @@ class _TeamSelectScreenState extends ConsumerState<TeamSelectScreen>
           
           TextField(
             controller: _teamNameController,
+            keyboardType: TextInputType.number,
             decoration: const InputDecoration(
-              labelText: 'Team Name',
-              hintText: 'e.g., Sushi Robotics',
+              labelText: 'Team Number',
+              hintText: 'e.g., 254',
               prefixIcon: Icon(Icons.group),
               border: OutlineInputBorder(),
             ),
           ),
           
           const SizedBox(height: AppTheme.spacingMd),
-          
+
+          if (_createError != null) ...[
+            Container(
+              padding: const EdgeInsets.all(AppTheme.spacingMd),
+              decoration: BoxDecoration(
+                color: colorScheme.errorContainer,
+                borderRadius: BorderRadius.circular(AppTheme.spacingSm),
+              ),
+              child: Text(
+                _createError!,
+                style: TextStyle(color: colorScheme.onErrorContainer),
+              ),
+            ),
+            const SizedBox(height: AppTheme.spacingMd),
+          ],
+
           if (authState.hasError) ...[
             Container(
               padding: const EdgeInsets.all(AppTheme.spacingMd),
@@ -160,15 +178,19 @@ class _TeamSelectScreenState extends ConsumerState<TeamSelectScreen>
             ),
             const SizedBox(height: AppTheme.spacingMd),
           ],
-          
+
           FilledButton.icon(
             onPressed: authState.status == AuthStatus.loading
                 ? null
                 : () {
                     final name = _teamNameController.text.trim();
-                    if (name.isNotEmpty) {
-                      ref.read(authProvider.notifier).createTeam(name);
+                    final error = FormValidators.teamName(name);
+                    if (error != null) {
+                      setState(() => _createError = error);
+                      return;
                     }
+                    setState(() => _createError = null);
+                    ref.read(authProvider.notifier).createTeam(name);
                   },
             icon: authState.status == AuthStatus.loading
                 ? const SizedBox(
