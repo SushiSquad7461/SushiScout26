@@ -93,3 +93,46 @@ Personal/ephemeral state (`settings.local.json`, ralph logs, `.superpowers/`,
 For recommended plugins and first-time setup, see the `repo-ai-setup` skill
 (`.claude/skills/repo-ai-setup/SKILL.md`).
 
+This repo prioritizes the **`superpowers`** plugin for workflow — use its skills
+(`brainstorming`, `writing-plans`, `test-driven-development`, `systematic-debugging`,
+`requesting-code-review`/`receiving-code-review`, `finishing-a-development-branch`,
+`using-git-worktrees`, `writing-skills`, `subagent-driven-development`,
+`dispatching-parallel-agents`) over generic alternatives. Three plugins that
+duplicate superpowers workflows are disabled at the project level
+(`.claude/settings.json` `enabledPlugins`, overriding the user's global config)
+even though they may be enabled globally — don't re-enable them here:
+- `commit-commands` (commit/PR creation) — superseded by `finishing-a-development-branch`
+- `ralph-loop` (autonomous agent looping) — superseded by `subagent-driven-development` / `dispatching-parallel-agents`
+- `skill-creator` (skill authoring) — superseded by `writing-skills`
+
+Superpowers' `brainstorming`/`writing-plans` output (specs and plans) lands in
+`docs/superpowers/specs/` and `docs/superpowers/plans/`, which are tracked in
+git (unlike the `.superpowers/` scratch directory — task briefs, review diffs,
+per-task working state — which stays gitignored as ephemeral). **Commit new
+spec/plan docs there as part of finishing the work**, so the whole team can see
+prior design decisions, not just whoever ran the session. Scrub personal
+identifiers (emails, tokens, machine paths) before committing.
+
+**Agents** (`.claude/agents/`) — domain-specific reviewers superpowers doesn't
+cover: `security-reviewer` (auth/team-isolation/rules changes), `sync-logic-reviewer`
+(Firestore->Sheets export idempotency/team-scoping), `riverpod-provider-reviewer`
+(provider override/dependency correctness, esp. the team/event chain).
+
+**Skills** (`.claude/skills/`) — domain-specific wrappers superpowers doesn't
+cover: `deploy-functions`, `firestore-rules-check`, `run-tests`.
+
+**Plugins/MCP**: `firebase` and `playwright` stay enabled (Firestore/Functions
+inspection, browser automation for the Flutter web build). A `github` MCP server
+is configured user-locally only — not committed, since it embeds a personal
+token; set it up yourself with
+`claude mcp add --transport http github https://api.githubcopilot.com/mcp/ --header "Authorization: Bearer $(gh auth token)" -s local`.
+
+**Hooks** (`.claude/settings.json`): dart format+analyze, a
+`python3 -m py_compile` syntax check on `functions/*.py` edits, and a reminder
+to run `firestore-rules-check` when `firestore.rules` changes all run on
+relevant file edits; editing generated `*.g.dart`/`*.mocks.dart` is blocked
+outright.
+
+**CI**: `.github/workflows/test.yml` runs Flutter tests, pytest, and the
+Firestore rules suite on every push/PR to `master`.
+

@@ -1,6 +1,9 @@
 {
   "enabledPlugins": {
-    "firebase@claude-plugins-official": true
+    "firebase@claude-plugins-official": true,
+    "commit-commands@claude-plugins-official": false,
+    "ralph-loop@claude-plugins-official": false,
+    "skill-creator@claude-plugins-official": false
   },
   "hooks": {
     "PostToolUse": [
@@ -10,6 +13,14 @@
           {
             "type": "command",
             "command": "f=$(echo \"$TOOL_INPUT\" | grep -oE '([A-Za-z]:[^\"]*|/[^\"]*)\\.dart' | head -1); if [ -n \"$f\" ] && [[ \"$f\" != *.g.dart ]] && [[ \"$f\" != *.mocks.dart ]]; then cd \"$CLAUDE_PROJECT_DIR/frontend\" && dart format \"$f\" 2>&1 | tail -1 && flutter analyze --no-fatal-infos 2>&1 | tail -3; fi"
+          },
+          {
+            "type": "command",
+            "command": "f=$(echo \"$TOOL_INPUT\" | grep -oE '([A-Za-z]:[^\"]*|/[^\"]*)\\.py' | head -1); if [ -n \"$f\" ] && [[ \"$f\" == *functions/* ]]; then python3 -m py_compile \"$f\" 2>&1 | tail -5; fi"
+          },
+          {
+            "type": "command",
+            "command": "f=$(echo \"$TOOL_INPUT\" | grep -oE '([A-Za-z]:[^\"]*|/[^\"]*)firestore\\.rules' | head -1); if [ -n \"$f\" ]; then echo 'REMINDER: firestore.rules changed - run the firestore-rules-check skill or the emulator jest suite (test/firestore-rules) before deploying. Rules bugs here are privilege-escalation risk (team isolation).'; fi"
           }
         ]
       }
