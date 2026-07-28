@@ -171,5 +171,98 @@ class TestGenerateInviteCode(unittest.TestCase):
             self.assertTrue(set(code).issubset(charset))
 
 
+
+class TestRegenerateInviteCode(unittest.TestCase):
+    """Invite rotation moved server-side: it used to be a client transaction
+    whose only check was `createdBy == uid`, on a field the same client could
+    rewrite (rules allowed any member to update the whole team doc)."""
+
+    def setUp(self):
+        main._db = None
+
+    @staticmethod
+    def _req_with_claim(uid, teams, data):
+        r = Mock()
+        if uid:
+            r.auth = Mock(uid=uid)
+            r.auth.token = {'teams': teams}
+        else:
+            r.auth = None
+        r.data = data
+        return r
+
+    def _call(self, req):
+        return main.regenerate_invite_code.__wrapped__.__wrapped__(req)
+
+    def test_unauthenticated_raises(self):
+        with self.assertRaises(https_fn.HttpsError) as cm:
+            self._call(self._req_with_claim(None, {}, {'teamId': 't1'}))
+        self.assertEqual(cm.exception.code,
+                         https_fn.FunctionsErrorCode.UNAUTHENTICATED)
+
+    def test_missing_team_id_raises(self):
+        with self.assertRaises(https_fn.HttpsError) as cm:
+            self._call(self._req_with_claim('u1', {'t1': 'admin'}, {}))
+        self.assertEqual(cm.exception.code,
+                         https_fn.FunctionsErrorCode.INVALID_ARGUMENT)
+
+    def test_plain_member_is_denied(self):
+        with self.assertRaises(https_fn.HttpsError) as cm:
+            self._call(self._req_with_claim('u1', {'t1': 'member'}, {'teamId': 't1'}))
+        self.assertEqual(cm.exception.code,
+                         https_fn.FunctionsErrorCode.PERMISSION_DENIED)
+
+    def test_admin_of_another_team_is_denied(self):
+        with self.assertRaises(https_fn.HttpsError) as cm:
+            self._call(self._req_with_claim('u1', {'other': 'admin'}, {'teamId': 't1'}))
+        self.assertEqual(cm.exception.code,
+                         https_fn.FunctionsErrorCode.PERMISSION_DENIED)
+
+    @patch('main.get_db')
+    def test_missing_team_raises_not_found(self, mock_db):
+        team_ref = MagicMock()
+        team_ref.get.return_value = Mock(exists=False)
+        mock_db.return_value.collection.return_value.document.return_value = team_ref
+        with self.assertRaises(https_fn.HttpsError) as cm:
+            self._call(self._req_with_claim('u1', {'t1': 'admin'}, {'teamId': 't1'}))
+        self.assertEqual(cm.exception.code,
+                         https_fn.FunctionsErrorCode.NOT_FOUND)
+
+    @patch('main.get_db')
+    def test_admin_rotates_code_with_server_generated_value(self, mock_db):
+        db = mock_db.return_value
+        team_ref = MagicMock()
+        team_ref.get.return_value = Mock(exists=True)
+        db.collection.return_value.document.return_value = team_ref
+        # No collision on the first generated code.
+        db.collection.return_value.where.return_value.limit.return_value.get.return_value = []
+
+        result = self._call(
+            self._req_with_claim('u1', {'t1': 'admin'}, {'teamId': 't1'}))
+
+        new_code = result['inviteCode']
+        # Server charset and length, not the client's 6-char dart:math code.
+        self.assertEqual(len(new_code), 8)
+        self.assertTrue(set(new_code).issubset(set('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789')))
+        team_ref.update.assert_called_once()
+        self.assertEqual(team_ref.update.call_args[0][0]['inviteCode'], new_code)
+
+    @patch('main.get_db')
+    def test_retries_until_code_is_unique(self, mock_db):
+        db = mock_db.return_value
+        team_ref = MagicMock()
+        team_ref.get.return_value = Mock(exists=True)
+        db.collection.return_value.document.return_value = team_ref
+        # First candidate collides with an existing team, second is free.
+        db.collection.return_value.where.return_value.limit.return_value.get.side_effect = [
+            [Mock()], []
+        ]
+
+        result = self._call(
+            self._req_with_claim('u1', {'t1': 'admin'}, {'teamId': 't1'}))
+        self.assertEqual(len(result['inviteCode']), 8)
+
+
+
 if __name__ == '__main__':
     unittest.main()
