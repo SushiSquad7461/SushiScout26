@@ -90,12 +90,13 @@ class BrandAppBar extends StatelessWidget implements PreferredSizeWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         ColoredBox(
-          color: cs.onSurface,
+          // Chrome is ink in BOTH brightnesses — reading colorScheme.onSurface
+          // here made this bar white in dark mode, unlike the themed AppBar.
+          color: AppTheme.chrome(brand),
           child: SafeArea(
             bottom: false,
             child: SizedBox(
@@ -125,7 +126,7 @@ class BrandAppBar extends StatelessWidget implements PreferredSizeWidget {
                             brand,
                             size: 21,
                             letterSpacing: 0.01,
-                            color: cs.surface,
+                            color: AppTheme.onChrome(brand),
                           ),
                         ),
                         if (subtitle != null)

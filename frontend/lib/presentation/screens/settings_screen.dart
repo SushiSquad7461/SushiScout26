@@ -384,51 +384,60 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         ref.watch(settingsProvider)[PrefKeys.colorSeed] ??
         TeamBrands.fallback.id;
 
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        for (final b in TeamBrands.all) ...[
+    // IntrinsicHeight is required, not decorative: CrossAxisAlignment.stretch
+    // inside a SingleChildScrollView forces an infinite height, which threw
+    // during layout and left every widget after this Row unlaid-out — they
+    // then painted stacked at the top of the screen. IntrinsicHeight bounds
+    // the row to its tallest child so the tiles can still stretch to match.
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (final b in TeamBrands.all) ...[
+            Expanded(
+              child: _BrandTile(
+                brand: b,
+                selected: TeamBrands.byId(currentId).id == b.id,
+                onTap: () =>
+                    ref.read(settingsProvider.notifier).setColorSeed(b.id),
+              ),
+            ),
+            const SizedBox(width: AppTheme.spacingSm),
+          ],
+          // Placeholder for the next team's identity.
           Expanded(
-            child: _BrandTile(
-              brand: b,
-              selected: TeamBrands.byId(currentId).id == b.id,
-              onTap: () =>
-                  ref.read(settingsProvider.notifier).setColorSeed(b.id),
-            ),
-          ),
-          const SizedBox(width: AppTheme.spacingSm),
-        ],
-        // Placeholder for the next team's identity.
-        Expanded(
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              border: Border.all(color: Theme.of(context).colorScheme.outline),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(AppTheme.spacingSm),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.add,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                  const SizedBox(height: AppTheme.spacingXs),
-                  Text(
-                    'add a team',
-                    textAlign: TextAlign.center,
-                    style: AppTheme.label(
-                      BrandScope.of(context),
-                      size: 13,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                border: Border.all(
+                  color: Theme.of(context).colorScheme.outline,
+                ),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(AppTheme.spacingSm),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.add,
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
-                  ),
-                ],
+                    const SizedBox(height: AppTheme.spacingXs),
+                    Text(
+                      'add a team',
+                      textAlign: TextAlign.center,
+                      style: AppTheme.label(
+                        BrandScope.of(context),
+                        size: 13,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
