@@ -315,13 +315,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ),
               ],
               const SizedBox(height: AppTheme.spacingSm),
-              Row(
+              // Wrap, not Row: "Save" + "Backfill this event" side by side
+              // overflowed a phone width by ~139px, which is what made this
+              // section render garbled. They now reflow onto a second line.
+              Wrap(
+                spacing: AppTheme.spacingSm,
+                runSpacing: AppTheme.spacingSm,
                 children: [
                   FilledButton(
                     onPressed: _saving ? null : _saveSheet,
                     child: Text(_saving ? "Saving…" : "Save"),
                   ),
-                  const SizedBox(width: AppTheme.spacingSm),
                   OutlinedButton(
                     onPressed:
                         (_sheetId == null || _sheetId!.isEmpty || _backfilling)

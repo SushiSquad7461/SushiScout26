@@ -55,9 +55,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final brand = BrandScope.of(context);
+    // This is an ink page by design — black ground, white type — so it must
+    // stay ink in BOTH brightnesses. Reading it from colorScheme.onSurface /
+    // .surface inverted the whole screen to white-on-black in dark mode.
+    final ink = AppTheme.chrome(brand);
+    final onInk = AppTheme.onChrome(brand);
 
     return Scaffold(
-      backgroundColor: colorScheme.onSurface,
+      backgroundColor: ink,
       body: Column(
         children: [
           // The mascot stands in for a logo. Full-bleed, so it sits outside the
@@ -75,7 +80,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
           Expanded(
             child: Material(
-              color: colorScheme.onSurface,
+              color: ink,
               child: SafeArea(
                 top: false,
                 child: Padding(
@@ -97,7 +102,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                 size: 46,
                                 letterSpacing: -0.01,
                                 height: 0.94,
-                                color: colorScheme.surface,
+                                color: onInk,
                               ),
                             ),
                           ),
@@ -152,7 +157,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           if (_isDesktop) ...[
                             TextFormField(
                               controller: _emailController,
-                              style: TextStyle(color: colorScheme.surface),
+                              style: TextStyle(color: onInk),
                               decoration: _darkField(
                                 brand,
                                 colorScheme,
@@ -173,7 +178,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             const SizedBox(height: AppTheme.spacingMd),
                             TextFormField(
                               controller: _passwordController,
-                              style: TextStyle(color: colorScheme.surface),
+                              style: TextStyle(color: onInk),
                               decoration: _darkField(
                                 brand,
                                 colorScheme,
@@ -225,8 +230,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               child: FilledButton(
                                 onPressed: _isLoading ? null : _signIn,
                                 style: FilledButton.styleFrom(
-                                  backgroundColor: colorScheme.surface,
-                                  foregroundColor: colorScheme.onSurface,
+                                  backgroundColor: onInk,
+                                  foregroundColor: ink,
                                 ),
                                 child: _isLoading
                                     ? SizedBox(
@@ -234,7 +239,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                         height: 20,
                                         child: CircularProgressIndicator(
                                           strokeWidth: 2,
-                                          color: colorScheme.onSurface,
+                                          color: ink,
                                         ),
                                       )
                                     : const Text('Sign In'),
@@ -252,8 +257,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                           .read(authProvider.notifier)
                                           .signInWithGoogle(),
                                 style: FilledButton.styleFrom(
-                                  backgroundColor: colorScheme.surface,
-                                  foregroundColor: colorScheme.onSurface,
+                                  backgroundColor: onInk,
+                                  foregroundColor: ink,
                                 ),
                                 child: authState.status == AuthStatus.loading
                                     ? Row(
@@ -265,7 +270,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                             height: 20,
                                             child: CircularProgressIndicator(
                                               strokeWidth: 2,
-                                              color: colorScheme.onSurface,
+                                              color: ink,
                                             ),
                                           ),
                                           const SizedBox(
@@ -325,7 +330,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       prefixIcon: Icon(icon, color: brand.neutralOnInk),
       suffixIcon: suffix,
       labelStyle: AppTheme.label(brand, color: brand.neutralOnInk),
-      floatingLabelStyle: AppTheme.label(brand, color: colorScheme.surface),
+      floatingLabelStyle: AppTheme.label(
+        brand,
+        color: AppTheme.onChrome(brand),
+      ),
       border: border,
       enabledBorder: border,
       focusedBorder: OutlineInputBorder(
