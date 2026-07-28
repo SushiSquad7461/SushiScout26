@@ -264,3 +264,130 @@ describe('teamSettings googleSheetId is server-authoritative', () => {
     );
   });
 });
+
+// ---------------------------------------------------------------------------
+// Security review 2026-07-28: the team document and the events namespace
+// ---------------------------------------------------------------------------
+
+describe('teams doc is server-authoritative', () => {
+  const memberOfTeamA = () =>
+    testEnv.authenticatedContext('mem', { teams: { teamA: 'member' } }).firestore();
+  const adminOfTeamA = () =>
+    testEnv.authenticatedContext('adm', { teams: { teamA: 'admin' } }).firestore();
+
+  async function seedTeam() {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'teams/teamA'), {
+        name: '254',
+        inviteCode: 'AAAA1111',
+        createdBy: 'adm',
+        memberCount: 2,
+        isMasterTeam: false,
+      });
+    });
+  }
+
+  test('member can still read own team', async () => {
+    await seedTeam();
+    await assertSucceeds(getDoc(doc(memberOfTeamA(), 'teams/teamA')));
+  });
+
+  // The invite code is the only credential join_team accepts. A member who
+  // could rewrite it could collide it with another team's code and hijack
+  // that team's incoming scouts.
+  test('member cannot rewrite inviteCode', async () => {
+    await seedTeam();
+    await assertFails(
+      updateDoc(doc(memberOfTeamA(), 'teams/teamA'), { inviteCode: 'HIJACK00' })
+    );
+  });
+
+  test('admin cannot rewrite inviteCode either (callable-only path)', async () => {
+    await seedTeam();
+    await assertFails(
+      updateDoc(doc(adminOfTeamA(), 'teams/teamA'), { inviteCode: 'HIJACK00' })
+    );
+  });
+
+  // createdBy was the ONLY authorization check on invite rotation, and it was
+  // enforced client-side against this field.
+  test('member cannot rewrite createdBy to themselves', async () => {
+    await seedTeam();
+    await assertFails(
+      updateDoc(doc(memberOfTeamA(), 'teams/teamA'), { createdBy: 'mem' })
+    );
+  });
+
+  test('member cannot forge memberCount or isMasterTeam', async () => {
+    await seedTeam();
+    await assertFails(
+      updateDoc(doc(memberOfTeamA(), 'teams/teamA'), { memberCount: 999 })
+    );
+    await assertFails(
+      updateDoc(doc(memberOfTeamA(), 'teams/teamA'), { isMasterTeam: true })
+    );
+  });
+
+  test('client cannot create a team doc directly', async () => {
+    await assertFails(
+      setDoc(doc(adminOfTeamA(), 'teams/teamNew'), { name: '254', inviteCode: 'X' })
+    );
+  });
+});
+
+describe('events cannot be squatted across teams', () => {
+  const alice2 = () =>
+    testEnv.authenticatedContext('alice', { teams: { teamA: 'admin' } }).firestore();
+
+  test('member can create an event under own team prefix', async () => {
+    await assertSucceeds(
+      setDoc(doc(alice2(), 'events/teamA_2026casj'), {
+        teamId: 'teamA',
+        programType: 'FRC',
+        tbaKey: '2026casj',
+      })
+    );
+  });
+
+  // The core squat: own teamId in the payload, VICTIM's id in the document id.
+  // Once written, every later rule evaluates against the squatter's teamId, so
+  // the victim team can no longer read, update, or delete their own event id.
+  test('member cannot squat another team\'s event id', async () => {
+    await assertFails(
+      setDoc(doc(alice2(), 'events/teamB_2026casj'), {
+        teamId: 'teamA',
+        programType: 'FTC',
+        tbaKey: '2026casj',
+      })
+    );
+  });
+
+  test('member cannot create an event stamped for another team', async () => {
+    await assertFails(
+      setDoc(doc(alice2(), 'events/teamB_2026casj'), {
+        teamId: 'teamB',
+        programType: 'FRC',
+        tbaKey: '2026casj',
+      })
+    );
+  });
+});
+
+describe('matches eventId prefix is enforced on update, not just create', () => {
+  const alice3 = () =>
+    testEnv.authenticatedContext('alice', { teams: { teamA: 'admin' } }).firestore();
+
+  test('member cannot rewrite eventId to an out-of-team value', async () => {
+    await seedMatch('teamA');
+    await assertFails(
+      updateDoc(doc(alice3(), 'matches/m1'), { eventId: 'teamB_2026casj' })
+    );
+  });
+
+  test('member can still update a match within its own event', async () => {
+    await seedMatch('teamA');
+    await assertSucceeds(
+      updateDoc(doc(alice3(), 'matches/m1'), { isDeleted: true })
+    );
+  });
+});
