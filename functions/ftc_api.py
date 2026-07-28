@@ -2,6 +2,7 @@
 
 from firebase_functions import https_fn, logger
 from firebase_admin import firestore
+import re
 import requests
 import os
 from datetime import datetime, timedelta
@@ -9,6 +10,10 @@ from datetime import datetime, timedelta
 _db = None
 
 CACHE_TTL_HOURS = 24
+
+# See tba_sync.py: anchored alphanumeric so the code is safe as both a URL
+# path segment and a Firestore document id.
+_EVENT_CODE_RE = re.compile(r'^[A-Za-z0-9]{1,32}$')
 
 
 def _get_db():
@@ -37,11 +42,23 @@ def fetch_ftc_schedule(req: https_fn.CallableRequest) -> dict:
     Returns: { "success": True, "count": N, "cached": bool }
     Schedule data is written to Firestore, not returned inline.
     """
-    event_code = req.data.get("eventCode")
+    # See tba_sync.fetch_event_schedule: public endpoint, no App Check.
+    if not req.auth:
+        raise https_fn.HttpsError(
+            code=https_fn.FunctionsErrorCode.UNAUTHENTICATED,
+            message="Must be authenticated",
+        )
+
+    event_code = (req.data or {}).get("eventCode")
     if not event_code:
         raise https_fn.HttpsError(
             code=https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
             message="Missing eventCode",
+        )
+    if not _EVENT_CODE_RE.match(str(event_code)):
+        raise https_fn.HttpsError(
+            code=https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            message="Invalid eventCode",
         )
 
     db = _get_db()
