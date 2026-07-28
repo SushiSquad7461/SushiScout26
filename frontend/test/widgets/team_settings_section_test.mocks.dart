@@ -231,7 +231,7 @@ class MockTeamRepository extends _i1.Mock implements _i5.TeamRepository {
           as _i6.Future<Map<String, dynamic>>);
 
   @override
-  _i6.Future<void> regenerateInviteCode({
+  _i6.Future<String> regenerateInviteCode({
     required String? teamId,
     required String? requestingUserId,
   }) =>
@@ -240,10 +240,26 @@ class MockTeamRepository extends _i1.Mock implements _i5.TeamRepository {
               #teamId: teamId,
               #requestingUserId: requestingUserId,
             }),
-            returnValue: _i6.Future<void>.value(),
-            returnValueForMissingStub: _i6.Future<void>.value(),
+            returnValue: _i6.Future<String>.value(
+              _i7.dummyValue<String>(
+                this,
+                Invocation.method(#regenerateInviteCode, [], {
+                  #teamId: teamId,
+                  #requestingUserId: requestingUserId,
+                }),
+              ),
+            ),
+            returnValueForMissingStub: _i6.Future<String>.value(
+              _i7.dummyValue<String>(
+                this,
+                Invocation.method(#regenerateInviteCode, [], {
+                  #teamId: teamId,
+                  #requestingUserId: requestingUserId,
+                }),
+              ),
+            ),
           )
-          as _i6.Future<void>);
+          as _i6.Future<String>);
 }
 
 /// A class which mocks [AuthService].
