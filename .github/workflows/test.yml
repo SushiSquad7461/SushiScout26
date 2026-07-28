@@ -42,6 +42,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+      # The Firestore emulator is a Java process, and firebase-tools requires
+      # JDK 21+. The runner's default JDK is older, so without this the job
+      # dies before a single rule is evaluated.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
       - run: npm install -g firebase-tools
       - run: npm ci
         working-directory: test/firestore-rules

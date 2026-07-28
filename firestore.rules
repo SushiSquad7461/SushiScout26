@@ -28,13 +28,25 @@ service cloud.firestore {
       allow delete:       if resource != null && isTeamMember(resource.data.teamId);
       allow update:       if isTeamMember(resource.data.teamId)
                             && request.resource.data.teamId == resource.data.teamId;
-      allow create:       if isTeamMember(request.resource.data.teamId);
+      // The document id must carry the creating team's prefix, exactly like
+      // the null-`resource` read above trusts it to. Checking only the teamId
+      // FIELD let anyone create `events/{victimTeamId}_{code}` owned by their
+      // own team: every later rule then evaluates against the squatter's
+      // teamId, permanently locking the victim out of an event id they can
+      // neither read, update, nor delete (event codes are public, so future
+      // competitions were pre-squattable).
+      allow create:       if isTeamMember(request.resource.data.teamId)
+                            && eventId.matches('^' + request.resource.data.teamId + '_.*');
     }
 
     match /matches/{reportId} {
       allow read, delete: if isTeamMember(resource.data.teamId);
+      // The eventId prefix is re-checked on update too — enforcing it only on
+      // create left the stated defense bypassable by create-then-rewrite.
       allow update:       if isTeamMember(resource.data.teamId)
-                            && request.resource.data.teamId == resource.data.teamId;
+                            && request.resource.data.teamId == resource.data.teamId
+                            && request.resource.data.eventId is string
+                            && request.resource.data.eventId.matches('^' + request.resource.data.teamId + '_.*');
       // Defense-in-depth: the composite eventId (used as the Sheets tab name)
       // must be prefixed by the creating team's id, so a member can't create
       // a match doc that leaks into another team's Sheet tab.
@@ -59,7 +71,19 @@ service cloud.firestore {
     match /teams/{teamId} {
       allow read:   if isTeamMember(teamId);
       allow create: if false;                      // create_team callable only
-      allow update: if isTeamMember(teamId);       // e.g. invite-code regen
+      // Server-authoritative, like membership and googleSheetId. This used to
+      // be `isTeamMember(teamId)` with no field allowlist, which let ANY plain
+      // member rewrite the whole doc:
+      //   - `inviteCode` is the only credential join_team accepts, and
+      //     uniqueness is enforced only in create_team — so a member could set
+      //     their own team's code to collide with another team's, and
+      //     join_team's `where(...).limit(1)` would route that team's new
+      //     scouts into the attacker's team.
+      //   - `createdBy` was the ONLY check on invite rotation, and it was
+      //     enforced client-side against this very field.
+      // No client code writes this doc: rotation goes through the
+      // regenerate_invite_code callable, memberCount through join/leave_team.
+      allow update: if false;
 
       // Membership is server-authoritative: only the callables (Admin SDK,
       // which bypasses rules) write member docs. A client-writable member

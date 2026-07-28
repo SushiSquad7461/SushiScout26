@@ -372,9 +372,7 @@ def create_team(req: https_fn.CallableRequest) -> dict:
     uid = req.auth.uid
     db = get_db()
 
-    invite_code = _generate_invite_code()
-    while list(db.collection('teams').where('inviteCode', '==', invite_code).limit(1).get()):
-        invite_code = _generate_invite_code()
+    invite_code = _unique_invite_code(db)
 
     team_ref = db.collection('teams').document()
     team_id = team_ref.id
@@ -482,6 +480,58 @@ def leave_team(req: https_fn.CallableRequest) -> dict:
 
     _set_team_claims(uid, memberships)
     return {'success': True, 'currentTeamId': new_current}
+
+
+def _unique_invite_code(db) -> str:
+    """A fresh code that no existing team is already using.
+
+    Uniqueness matters beyond tidiness: join_team resolves a code with
+    `where('inviteCode','==',code).limit(1)`, so two teams sharing a code
+    means new scouts land in an arbitrary one of them."""
+    code = _generate_invite_code()
+    while list(db.collection('teams').where('inviteCode', '==', code).limit(1).get()):
+        code = _generate_invite_code()
+    return code
+
+
+@https_fn.on_call()
+def regenerate_invite_code(req: https_fn.CallableRequest) -> dict:
+    """Rotate a team's invite code. Admin-only, server-side.
+
+    This used to be a direct client transaction on teams/{teamId} whose only
+    authorization was a client-side `createdBy == uid` check — against a field
+    the client could also rewrite, since the rule was `update: if
+    isTeamMember(teamId)` with no field allowlist. It also generated the code
+    with dart:math Random() over 6 chars and skipped the uniqueness check.
+    Rules now deny all client writes to the team doc; this is the only path."""
+    if not req.auth:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.UNAUTHENTICATED, "Must be authenticated")
+
+    team_id = (req.data or {}).get('teamId') or ''
+    if not team_id:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Missing teamId")
+
+    if not _is_team_admin(req.auth.token, team_id):
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.PERMISSION_DENIED,
+            "Only a team admin can regenerate the invite code")
+
+    db = get_db()
+    team_ref = db.collection('teams').document(team_id)
+    if not team_ref.get().exists:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.NOT_FOUND, "Team not found")
+
+    new_code = _unique_invite_code(db)
+    team_ref.update({
+        'inviteCode': new_code,
+        'updatedAt': firestore.SERVER_TIMESTAMP,
+    })
+
+    logger.info(f"Invite code regenerated for team {team_id} by {req.auth.uid}")
+    return {'inviteCode': new_code}
 
 
 _SHEET_URL_RE = re.compile(r'/spreadsheets/d/([a-zA-Z0-9-_]+)')

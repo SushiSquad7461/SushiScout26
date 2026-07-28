@@ -1,4 +1,3 @@
-import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import '../../core/auth/auth_exceptions.dart';
@@ -7,7 +6,6 @@ import '../models/team.dart';
 class TeamRepository {
   final FirebaseFirestore _firestore;
   final FirebaseFunctions _functions;
-  static final Random _random = Random();
 
   TeamRepository({FirebaseFirestore? firestore, FirebaseFunctions? functions})
       : _firestore = firestore ?? FirebaseFirestore.instance,
@@ -172,30 +170,30 @@ class TeamRepository {
     return result.data;
   }
 
-  Future<void> regenerateInviteCode({
+  /// Rotates the team's invite code via the server-side
+  /// `regenerate_invite_code` callable, and returns the new code.
+  ///
+  /// This was a direct client transaction on `teams/{teamId}` whose only
+  /// authorization was a client-side `createdBy == requestingUserId` check —
+  /// which the rules did not back, so any member could both bypass it and
+  /// rewrite `createdBy` itself. The code was also generated with dart:math
+  /// `Random()` (not a CSPRNG) over 6 characters, with no uniqueness check
+  /// against other teams. All three are now the server's job.
+  Future<String> regenerateInviteCode({
     required String teamId,
     required String requestingUserId,
   }) async {
-    final newCode = _generateInviteCode();
-    
-    await _firestore.runTransaction((transaction) async {
-      final teamRef = _firestore.collection('teams').doc(teamId);
-      final teamDoc = await transaction.get(teamRef);
-      final team = Team.fromFirestore(teamDoc);
-      
-      if (team.createdBy != requestingUserId) {
-        throw const AuthException('Only team creator can regenerate invite code');
+    try {
+      final callable = _functions.httpsCallable('regenerate_invite_code');
+      final result =
+          await callable.call<Map<String, dynamic>>({'teamId': teamId});
+      return result.data['inviteCode'] as String;
+    } on FirebaseFunctionsException catch (e) {
+      if (e.code == 'permission-denied') {
+        throw const AuthException(
+            'Only a team admin can regenerate the invite code');
       }
-      
-      transaction.update(teamRef, {
-        'inviteCode': newCode,
-        'updatedAt': Timestamp.fromDate(DateTime.now()),
-      });
-    });
-  }
-
-  String _generateInviteCode() {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    return List.generate(6, (_) => chars[_random.nextInt(chars.length)]).join();
+      _mapFunctionsError(e);
+    }
   }
 }

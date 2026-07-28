@@ -131,12 +131,27 @@ class ExportService {
     }
   }
 
-  /// Wraps a CSV field in quotes if it contains commas, quotes, or newlines.
+  /// Wraps a CSV field in quotes if it contains commas, quotes, or newlines,
+  /// and neutralizes leading characters that Excel/Sheets/LibreOffice treat
+  /// as the start of a formula.
+  ///
+  /// Quoting alone does NOT stop formula evaluation — a spreadsheet still
+  /// evaluates `=HYPERLINK(...)` inside a quoted field on open. Scout-supplied
+  /// free text (comments, scouterName) reaches this sink, so a teammate
+  /// opening an exported CSV would run whatever the scout typed.
   static String _escapeCsvField(String field) {
-    if (field.contains(RegExp(r'[,"\n\r]'))) {
-      return '"${field.replaceAll('"', '""')}"';
+    final guarded = _neutralizeFormula(field);
+    if (guarded.contains(RegExp(r'[,"\n\r]'))) {
+      return '"${guarded.replaceAll('"', '""')}"';
     }
-    return field;
+    return guarded;
+  }
+
+  /// Prefixes a single quote when a field starts with a formula trigger, so
+  /// the spreadsheet renders it as literal text.
+  static String _neutralizeFormula(String field) {
+    if (field.isEmpty) return field;
+    return RegExp(r'^[=+\-@\t\r]').hasMatch(field) ? "'$field" : field;
   }
 
   // ---------------------------------------------------------------------------

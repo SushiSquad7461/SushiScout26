@@ -2,6 +2,7 @@
 
 from firebase_functions import https_fn, logger
 from firebase_admin import firestore
+import re
 import requests
 import os
 from datetime import datetime, timedelta
@@ -9,6 +10,11 @@ from datetime import datetime, timedelta
 _db = None
 
 CACHE_TTL_HOURS = 24
+
+# Event keys are TBA/FIRST codes like "2026casj". Anchored and alphanumeric-
+# only so the value is safe both as a URL path segment and as a Firestore
+# document id (a '/' would otherwise redirect the write into a subcollection).
+_EVENT_KEY_RE = re.compile(r'^[A-Za-z0-9]{1,32}$')
 
 
 def _get_db():
@@ -26,9 +32,22 @@ def fetch_event_schedule(req: https_fn.CallableRequest) -> any:
     Caches responses for 24 hours to reduce API calls.
     Input: { "eventKey": "2026casj" }
     """
-    event_key = req.data.get("eventKey")
+    # Callables are public HTTPS endpoints and there is no App Check, so
+    # without this an anonymous caller could drive Firestore writes and burn
+    # the project's TBA credentials. Every other callable in this codebase
+    # already gates on req.auth; these two were the outliers.
+    if not req.auth:
+        raise https_fn.HttpsError(
+            code=https_fn.FunctionsErrorCode.UNAUTHENTICATED,
+            message="Must be authenticated")
+
+    event_key = (req.data or {}).get("eventKey")
     if not event_key:
         raise https_fn.HttpsError(code=https_fn.FunctionsErrorCode.INVALID_ARGUMENT, message="Missing eventKey")
+    if not _EVENT_KEY_RE.match(str(event_key)):
+        raise https_fn.HttpsError(
+            code=https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            message="Invalid eventKey")
 
     db = _get_db()
     cache_ref = db.collection('tba_cache').document(event_key)

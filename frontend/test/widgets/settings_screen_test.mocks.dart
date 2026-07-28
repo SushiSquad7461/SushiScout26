@@ -190,7 +190,7 @@ class MockTeamRepository extends _i1.Mock implements _i3.TeamRepository {
           as _i4.Future<Map<String, dynamic>>);
 
   @override
-  _i4.Future<void> regenerateInviteCode({
+  _i4.Future<String> regenerateInviteCode({
     required String? teamId,
     required String? requestingUserId,
   }) =>
@@ -199,8 +199,24 @@ class MockTeamRepository extends _i1.Mock implements _i3.TeamRepository {
               #teamId: teamId,
               #requestingUserId: requestingUserId,
             }),
-            returnValue: _i4.Future<void>.value(),
-            returnValueForMissingStub: _i4.Future<void>.value(),
+            returnValue: _i4.Future<String>.value(
+              _i5.dummyValue<String>(
+                this,
+                Invocation.method(#regenerateInviteCode, [], {
+                  #teamId: teamId,
+                  #requestingUserId: requestingUserId,
+                }),
+              ),
+            ),
+            returnValueForMissingStub: _i4.Future<String>.value(
+              _i5.dummyValue<String>(
+                this,
+                Invocation.method(#regenerateInviteCode, [], {
+                  #teamId: teamId,
+                  #requestingUserId: requestingUserId,
+                }),
+              ),
+            ),
           )
-          as _i4.Future<void>);
+          as _i4.Future<String>);
 }

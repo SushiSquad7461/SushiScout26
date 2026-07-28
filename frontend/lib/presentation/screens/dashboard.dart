@@ -1,8 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:share_plus/share_plus.dart';
-import 'dart:io';
 import '../../core/animations.dart';
 import '../../data/local/preferences.dart';
 import '../../data/repositories/providers.dart';
@@ -104,40 +101,18 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       return;
     }
 
-    final header = "Match,Team,Alliance,GameData,Comments,Synced\n";
-    final rows = matches
-        .map(
-          (m) =>
-              "${m.matchNumber},${m.teamNumber},${m.alliance},\"${m.gameData.toString().replaceAll('"', "'")}\",\"${m.comments.replaceAll('\n', ' ')}\",${m.isSynced}",
-        )
-        .join("\n");
-
-    final csvContent = header + rows;
-
+    // Built by ExportService rather than string-interpolated here: the old
+    // inline version quoted `comments` without doubling embedded quotes (so a
+    // comment could break out of its field and inject columns) and escaped no
+    // formula triggers, letting a scout's comment run as a formula in whoever
+    // opened the export.
     try {
-      await _shareFile(csvContent);
+      await ExportService.exportToCsv(matches);
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text("Export failed: $e")));
-      }
-    }
-  }
-
-  Future<void> _shareFile(String content) async {
-    try {
-      final directory = await getTemporaryDirectory();
-      final file = File('${directory.path}/sushiscout26_export.csv');
-      await file.writeAsString(content);
-
-      await SharePlus.instance.share(ShareParams(files: [XFile(file.path)]));
-    } catch (e) {
-      debugPrint("Sharing failed: $e");
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text("Error sharing file: $e")));
       }
     }
   }
