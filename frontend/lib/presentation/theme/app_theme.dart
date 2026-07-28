@@ -29,6 +29,20 @@ abstract final class AppTheme {
 
   static ThemeData dark(TeamBrand brand) => _build(brand, Brightness.dark);
 
+  /// Chrome — the app bar, the match-details header and the action bar.
+  ///
+  /// These are "ink" in the Initiative's sense, which means ink in BOTH
+  /// brightnesses. Reading them from `colorScheme.onSurface` inverts them to
+  /// solid white on a black screen in dark mode, which is what produced the
+  /// white slabs; [chrome] / [onChrome] are deliberately brightness-independent.
+  static Color chrome(TeamBrand brand) => brand.ink;
+
+  static Color onChrome(TeamBrand brand) => brand.paper;
+
+  /// De-emphasised text on [chrome]. Always the on-ink neutral, since chrome
+  /// is ink in both modes.
+  static Color mutedOnChrome(TeamBrand brand) => brand.neutralOnInk;
+
   // ---------------------------------------------------------------------------
   // Colour scheme — written, not generated
   // ---------------------------------------------------------------------------
@@ -298,16 +312,16 @@ abstract final class AppTheme {
         centerTitle: false,
         elevation: 0,
         scrolledUnderElevation: 0,
-        backgroundColor: cs.onSurface,
-        foregroundColor: cs.surface,
+        backgroundColor: chrome(brand),
+        foregroundColor: onChrome(brand),
         surfaceTintColor: Colors.transparent,
-        iconTheme: IconThemeData(color: cs.surface, size: 22),
-        actionsIconTheme: IconThemeData(color: cs.surface, size: 22),
+        iconTheme: IconThemeData(color: onChrome(brand), size: 22),
+        actionsIconTheme: IconThemeData(color: onChrome(brand), size: 22),
         titleTextStyle: display(
           brand,
           size: 21,
           letterSpacing: 0.01,
-          color: cs.surface,
+          color: onChrome(brand),
         ),
       ),
 

@@ -37,6 +37,10 @@ class ColorBar extends StatelessWidget {
     final colors = brand.colorBar(reversed: reversed);
     final bar = Flex(
       direction: axis,
+      // stretch is required: with the default (center) the cross-axis
+      // constraint is loose, and a childless ColoredBox collapses to zero in
+      // that axis — the bar occupied its space but painted nothing.
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [for (final c in colors) Expanded(child: ColoredBox(color: c))],
     );
 
@@ -252,7 +256,6 @@ class BrandEventBar extends StatelessWidget implements PreferredSizeWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -271,7 +274,9 @@ class BrandEventBar extends StatelessWidget implements PreferredSizeWidget {
                 eventCode,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: AppTheme.label(brand, color: cs.onSurface),
+                // Sits inside the app bar, so it reads against chrome — not
+                // against the surface (which made it white-on-white in dark).
+                style: AppTheme.label(brand, color: AppTheme.onChrome(brand)),
               ),
             ),
           ),
@@ -311,15 +316,23 @@ class BrandActionBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
     final enabled = onPressed != null;
 
-    return SafeArea(
-      top: false,
-      minimum: const EdgeInsets.only(bottom: 0),
-      child: SizedBox(
-        height: 66,
-        child: Row(
+    // The bar is ink chrome in BOTH brightnesses, and the ColoredBox extends
+    // that ink through the bottom safe-area inset so the bar reaches the screen
+    // edge instead of floating above a strip of background.
+    final barColor = enabled
+        ? AppTheme.chrome(brand)
+        : AppTheme.mutedOnChrome(brand);
+
+    return ColoredBox(
+      color: barColor,
+      child: SafeArea(
+        top: false,
+        minimum: const EdgeInsets.only(bottom: 0),
+        child: SizedBox(
+          height: 66,
+          child: Row(
           children: [
             if (secondaryLabel != null)
               InkWell(
@@ -331,11 +344,11 @@ class BrandActionBar extends StatelessWidget {
                   decoration: BoxDecoration(
                     border: Border(
                       top: BorderSide(
-                        color: cs.outline,
+                        color: AppTheme.mutedOnChrome(brand),
                         width: AppTheme.ruleWidth,
                       ),
                       right: BorderSide(
-                        color: cs.outline,
+                        color: AppTheme.mutedOnChrome(brand),
                         width: AppTheme.ruleWidth,
                       ),
                     ),
@@ -346,14 +359,14 @@ class BrandActionBar extends StatelessWidget {
                       brand,
                       size: 17,
                       letterSpacing: 0.1,
-                      color: cs.onSurfaceVariant,
+                      color: AppTheme.mutedOnChrome(brand),
                     ),
                   ),
                 ),
               ),
             Expanded(
               child: Material(
-                color: enabled ? cs.onSurface : cs.onSurfaceVariant,
+                color: barColor,
                 child: InkWell(
                   onTap: onPressed,
                   child: Row(
@@ -365,7 +378,7 @@ class BrandActionBar extends StatelessWidget {
                           brand,
                           size: 21,
                           letterSpacing: 0.1,
-                          color: cs.surface,
+                          color: AppTheme.onChrome(brand),
                         ),
                       ),
                       if (showColorBar) ...[
@@ -378,6 +391,7 @@ class BrandActionBar extends StatelessWidget {
               ),
             ),
           ],
+          ),
         ),
       ),
     );

@@ -516,8 +516,11 @@ class _MatchCard extends ConsumerWidget {
     return Card(
       elevation: 0,
       clipBehavior: Clip.antiAlias,
+      // Carry the 2.5px rule explicitly — a bare RoundedRectangleBorder here
+      // overrode the theme's side and left the card with no visible edge.
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppTheme.cardRadius),
+        side: BorderSide(color: colorScheme.outline, width: AppTheme.ruleWidth),
       ),
       child: InkWell(
         onTap: () {

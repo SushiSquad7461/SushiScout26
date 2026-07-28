@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../data/models/match_report.dart';
 import '../theme/app_theme.dart';
+import '../theme/team_brand.dart';
+import '../widgets/color_bar.dart';
 
 /// Material 3 styled match details screen with comprehensive data display.
 class MatchDetailsScreen extends StatelessWidget {
@@ -12,6 +14,7 @@ class MatchDetailsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final brand = BrandScope.of(context);
     final allianceColor = AppTheme.allianceColor(match.alliance);
 
     // Determine program type: prefer top-level field, fall back to key detection
@@ -26,13 +29,13 @@ class MatchDetailsScreen extends StatelessWidget {
           // Large app bar with team info
           SliverAppBar.large(
             expandedHeight: 200,
-            backgroundColor: colorScheme.onSurface,
-            foregroundColor: colorScheme.surface,
+            backgroundColor: AppTheme.chrome(brand),
+            foregroundColor: AppTheme.onChrome(brand),
             flexibleSpace: FlexibleSpaceBar(
               title: Text(
                 "Team ${match.teamNumber}",
                 style: TextStyle(
-                  color: colorScheme.surface,
+                  color: AppTheme.onChrome(brand),
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -68,7 +71,7 @@ class MatchDetailsScreen extends StatelessWidget {
                         child: Text(
                           "${match.alliance} Alliance",
                           style: theme.textTheme.titleMedium?.copyWith(
-                            color: colorScheme.surface,
+                            color: AppTheme.onChrome(brand),
                             fontWeight: FontWeight.w600,
                           ),
                         ),
@@ -104,40 +107,26 @@ class MatchDetailsScreen extends StatelessWidget {
                     ),
                   ),
                   const Spacer(),
-                  // Program type chip
+                  // Program type chip — square and outlined from the chip
+                  // theme; an accent tint on a surface is what the Initiative
+                  // rules out, so no container fill here.
                   Chip(
                     avatar: Icon(
                       isFtc ? Icons.precision_manufacturing : Icons.build,
                       size: 16,
-                      color: colorScheme.onSecondaryContainer,
+                      color: colorScheme.onSurface,
                     ),
                     label: Text(isFtc ? "FTC" : "FRC"),
-                    backgroundColor: colorScheme.secondaryContainer.withValues(
-                      alpha: 0.5,
-                    ),
-                    side: BorderSide.none,
                     padding: EdgeInsets.zero,
                     labelPadding: const EdgeInsets.only(
                       right: AppTheme.spacingSm,
                     ),
                   ),
                   const SizedBox(width: AppTheme.spacingXs),
-                  // Synced status chip
+                  // Synced status chip — the arita square carries the state.
                   Chip(
-                    avatar: Icon(
-                      match.isSynced ? Icons.cloud_done : Icons.cloud_off,
-                      size: 16,
-                      color: match.isSynced
-                          ? colorScheme.primary
-                          : colorScheme.onSurfaceVariant,
-                    ),
+                    avatar: SyncSquare(brand: brand, synced: match.isSynced),
                     label: Text(match.isSynced ? "Synced" : "Local"),
-                    backgroundColor: match.isSynced
-                        ? colorScheme.primaryContainer.withValues(alpha: 0.5)
-                        : colorScheme.surfaceContainerHighest.withValues(
-                            alpha: 0.5,
-                          ),
-                    side: BorderSide.none,
                     padding: EdgeInsets.zero,
                     labelPadding: const EdgeInsets.only(
                       right: AppTheme.spacingSm,
@@ -369,11 +358,11 @@ class _SectionCard extends StatelessWidget {
 
     return Card(
       elevation: 0,
+      // Square, per the Initiative's geometry — a 12dp radius here was
+      // overriding the theme's square cardTheme.
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(
-          color: colorScheme.outlineVariant.withValues(alpha: 0.5),
-        ),
+        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
+        side: BorderSide(color: colorScheme.outline, width: AppTheme.ruleWidth),
       ),
       clipBehavior: Clip.antiAlias,
       child: IntrinsicHeight(
