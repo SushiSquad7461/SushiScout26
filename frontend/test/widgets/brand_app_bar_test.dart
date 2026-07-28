@@ -4,13 +4,17 @@ import 'package:frontend/presentation/theme/app_theme.dart';
 import 'package:frontend/presentation/theme/team_brand.dart';
 import 'package:frontend/presentation/widgets/color_bar.dart';
 
-/// BrandAppBar declares preferredSize 56 + colourBar, but wraps the 56dp bar in
-/// a SafeArea(bottom: false), which adds the status-bar inset on a real device.
-/// Scaffold allots exactly preferredSize.height, so the bar overflows into the
-/// body. Reproduced with the reporting device's status bar inset.
+/// Regression guard, not a reproduction: BrandAppBar declares preferredSize
+/// 56 + colourBar while wrapping the 56dp bar in a SafeArea(bottom: false),
+/// which looks like it should overflow once a status-bar inset is added. It
+/// does not — Scaffold accounts for the inset itself — and this test pins that,
+/// so a future change to either the preferredSize maths or the SafeArea fails
+/// loudly instead of silently painting the bar over the body.
 void main() {
   const brand = TeamBrands.fallback;
-  const statusBar = 48.0; // realistic for a 1280x2856 @480dpi phone
+  // Any non-zero inset exercises the same path; 48 is realistic for a
+  // 1280x2856 @480dpi phone.
+  const statusBar = 48.0;
 
   testWidgets('BrandAppBar fits its preferredSize under a status bar inset', (
     tester,
