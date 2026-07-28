@@ -1,14 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../theme/app_theme.dart';
+import '../theme/team_brand.dart';
 
-/// Material 3 styled counter card with mobile-optimized touch targets.
+/// Counter card — rebranded, not redesigned.
 ///
-/// Features:
-/// - 56dp buttons (M3 FAB mini size) for easy touch interaction
-/// - Haptic feedback on value changes
-/// - M3 filled card styling with surface tint
-/// - Optional accent color and helper text
+/// The structure, the API and the field wiring are byte-for-byte the original:
+/// centred label, optional helper, a centred [− value +] row with a fixed 80dp
+/// value slot and 56dp buttons, and the same opt-in step control underneath.
+/// Only the paint changed:
+///
+///  * the 10%-alpha accent wash behind the whole card is gone — the Initiative
+///    uses accents to highlight an element, not to tint a surface — so the card
+///    is the surface colour with the theme's 2px rule, and the accent moves to
+///    the label and the buttons, which the original already coloured;
+///  * the buttons are square outlines in the accent rather than 12%-alpha
+///    rounded fills, which holds up in the stands;
+///  * type is Sushi Sans / Mohave via the theme.
+///
+/// [brand] is optional and resolves from [BrandScope], so existing call sites
+/// compile unchanged.
 class CounterCard extends StatelessWidget {
   final String label;
   final int value;
@@ -20,6 +31,7 @@ class CounterCard extends StatelessWidget {
   final bool showStepControl;
   final int stepSize;
   final Function(int)? onStepChanged;
+  final TeamBrand? brand;
 
   const CounterCard({
     super.key,
@@ -33,18 +45,18 @@ class CounterCard extends StatelessWidget {
     this.showStepControl = false,
     this.stepSize = 1,
     this.onStepChanged,
+    this.brand,
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final b = brand ?? BrandScope.of(context);
+    final accent = accentColor ?? colorScheme.onSurface;
 
     return Card(
       elevation: 0,
-      color:
-          accentColor?.withValues(alpha: 0.1) ??
-          colorScheme.surfaceContainerLow,
       child: Padding(
         padding: const EdgeInsets.all(AppTheme.spacingMd),
         child: Column(
@@ -53,10 +65,7 @@ class CounterCard extends StatelessWidget {
             // Label
             Text(
               label,
-              style: theme.textTheme.titleMedium?.copyWith(
-                color: accentColor ?? colorScheme.onSurface,
-                fontWeight: FontWeight.w600,
-              ),
+              style: AppTheme.label(b, size: 16, color: accent),
               textAlign: TextAlign.center,
             ),
 
@@ -65,9 +74,7 @@ class CounterCard extends StatelessWidget {
               const SizedBox(height: AppTheme.spacingXs),
               Text(
                 helperText!,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
-                ),
+                style: AppTheme.helper(b, color: colorScheme.onSurfaceVariant),
                 textAlign: TextAlign.center,
               ),
             ],
@@ -78,21 +85,22 @@ class CounterCard extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // Decrement button (56dp - M3 FAB mini size)
                 _CounterButton(
                   icon: Icons.remove,
                   semanticLabel: 'Decrease $label by $stepSize',
                   onPressed: value > minValue
                       ? () {
                           HapticFeedback.lightImpact();
-                          onChanged((value - stepSize).clamp(minValue, maxValue));
+                          onChanged(
+                            (value - stepSize).clamp(minValue, maxValue),
+                          );
                         }
                       : null,
                   colorScheme: colorScheme,
                   accentColor: accentColor,
                 ),
 
-                // Value display
+                // Value display — fixed slot so 3-digit values stay on one row.
                 Padding(
                   padding: const EdgeInsets.symmetric(
                     horizontal: AppTheme.spacingLg,
@@ -102,9 +110,6 @@ class CounterCard extends StatelessWidget {
                     child: Semantics(
                       liveRegion: true,
                       label: '$label: $value',
-                      // Scale the number down to fit the fixed slot so 3-digit
-                      // values (100+) stay on a single row instead of wrapping,
-                      // even under large accessibility text scaling.
                       child: FittedBox(
                         fit: BoxFit.scaleDown,
                         child: Text(
@@ -112,8 +117,7 @@ class CounterCard extends StatelessWidget {
                           maxLines: 1,
                           softWrap: false,
                           style: theme.textTheme.displayMedium?.copyWith(
-                            color: accentColor ?? colorScheme.onSurface,
-                            fontWeight: FontWeight.bold,
+                            color: colorScheme.onSurface,
                             fontFeatures: const [FontFeature.tabularFigures()],
                           ),
                         ),
@@ -122,14 +126,15 @@ class CounterCard extends StatelessWidget {
                   ),
                 ),
 
-                // Increment button
                 _CounterButton(
                   icon: Icons.add,
                   semanticLabel: 'Increase $label by $stepSize',
                   onPressed: value < maxValue
                       ? () {
                           HapticFeedback.lightImpact();
-                          onChanged((value + stepSize).clamp(minValue, maxValue));
+                          onChanged(
+                            (value + stepSize).clamp(minValue, maxValue),
+                          );
                         }
                       : null,
                   colorScheme: colorScheme,
@@ -140,14 +145,16 @@ class CounterCard extends StatelessWidget {
 
             if (showStepControl && onStepChanged != null) ...[
               const SizedBox(height: AppTheme.spacingSm),
-              const Divider(height: 1),
+              Divider(height: AppTheme.ruleWidth, color: colorScheme.outline),
               const SizedBox(height: AppTheme.spacingSm),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(
-                    'Step:',
-                    style: theme.textTheme.bodySmall?.copyWith(
+                    'step',
+                    style: AppTheme.label(
+                      b,
+                      size: 14,
                       color: colorScheme.onSurfaceVariant,
                     ),
                   ),
@@ -165,14 +172,17 @@ class CounterCard extends StatelessWidget {
                     accentColor: accentColor,
                   ),
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: AppTheme.spacingMd),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppTheme.spacingMd,
+                    ),
                     child: Semantics(
                       label: 'Step size: $stepSize',
                       child: Text(
                         stepSize.toString(),
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: accentColor ?? colorScheme.onSurface,
+                        style: AppTheme.display(
+                          b,
+                          size: 19,
+                          color: colorScheme.onSurface,
                         ),
                       ),
                     ),
@@ -199,7 +209,7 @@ class CounterCard extends StatelessWidget {
   }
 }
 
-/// Individual counter button with M3 styling
+/// 56dp square, outlined in the accent. Same size and position as before.
 class _CounterButton extends StatelessWidget {
   final IconData icon;
   final VoidCallback? onPressed;
@@ -218,30 +228,25 @@ class _CounterButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isEnabled = onPressed != null;
-    final buttonColor = accentColor ?? colorScheme.primary;
+    final buttonColor = accentColor ?? colorScheme.onSurface;
+    final edge = isEnabled ? buttonColor : colorScheme.onSurfaceVariant;
 
     return Semantics(
       button: true,
       enabled: isEnabled,
       label: semanticLabel,
       child: Material(
-        color: isEnabled
-            ? buttonColor.withValues(alpha: 0.12)
-            : colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(AppTheme.buttonRadius),
+        color: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppTheme.buttonRadius),
+          side: BorderSide(color: edge, width: AppTheme.ruleWidth),
+        ),
         child: InkWell(
           onTap: onPressed,
-          borderRadius: BorderRadius.circular(AppTheme.buttonRadius),
           child: SizedBox(
-            width: 56, // M3 FAB mini size
+            width: 56,
             height: 56,
-            child: Icon(
-              icon,
-              size: 28,
-              color: isEnabled
-                  ? buttonColor
-                  : colorScheme.onSurface.withValues(alpha: 0.38),
-            ),
+            child: Icon(icon, size: 28, color: edge),
           ),
         ),
       ),
@@ -249,7 +254,6 @@ class _CounterButton extends StatelessWidget {
   }
 }
 
-/// Step control button for meta-counter
 class _StepControlButton extends StatelessWidget {
   final IconData icon;
   final VoidCallback? onPressed;
@@ -268,30 +272,25 @@ class _StepControlButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isEnabled = onPressed != null;
-    final buttonColor = accentColor ?? colorScheme.primary;
+    final buttonColor = accentColor ?? colorScheme.onSurface;
+    final edge = isEnabled ? buttonColor : colorScheme.onSurfaceVariant;
 
     return Semantics(
       button: true,
       enabled: isEnabled,
       label: semanticLabel,
       child: Material(
-        color: isEnabled
-            ? buttonColor.withValues(alpha: 0.08)
-            : colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(AppTheme.buttonRadius - 2),
+        color: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppTheme.buttonRadius),
+          side: BorderSide(color: edge, width: AppTheme.ruleWidth),
+        ),
         child: InkWell(
           onTap: onPressed,
-          borderRadius: BorderRadius.circular(AppTheme.buttonRadius - 2),
           child: SizedBox(
             width: 40,
             height: 40,
-            child: Icon(
-              icon,
-              size: 22,
-              color: isEnabled
-                  ? buttonColor
-                  : colorScheme.onSurface.withValues(alpha: 0.38),
-            ),
+            child: Icon(icon, size: 22, color: edge),
           ),
         ),
       ),

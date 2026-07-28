@@ -15,7 +15,8 @@ class MatchDetailsScreen extends StatelessWidget {
     final allianceColor = AppTheme.allianceColor(match.alliance);
 
     // Determine program type: prefer top-level field, fall back to key detection
-    final isFtc = match.programType == 'FTC' ||
+    final isFtc =
+        match.programType == 'FTC' ||
         (match.programType.isEmpty &&
             match.gameData.containsKey('artifacts_auto'));
 
@@ -25,12 +26,13 @@ class MatchDetailsScreen extends StatelessWidget {
           // Large app bar with team info
           SliverAppBar.large(
             expandedHeight: 200,
-            backgroundColor: allianceColor.withValues(alpha: 0.15),
+            backgroundColor: colorScheme.onSurface,
+            foregroundColor: colorScheme.surface,
             flexibleSpace: FlexibleSpaceBar(
               title: Text(
                 "Team ${match.teamNumber}",
                 style: TextStyle(
-                  color: allianceColor,
+                  color: colorScheme.surface,
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -41,36 +43,32 @@ class MatchDetailsScreen extends StatelessWidget {
                     children: [
                       Container(
                         padding: const EdgeInsets.all(AppTheme.spacingMd),
-                        decoration: BoxDecoration(
-                          color: allianceColor.withValues(alpha: 0.2),
-                          shape: BoxShape.circle,
-                        ),
+                        decoration: BoxDecoration(color: allianceColor),
                         child: Text(
                           "M${match.matchNumber}",
                           style: theme.textTheme.headlineLarge?.copyWith(
-                            color: allianceColor,
+                            color: Colors.white,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
                       ),
                       const SizedBox(height: AppTheme.spacingSm),
-                      // Alliance badge with colored background
+                      // Outlined alliance pill
                       Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: AppTheme.spacingSm,
                           vertical: AppTheme.spacingXs,
                         ),
                         decoration: BoxDecoration(
-                          color: allianceColor.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(AppTheme.spacingSm),
                           border: Border.all(
-                            color: allianceColor.withValues(alpha: 0.4),
+                            color: allianceColor,
+                            width: AppTheme.ruleWidth,
                           ),
                         ),
                         child: Text(
                           "${match.alliance} Alliance",
                           style: theme.textTheme.titleMedium?.copyWith(
-                            color: allianceColor,
+                            color: colorScheme.surface,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
@@ -177,7 +175,14 @@ class MatchDetailsScreen extends StatelessWidget {
                 if (match.robotDied) ...[
                   const SizedBox(height: AppTheme.spacingMd),
                   Card(
-                    color: colorScheme.errorContainer,
+                    color: colorScheme.surface,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(AppTheme.cardRadius),
+                      side: BorderSide(
+                        color: colorScheme.error,
+                        width: AppTheme.ruleWidth,
+                      ),
+                    ),
                     child: Padding(
                       padding: const EdgeInsets.all(AppTheme.spacingMd),
                       child: Row(
@@ -187,7 +192,7 @@ class MatchDetailsScreen extends StatelessWidget {
                           Text(
                             "Robot Died / Disabled During Match",
                             style: theme.textTheme.titleSmall?.copyWith(
-                              color: colorScheme.onErrorContainer,
+                              color: colorScheme.error,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
@@ -376,10 +381,7 @@ class _SectionCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             // Alliance-colored accent strip
-            Container(
-              width: 4,
-              color: accentColor,
-            ),
+            Container(width: 4, color: accentColor),
             // Card content
             Expanded(
               child: Padding(
@@ -475,12 +477,22 @@ class _RatingRow extends StatelessWidget {
               final isFilled = index < value;
               return Padding(
                 padding: const EdgeInsets.only(left: 2),
-                child: Icon(
-                  isFilled ? Icons.star : Icons.star_border,
-                  size: 18,
-                  color: isFilled
-                      ? colorScheme.primary
-                      : colorScheme.outlineVariant,
+                child: SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: isFilled
+                          ? colorScheme.onSurface
+                          : Colors.transparent,
+                      border: isFilled
+                          ? null
+                          : Border.all(
+                              color: colorScheme.outline,
+                              width: AppTheme.ruleWidth,
+                            ),
+                    ),
+                  ),
                 ),
               );
             }),
