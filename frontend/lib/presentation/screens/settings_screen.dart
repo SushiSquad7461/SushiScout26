@@ -393,49 +393,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          for (final b in TeamBrands.all) ...[
+          // Gap between tiles rather than after each, so the row leaves no
+          // trailing space now that the placeholder is gone.
+          for (var i = 0; i < TeamBrands.all.length; i++) ...[
+            if (i > 0) const SizedBox(width: AppTheme.spacingSm),
             Expanded(
               child: _BrandTile(
-                brand: b,
-                selected: TeamBrands.byId(currentId).id == b.id,
-                onTap: () =>
-                    ref.read(settingsProvider.notifier).setColorSeed(b.id),
+                brand: TeamBrands.all[i],
+                selected: TeamBrands.byId(currentId).id == TeamBrands.all[i].id,
+                onTap: () => ref
+                    .read(settingsProvider.notifier)
+                    .setColorSeed(TeamBrands.all[i].id),
               ),
             ),
-            const SizedBox(width: AppTheme.spacingSm),
           ],
-          // Placeholder for the next team's identity.
-          Expanded(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                border: Border.all(
-                  color: Theme.of(context).colorScheme.outline,
-                ),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(AppTheme.spacingSm),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.add,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                    const SizedBox(height: AppTheme.spacingXs),
-                    Text(
-                      'add a team',
-                      textAlign: TextAlign.center,
-                      style: AppTheme.label(
-                        BrandScope.of(context),
-                        size: 13,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
         ],
       ),
     );
