@@ -10,6 +10,7 @@ import 'data/repositories/providers.dart';
 import 'presentation/providers/auth_provider.dart';
 import 'presentation/widgets/auth_wrapper.dart';
 import 'presentation/theme/app_theme.dart';
+import 'presentation/theme/team_brand.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -21,11 +22,13 @@ void main() async {
   );
 
   final prefs = await SharedPreferences.getInstance();
-  
+
   final container = ProviderContainer(
     overrides: [
       sharedPreferencesProvider.overrideWithValue(prefs),
-      activeTeamIdProvider.overrideWith((ref) => ref.watch(currentTeamIdProvider)),
+      activeTeamIdProvider.overrideWith(
+        (ref) => ref.watch(currentTeamIdProvider),
+      ),
       firestoreRepositoryProvider.overrideWith((ref) {
         final teamId = ref.watch(activeTeamIdProvider);
         return FirestoreRepository(FirebaseFirestore.instance, teamId: teamId);
@@ -56,15 +59,16 @@ class SushiScoutApp extends ConsumerWidget {
       _ => ThemeMode.system,
     };
 
-    final Color seedColor = AppTheme.getSeedColor(colorSeedStr);
+    final brand = AppTheme.brandFor(colorSeedStr);
 
     return MaterialApp(
       title: 'SushiScout 26',
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.lightTheme(seedColor),
-      darkTheme: AppTheme.darkTheme(seedColor),
+      theme: AppTheme.light(brand),
+      darkTheme: AppTheme.dark(brand),
       themeMode: mode,
       home: const AuthWrapper(),
+      builder: (context, child) => BrandScope(brand: brand, child: child!),
     );
   }
 }

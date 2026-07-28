@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../core/animations.dart';
 import '../theme/app_theme.dart';
+import '../theme/team_brand.dart';
 
 /// Controller for programmatically starting the match timer.
 class MatchTimerController extends ChangeNotifier {
@@ -48,36 +49,20 @@ class _MatchTimerState extends State<MatchTimer> {
   }
 
   /// Whether the timer has been started at least once (not at initial state).
-  bool get _hasStarted =>
-      _isRunning || _secondsRemaining != _totalDuration;
+  bool get _hasStarted => _isRunning || _secondsRemaining != _totalDuration;
 
-  Color _getPhaseColor(ColorScheme colorScheme) {
+  Color _getPhaseColor(TeamBrand brand, ColorScheme colorScheme) {
     switch (_currentPhase) {
       case "AUTO":
-        return colorScheme.tertiary;
+        return brand.accentHighlight; // french
       case "TELEOP":
-        return colorScheme.primary;
+        return colorScheme.onSurface;
       case "ENDGAME":
         return colorScheme.error;
       case "FINISHED":
         return colorScheme.error;
       default:
         return colorScheme.outline;
-    }
-  }
-
-  Color _getPhaseContainerColor(ColorScheme colorScheme) {
-    switch (_currentPhase) {
-      case "AUTO":
-        return colorScheme.tertiaryContainer;
-      case "TELEOP":
-        return colorScheme.primaryContainer;
-      case "ENDGAME":
-        return colorScheme.errorContainer;
-      case "FINISHED":
-        return colorScheme.errorContainer;
-      default:
-        return colorScheme.surfaceContainerHighest;
     }
   }
 
@@ -140,20 +125,25 @@ class _MatchTimerState extends State<MatchTimer> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final phaseColor = _getPhaseColor(colorScheme);
-    final containerColor = _getPhaseContainerColor(colorScheme);
+    final brand = BrandScope.of(context);
+    final phaseColor = _getPhaseColor(brand, colorScheme);
 
     final minutes = _secondsRemaining ~/ 60;
     final seconds = (_secondsRemaining % 60).toString().padLeft(2, '0');
     final progress = 1.0 - (_secondsRemaining / _totalDuration);
-    final timeString = "$minutes:$seconds";
 
     return Container(
       height: 64,
+      // A tinted-down accent over a surface is the one thing the Initiative
+      // rules out — at 50% this was a washed pink / mid-grey ground. The phase
+      // colour reads from the chip fill and the progress bar instead.
       decoration: BoxDecoration(
-        color: containerColor.withValues(alpha: 0.5),
+        color: colorScheme.surface,
         border: Border(
-          bottom: BorderSide(color: colorScheme.outlineVariant, width: 1),
+          bottom: BorderSide(
+            color: colorScheme.outline,
+            width: AppTheme.ruleWidth,
+          ),
         ),
       ),
       child: Column(
@@ -185,8 +175,8 @@ class _MatchTimerState extends State<MatchTimer> {
                     label: _isRunning
                         ? 'Pause match timer'
                         : _secondsRemaining <= 0
-                            ? 'Restart match timer'
-                            : 'Start match timer',
+                        ? 'Restart match timer'
+                        : 'Start match timer',
                     button: true,
                     child: IconButton(
                       onPressed: _toggleTimer,
@@ -225,22 +215,18 @@ class _MatchTimerState extends State<MatchTimer> {
 
                   // Phase label
                   Semantics(
-                    label: 'Current match phase: ${_currentPhase.toLowerCase()}',
+                    label:
+                        'Current match phase: ${_currentPhase.toLowerCase()}',
                     child: Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: AppTheme.spacingSm,
                         vertical: AppTheme.spacingXs,
                       ),
-                      decoration: BoxDecoration(
-                        color: phaseColor.withValues(alpha: 0.15),
-                        borderRadius:
-                            BorderRadius.circular(AppTheme.spacingSm),
-                      ),
+                      decoration: BoxDecoration(color: phaseColor),
                       child: Text(
                         _currentPhase,
                         style: theme.textTheme.labelMedium?.copyWith(
-                          color: phaseColor,
-                          fontWeight: FontWeight.bold,
+                          color: brand.ink,
                           letterSpacing: 1.2,
                         ),
                       ),
@@ -251,25 +237,21 @@ class _MatchTimerState extends State<MatchTimer> {
 
                   // Timer display
                   Semantics(
-                    label: '$minutes minutes and ${_secondsRemaining % 60} seconds remaining',
+                    label:
+                        '$minutes minutes and ${_secondsRemaining % 60} seconds remaining',
                     liveRegion: true,
                     child: Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: AppTheme.spacingMd,
                         vertical: AppTheme.spacingSm,
                       ),
-                      decoration: BoxDecoration(
-                        color: phaseColor.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(
-                          AppTheme.cardRadius,
-                        ),
-                      ),
-                      child: Text(
-                        timeString,
-                        style: theme.textTheme.headlineSmall?.copyWith(
-                          color: phaseColor,
-                          fontWeight: FontWeight.bold,
-                          fontFeatures: const [FontFeature.tabularFigures()],
+                      child: Text.rich(
+                        AppTheme.displayRun(
+                          brand,
+                          ['$minutes', seconds],
+                          separator: ':',
+                          size: 24,
+                          color: colorScheme.onSurface,
                         ),
                       ),
                     ),

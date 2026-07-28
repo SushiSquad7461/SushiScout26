@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../data/models/match_report.dart';
 import '../theme/app_theme.dart';
+import '../theme/team_brand.dart';
+import '../widgets/color_bar.dart';
 
 /// Material 3 styled match details screen with comprehensive data display.
 class MatchDetailsScreen extends StatelessWidget {
@@ -12,10 +14,12 @@ class MatchDetailsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final brand = BrandScope.of(context);
     final allianceColor = AppTheme.allianceColor(match.alliance);
 
     // Determine program type: prefer top-level field, fall back to key detection
-    final isFtc = match.programType == 'FTC' ||
+    final isFtc =
+        match.programType == 'FTC' ||
         (match.programType.isEmpty &&
             match.gameData.containsKey('artifacts_auto'));
 
@@ -25,13 +29,17 @@ class MatchDetailsScreen extends StatelessWidget {
           // Large app bar with team info
           SliverAppBar.large(
             expandedHeight: 200,
-            backgroundColor: allianceColor.withValues(alpha: 0.15),
+            backgroundColor: AppTheme.chrome(brand),
+            foregroundColor: AppTheme.onChrome(brand),
             flexibleSpace: FlexibleSpaceBar(
               title: Text(
                 "Team ${match.teamNumber}",
-                style: TextStyle(
-                  color: allianceColor,
-                  fontWeight: FontWeight.bold,
+                // A bare TextStyle inherits no family — this was rendering in
+                // the default face rather than Sushi Sans.
+                style: AppTheme.display(
+                  brand,
+                  size: 24,
+                  color: AppTheme.onChrome(brand),
                 ),
               ),
               background: SafeArea(
@@ -41,37 +49,31 @@ class MatchDetailsScreen extends StatelessWidget {
                     children: [
                       Container(
                         padding: const EdgeInsets.all(AppTheme.spacingMd),
-                        decoration: BoxDecoration(
-                          color: allianceColor.withValues(alpha: 0.2),
-                          shape: BoxShape.circle,
-                        ),
+                        decoration: BoxDecoration(color: allianceColor),
                         child: Text(
                           "M${match.matchNumber}",
                           style: theme.textTheme.headlineLarge?.copyWith(
-                            color: allianceColor,
-                            fontWeight: FontWeight.bold,
+                            color: brand.paper,
                           ),
                         ),
                       ),
                       const SizedBox(height: AppTheme.spacingSm),
-                      // Alliance badge with colored background
+                      // Outlined alliance pill
                       Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: AppTheme.spacingSm,
                           vertical: AppTheme.spacingXs,
                         ),
                         decoration: BoxDecoration(
-                          color: allianceColor.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(AppTheme.spacingSm),
                           border: Border.all(
-                            color: allianceColor.withValues(alpha: 0.4),
+                            color: allianceColor,
+                            width: AppTheme.ruleWidth,
                           ),
                         ),
                         child: Text(
                           "${match.alliance} Alliance",
                           style: theme.textTheme.titleMedium?.copyWith(
-                            color: allianceColor,
-                            fontWeight: FontWeight.w600,
+                            color: AppTheme.onChrome(brand),
                           ),
                         ),
                       ),
@@ -106,40 +108,26 @@ class MatchDetailsScreen extends StatelessWidget {
                     ),
                   ),
                   const Spacer(),
-                  // Program type chip
+                  // Program type chip — square and outlined from the chip
+                  // theme; an accent tint on a surface is what the Initiative
+                  // rules out, so no container fill here.
                   Chip(
                     avatar: Icon(
                       isFtc ? Icons.precision_manufacturing : Icons.build,
                       size: 16,
-                      color: colorScheme.onSecondaryContainer,
+                      color: colorScheme.onSurface,
                     ),
                     label: Text(isFtc ? "FTC" : "FRC"),
-                    backgroundColor: colorScheme.secondaryContainer.withValues(
-                      alpha: 0.5,
-                    ),
-                    side: BorderSide.none,
                     padding: EdgeInsets.zero,
                     labelPadding: const EdgeInsets.only(
                       right: AppTheme.spacingSm,
                     ),
                   ),
                   const SizedBox(width: AppTheme.spacingXs),
-                  // Synced status chip
+                  // Synced status chip — the arita square carries the state.
                   Chip(
-                    avatar: Icon(
-                      match.isSynced ? Icons.cloud_done : Icons.cloud_off,
-                      size: 16,
-                      color: match.isSynced
-                          ? colorScheme.primary
-                          : colorScheme.onSurfaceVariant,
-                    ),
+                    avatar: SyncSquare(brand: brand, synced: match.isSynced),
                     label: Text(match.isSynced ? "Synced" : "Local"),
-                    backgroundColor: match.isSynced
-                        ? colorScheme.primaryContainer.withValues(alpha: 0.5)
-                        : colorScheme.surfaceContainerHighest.withValues(
-                            alpha: 0.5,
-                          ),
-                    side: BorderSide.none,
                     padding: EdgeInsets.zero,
                     labelPadding: const EdgeInsets.only(
                       right: AppTheme.spacingSm,
@@ -177,7 +165,14 @@ class MatchDetailsScreen extends StatelessWidget {
                 if (match.robotDied) ...[
                   const SizedBox(height: AppTheme.spacingMd),
                   Card(
-                    color: colorScheme.errorContainer,
+                    color: colorScheme.surface,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(AppTheme.cardRadius),
+                      side: BorderSide(
+                        color: colorScheme.error,
+                        width: AppTheme.ruleWidth,
+                      ),
+                    ),
                     child: Padding(
                       padding: const EdgeInsets.all(AppTheme.spacingMd),
                       child: Row(
@@ -187,8 +182,7 @@ class MatchDetailsScreen extends StatelessWidget {
                           Text(
                             "Robot Died / Disabled During Match",
                             style: theme.textTheme.titleSmall?.copyWith(
-                              color: colorScheme.onErrorContainer,
-                              fontWeight: FontWeight.bold,
+                              color: colorScheme.error,
                             ),
                           ),
                         ],
@@ -364,11 +358,11 @@ class _SectionCard extends StatelessWidget {
 
     return Card(
       elevation: 0,
+      // Square, per the Initiative's geometry — a 12dp radius here was
+      // overriding the theme's square cardTheme.
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(
-          color: colorScheme.outlineVariant.withValues(alpha: 0.5),
-        ),
+        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
+        side: BorderSide(color: colorScheme.outline, width: AppTheme.ruleWidth),
       ),
       clipBehavior: Clip.antiAlias,
       child: IntrinsicHeight(
@@ -376,10 +370,7 @@ class _SectionCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             // Alliance-colored accent strip
-            Container(
-              width: 4,
-              color: accentColor,
-            ),
+            Container(width: 4, color: accentColor),
             // Card content
             Expanded(
               child: Padding(
@@ -395,7 +386,6 @@ class _SectionCard extends StatelessWidget {
                           title,
                           style: theme.textTheme.titleMedium?.copyWith(
                             color: colorScheme.primary,
-                            fontWeight: FontWeight.w600,
                           ),
                         ),
                       ],
@@ -435,12 +425,9 @@ class _DataRow extends StatelessWidget {
               color: theme.colorScheme.onSurfaceVariant,
             ),
           ),
-          Text(
-            value,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              fontWeight: FontWeight.w600,
-            ),
-          ),
+          // The label/value distinction comes from colour — the label is
+          // onSurfaceVariant, the value inherits onSurface — so no weight.
+          Text(value, style: theme.textTheme.bodyMedium),
         ],
       ),
     );
@@ -475,12 +462,22 @@ class _RatingRow extends StatelessWidget {
               final isFilled = index < value;
               return Padding(
                 padding: const EdgeInsets.only(left: 2),
-                child: Icon(
-                  isFilled ? Icons.star : Icons.star_border,
-                  size: 18,
-                  color: isFilled
-                      ? colorScheme.primary
-                      : colorScheme.outlineVariant,
+                child: SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: isFilled
+                          ? colorScheme.onSurface
+                          : Colors.transparent,
+                      border: isFilled
+                          ? null
+                          : Border.all(
+                              color: colorScheme.outline,
+                              width: AppTheme.ruleWidth,
+                            ),
+                    ),
+                  ),
                 ),
               );
             }),

@@ -4,32 +4,6 @@ import 'package:frontend/presentation/theme/app_theme.dart';
 
 void main() {
   group('AppTheme', () {
-    group('getSeedColor', () {
-      test('returns salmon for null', () {
-        expect(AppTheme.getSeedColor(null), AppTheme.salmonSeed);
-      });
-
-      test('returns salmon for unknown value', () {
-        expect(AppTheme.getSeedColor('unknown'), AppTheme.salmonSeed);
-      });
-
-      test('returns blue for blue', () {
-        expect(AppTheme.getSeedColor('blue'), AppTheme.blueSeed);
-      });
-
-      test('returns green for green', () {
-        expect(AppTheme.getSeedColor('green'), AppTheme.greenSeed);
-      });
-
-      test('returns purple for purple', () {
-        expect(AppTheme.getSeedColor('purple'), AppTheme.purpleSeed);
-      });
-
-      test('returns orange for orange', () {
-        expect(AppTheme.getSeedColor('orange'), AppTheme.orangeSeed);
-      });
-    });
-
     group('spacing constants', () {
       test('spacing values are properly defined', () {
         expect(AppTheme.spacingXs, 4);
@@ -44,12 +18,12 @@ void main() {
         expect(AppTheme.minTouchTarget, 48);
       });
 
-      test('cardRadius is 16', () {
-        expect(AppTheme.cardRadius, 16);
+      test('cardRadius is 0 (square geometry)', () {
+        expect(AppTheme.cardRadius, 0);
       });
 
-      test('buttonRadius is 12', () {
-        expect(AppTheme.buttonRadius, 12);
+      test('buttonRadius is 0 (square geometry)', () {
+        expect(AppTheme.buttonRadius, 0);
       });
     });
 
@@ -144,21 +118,5 @@ void main() {
       });
     });
 
-    group('seed colors', () {
-      test('salmon seed color is correct', () {
-        expect(AppTheme.salmonSeed, const Color(0xFFFA8072));
-      });
-
-      test('all seed colors are distinct', () {
-        final colors = {
-          AppTheme.salmonSeed,
-          AppTheme.blueSeed,
-          AppTheme.greenSeed,
-          AppTheme.purpleSeed,
-          AppTheme.orangeSeed,
-        };
-        expect(colors.length, 5); // All unique
-      });
-    });
   });
 }
