@@ -252,7 +252,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                               final confirmed = await showDialog<bool>(
                                 context: context,
                                 builder: (context) => AlertDialog(
-                                  title: const Text('Sign Out?'),
+                                  // '?' has no glyph in Sushi Sans and the dialog title
+                          // is the display face, so it would render as a gap.
+                          title: const Text('Sign out'),
                                   content: const Text(
                                     'You will need to sign in again to access your team data.',
                                   ),
@@ -563,7 +565,6 @@ class _MatchCard extends ConsumerWidget {
                             "${match.matchNumber}",
                             style: theme.textTheme.titleMedium?.copyWith(
                               color: colorScheme.surface,
-                              fontWeight: FontWeight.bold,
                             ),
                           ),
                         ),
@@ -582,8 +583,7 @@ class _MatchCard extends ConsumerWidget {
                                 Flexible(
                                   child: Text(
                                     "Q${match.matchNumber} \u2022 Team ${match.teamNumber}",
-                                    style: theme.textTheme.titleMedium
-                                        ?.copyWith(fontWeight: FontWeight.w600),
+                                    style: theme.textTheme.titleMedium,
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
@@ -593,15 +593,11 @@ class _MatchCard extends ConsumerWidget {
                                     horizontal: 6,
                                     vertical: 2,
                                   ),
-                                  decoration: BoxDecoration(
-                                    color: allianceColor,
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
+                                  decoration: BoxDecoration(color: allianceColor),
                                   child: Text(
                                     match.alliance,
                                     style: theme.textTheme.labelSmall?.copyWith(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.w600,
+                                      color: brand.paper,
                                     ),
                                   ),
                                 ),

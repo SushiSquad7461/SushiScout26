@@ -34,9 +34,12 @@ class MatchDetailsScreen extends StatelessWidget {
             flexibleSpace: FlexibleSpaceBar(
               title: Text(
                 "Team ${match.teamNumber}",
-                style: TextStyle(
+                // A bare TextStyle inherits no family — this was rendering in
+                // the default face rather than Sushi Sans.
+                style: AppTheme.display(
+                  brand,
+                  size: 24,
                   color: AppTheme.onChrome(brand),
-                  fontWeight: FontWeight.bold,
                 ),
               ),
               background: SafeArea(
@@ -50,8 +53,7 @@ class MatchDetailsScreen extends StatelessWidget {
                         child: Text(
                           "M${match.matchNumber}",
                           style: theme.textTheme.headlineLarge?.copyWith(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
+                            color: brand.paper,
                           ),
                         ),
                       ),
@@ -72,7 +74,6 @@ class MatchDetailsScreen extends StatelessWidget {
                           "${match.alliance} Alliance",
                           style: theme.textTheme.titleMedium?.copyWith(
                             color: AppTheme.onChrome(brand),
-                            fontWeight: FontWeight.w600,
                           ),
                         ),
                       ),
@@ -182,7 +183,6 @@ class MatchDetailsScreen extends StatelessWidget {
                             "Robot Died / Disabled During Match",
                             style: theme.textTheme.titleSmall?.copyWith(
                               color: colorScheme.error,
-                              fontWeight: FontWeight.bold,
                             ),
                           ),
                         ],
@@ -386,7 +386,6 @@ class _SectionCard extends StatelessWidget {
                           title,
                           style: theme.textTheme.titleMedium?.copyWith(
                             color: colorScheme.primary,
-                            fontWeight: FontWeight.w600,
                           ),
                         ),
                       ],
@@ -426,12 +425,9 @@ class _DataRow extends StatelessWidget {
               color: theme.colorScheme.onSurfaceVariant,
             ),
           ),
-          Text(
-            value,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              fontWeight: FontWeight.w600,
-            ),
-          ),
+          // The label/value distinction comes from colour — the label is
+          // onSurfaceVariant, the value inherits onSurface — so no weight.
+          Text(value, style: theme.textTheme.bodyMedium),
         ],
       ),
     );

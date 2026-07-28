@@ -66,21 +66,6 @@ class _MatchTimerState extends State<MatchTimer> {
     }
   }
 
-  Color _getPhaseContainerColor(ColorScheme colorScheme) {
-    switch (_currentPhase) {
-      case "AUTO":
-        return colorScheme.tertiaryContainer;
-      case "TELEOP":
-        return colorScheme.primaryContainer;
-      case "ENDGAME":
-        return colorScheme.errorContainer;
-      case "FINISHED":
-        return colorScheme.errorContainer;
-      default:
-        return colorScheme.surfaceContainerHighest;
-    }
-  }
-
   @override
   void initState() {
     super.initState();
@@ -142,7 +127,6 @@ class _MatchTimerState extends State<MatchTimer> {
     final colorScheme = theme.colorScheme;
     final brand = BrandScope.of(context);
     final phaseColor = _getPhaseColor(brand, colorScheme);
-    final containerColor = _getPhaseContainerColor(colorScheme);
 
     final minutes = _secondsRemaining ~/ 60;
     final seconds = (_secondsRemaining % 60).toString().padLeft(2, '0');
@@ -150,10 +134,16 @@ class _MatchTimerState extends State<MatchTimer> {
 
     return Container(
       height: 64,
+      // A tinted-down accent over a surface is the one thing the Initiative
+      // rules out — at 50% this was a washed pink / mid-grey ground. The phase
+      // colour reads from the chip fill and the progress bar instead.
       decoration: BoxDecoration(
-        color: containerColor.withValues(alpha: 0.5),
+        color: colorScheme.surface,
         border: Border(
-          bottom: BorderSide(color: colorScheme.outlineVariant, width: 1),
+          bottom: BorderSide(
+            color: colorScheme.outline,
+            width: AppTheme.ruleWidth,
+          ),
         ),
       ),
       child: Column(
@@ -232,15 +222,11 @@ class _MatchTimerState extends State<MatchTimer> {
                         horizontal: AppTheme.spacingSm,
                         vertical: AppTheme.spacingXs,
                       ),
-                      decoration: BoxDecoration(
-                        color: phaseColor,
-                        borderRadius: BorderRadius.circular(AppTheme.spacingSm),
-                      ),
+                      decoration: BoxDecoration(color: phaseColor),
                       child: Text(
                         _currentPhase,
                         style: theme.textTheme.labelMedium?.copyWith(
                           color: brand.ink,
-                          fontWeight: FontWeight.bold,
                           letterSpacing: 1.2,
                         ),
                       ),
@@ -258,11 +244,6 @@ class _MatchTimerState extends State<MatchTimer> {
                       padding: const EdgeInsets.symmetric(
                         horizontal: AppTheme.spacingMd,
                         vertical: AppTheme.spacingSm,
-                      ),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(
-                          AppTheme.cardRadius,
-                        ),
                       ),
                       child: Text.rich(
                         AppTheme.displayRun(
