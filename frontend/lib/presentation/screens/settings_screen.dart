@@ -204,29 +204,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
             const SizedBox(height: AppTheme.spacingMd),
 
-            Text(
-              "Program Type",
-              style: AppTheme.label(
-                brand,
-                size: 14,
-                color: colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: AppTheme.spacingSm),
-            SegmentedButton<String>(
-              segments: const [
-                ButtonSegment(value: 'FRC', label: Text('FRC')),
-                ButtonSegment(value: 'FTC', label: Text('FTC')),
-              ],
-              selected: {
-                ref.watch(settingsProvider)[PrefKeys.programType] ?? 'FRC',
-              },
-              onSelectionChanged: (selection) {
-                ref
-                    .read(settingsProvider.notifier)
-                    .setProgramType(selection.first);
-              },
-            ),
+            _buildProgramTypeSelector(context),
 
             const SizedBox(height: AppTheme.spacingLg),
 
@@ -343,6 +321,105 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  /// Program type: editable only while the event document doesn't exist yet.
+  ///
+  /// `dashboard.dart` lets the event document win over this preference, so an
+  /// always-editable control lies to the scout — pick FTC against an FRC event
+  /// and it reverts on the next Scout Match tap, with no feedback. That is the
+  /// actual bug behind "FTC support doesn't work".
+  ///
+  /// While no document exists, the choice is real: the first saved match creates
+  /// the event from this value (`FirestoreRepository._getOrCreateEvent`, which
+  /// takes the match's `programType` as its fallback). Once the document exists,
+  /// this becomes a read-only statement of what the event *is*.
+  Widget _buildProgramTypeSelector(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final brand = BrandScope.of(context);
+
+    final scoutValue =
+        ref.watch(settingsProvider)[PrefKeys.programType] ?? 'FRC';
+    final eventCode = ref.watch(currentEventCodeProvider);
+
+    // valueOrNull, not `.when`: a spinner here would flash on every open, and
+    // "still loading" and "no document" want the same treatment — editable.
+    final event = ref.watch(currentEventProvider).asData?.value;
+    final locked = event != null;
+    final value = event?.programType ?? scoutValue;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          "Program Type",
+          style: AppTheme.label(
+            brand,
+            size: 14,
+            color: colorScheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: AppTheme.spacingSm),
+
+        if (locked)
+          // A solid block, per the brand's geometry — this is a value, not a
+          // control, and it should not look tappable.
+          Row(
+            children: [
+              ColoredBox(
+                color: colorScheme.onSurface,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppTheme.spacingMd,
+                    vertical: AppTheme.spacingSm + 2,
+                  ),
+                  child: Text(
+                    value,
+                    style: AppTheme.display(
+                      brand,
+                      size: 17,
+                      letterSpacing: 0.1,
+                      color: colorScheme.surface,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: AppTheme.spacingSm),
+              Expanded(
+                child: Text(
+                  'set by event $eventCode',
+                  style: AppTheme.helper(
+                    brand,
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ],
+          )
+        else
+          SegmentedButton<String>(
+            segments: const [
+              ButtonSegment(value: 'FRC', label: Text('FRC')),
+              ButtonSegment(value: 'FTC', label: Text('FTC')),
+            ],
+            selected: {value},
+            onSelectionChanged: (selection) {
+              ref
+                  .read(settingsProvider.notifier)
+                  .setProgramType(selection.first);
+            },
+          ),
+
+        const SizedBox(height: AppTheme.spacingXs),
+        Text(
+          locked
+              ? 'An event is one program. To scout the other, enter a new event code above.'
+              : "No matches yet for $eventCode — the first one you save creates it as $value.",
+          style: AppTheme.helper(brand, color: colorScheme.onSurfaceVariant),
+        ),
+      ],
     );
   }
 
