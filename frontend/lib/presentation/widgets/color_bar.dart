@@ -216,6 +216,11 @@ class BrandSkewField extends StatelessWidget {
                       width: w,
                       height: h,
                       child: Column(
+                        // Same reason as ColorBar above: without stretch the
+                        // cross-axis constraint is loose and a childless
+                        // ColoredBox collapses to zero width, so the slice
+                        // took up its height and painted nothing.
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           for (final c in colors)
                             Expanded(child: ColoredBox(color: c)),
