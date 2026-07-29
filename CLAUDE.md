@@ -12,10 +12,9 @@ There is an in-progress simplification effort. **Before starting any refactor or
 "why is this so complex" work, read
 [`docs/superpowers/specs/2026-07-21-simplification-roadmap.md`](docs/superpowers/specs/2026-07-21-simplification-roadmap.md)** —
 it holds the audit evidence, the requirements already decided with the user, FRC prior-art
-research, and the scope of the remaining steps. Step 1 (team isolation) and Step 2
-(Sheets one-way) are shipped; Step 3 (collapse to a single offline store) is implemented on
-branch `single-offline-store` (reviewed, not yet merged/deployed); Step 4 (schema-driven forms)
-is not started. Step 4 still needs its own brainstorm → spec → plan.
+research, and the scope of the remaining steps. Step 1 (team isolation), Step 2
+(Sheets one-way), and Step 3 (collapse to a single offline store) are shipped on `master`;
+Step 4 (schema-driven forms) is not started and still needs its own brainstorm → spec → plan.
 
 ## Architecture
 
@@ -90,6 +89,12 @@ Subject: imperative mood, no capitalization, no trailing period, max 50 chars.
 - Generated files (`*.g.dart`, `*.mocks.dart`, `*.freezed.dart`) are excluded from `flutter analyze` via `analysis_options.yaml`.
 
 ## Working on this repo with AI (Claude Code)
+
+**Always fetch and pull the latest `master` from GitHub before starting work**
+(`git fetch origin && git pull`, or fetch before branching off it). Architecture
+and docs here move fast — stale state has already caused agents to "fix" things
+against a copy of the repo that no longer matches reality (see the Step 3 roadmap
+note above, which itself went stale this way).
 
 Personal/ephemeral state (`settings.local.json`, ralph logs, `.superpowers/`,
 `.opencode/`) is gitignored — set your own `settings.local.json` permissions.

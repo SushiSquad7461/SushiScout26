@@ -1,5 +1,7 @@
 # SushiScout 26
 
+[![test](https://github.com/SushiSquad7461/SushiScout26/actions/workflows/test.yml/badge.svg)](https://github.com/SushiSquad7461/SushiScout26/actions/workflows/test.yml)
+
 A cross-platform FRC & FTC scouting app built by [SushiSquad 7461](https://github.com/SushiSquad7461). Scouts record match data on any device, even offline, and it syncs automatically to Firestore and Google Sheets for real-time analysis.
 
 ## Features
@@ -22,16 +24,13 @@ A cross-platform FRC & FTC scouting app built by [SushiSquad 7461](https://githu
 │  └─────┬─────┘  └─────┬──────┘  └─────┬──────┘  │
 │        │              │               │          │
 │  ┌─────┴──────────────┴───────────────┴──────┐   │
-│  │          Hybrid Repository                │   │
-│  │   (reads local, queues writes for sync)   │   │
-│  └──────┬─────────────────────────┬──────────┘   │
-│   ┌─────┴─────┐           ┌──────┴───────┐      │
-│   │ Drift DB  │           │  Firestore   │      │
-│   │ (SQLite)  │           │  Repository  │      │
-│   └───────────┘           └──────────────┘      │
-└─────────────────────────────────────────────────┘
-                                    │
-                    ┌───────────────┴───────────────┐
+│  │           Firestore Repository            │   │
+│  │  (single store; Firestore's own on-disk   │   │
+│  │   persistence provides offline support)   │   │
+│  └──────────────────────┬───────────────────┘    │
+└─────────────────────────┼─────────────────────────┘
+                           │
+                    ┌──────┴────────────────────────┐
                     │     Firebase Cloud Functions   │
                     │  ┌────────┐ ┌────────┐ ┌─────┐ │
                     │  │ Sheets │ │Schedule│ │Team │ │
@@ -96,9 +95,8 @@ firebase emulators:exec --only firestore \
 1. **Scout opens the app** and selects their event
 2. **Match schedule loads** from TBA/FIRST Events API (or manual entry)
 3. **Scout fills in the form** — FRC or FTC, selected automatically by event type
-4. **Data saves locally** to SQLite (instant, works offline)
-5. **Background sync** pushes to Firestore when online
-6. **Cloud Function** mirrors data to Google Sheets for analysis
+4. **Data writes to Firestore** — instant even offline, since Firestore queues the write on disk and flushes it when the connection recovers
+5. **Cloud Function** exports the match one-way to the team's Google Sheet for analysis
 
 ### Team System
 
@@ -110,21 +108,19 @@ firebase emulators:exec --only firestore \
 
 ### Offline Support
 
-The app uses an offline-first architecture:
-- **Local SQLite** (via Drift) stores all data immediately
-- **Sync queue** tracks pending changes with retry logic
-- **Firestore** syncs in the background with conflict detection
-- On web, Firestore's built-in offline persistence is used instead
+Firestore is the app's only data store, on every platform:
+- **Firestore's on-disk persistence** (`persistenceEnabled`, unlimited cache size) queues writes durably when the network is unreachable and flushes them when the stream recovers — there is no separate local database or sync queue to keep in sync
+- **Connection status** comes from Firestore snapshot metadata (`isFromCache` / `hasPendingWrites`), not device connectivity — a captive portal can report "connected" while blocking all traffic, so the UI trusts what Firestore actually observed instead
 
 ## Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
-| Frontend | Flutter, Riverpod, Drift (SQLite) |
+| Frontend | Flutter, Riverpod |
 | Auth | Firebase Auth, Google Sign-In |
-| Database | Cloud Firestore, local SQLite |
+| Database | Cloud Firestore (with on-disk offline persistence) |
 | Backend | Python 3.11 Firebase Cloud Functions |
-| Sync | Google Sheets API, The Blue Alliance API |
+| Sync | Google Sheets API, The Blue Alliance API, FIRST Events API |
 | Platforms | Windows, macOS, Linux, Android, iOS, Web |
 
 ## Contributing
