@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:frontend/data/local/preferences.dart';
+import 'package:frontend/data/models/event.dart';
 import 'package:frontend/data/models/team.dart';
 import 'package:frontend/data/repositories/team_repository.dart';
 import 'package:frontend/presentation/providers/auth_provider.dart';
@@ -345,5 +346,80 @@ void main() {
       isNull,
       reason: 'settings screen threw during layout',
     );
+  });
+
+  // Program Type is a property of the EVENT, not the scout: dashboard.dart
+  // overwrites the preference with the event document's programType on every
+  // Scout Match tap. An always-editable SegmentedButton therefore lied — pick
+  // FTC against an FRC event and it silently reverted. The control must only
+  // offer a choice while that choice is still real.
+  group('program type', () {
+    Event frcEvent() => Event(
+      id: 'team1_2026test',
+      name: '2026TEST',
+      programType: 'FRC',
+      tbaKey: '2026test',
+      startDate: DateTime(2026, 1, 1),
+      teamId: 'team1',
+    );
+
+    testWidgets('is a read-only block once the event document exists', (
+      tester,
+    ) async {
+      await growViewport(tester);
+      await tester.pumpWidget(
+        wrap([
+          ...await baseOverrides(),
+          currentEventProvider.overrideWith((ref) async => frcEvent()),
+        ]),
+      );
+      await tester.pumpAndSettle();
+
+      // Only the Appearance selector is left — the program-type one is gone.
+      expect(find.byType(SegmentedButton<String>), findsOneWidget);
+      expect(find.textContaining('set by event'), findsOneWidget);
+      expect(
+        find.textContaining('An event is one program'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('stays editable when no event document exists yet', (
+      tester,
+    ) async {
+      await growViewport(tester);
+      await tester.pumpWidget(
+        wrap([
+          ...await baseOverrides(),
+          currentEventProvider.overrideWith((ref) async => null),
+        ]),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('set by event'), findsNothing);
+      expect(find.textContaining('the first one you save creates it'),
+          findsOneWidget);
+      expect(find.text('FRC'), findsWidgets);
+      expect(find.text('FTC'), findsWidgets);
+    });
+
+    testWidgets('a failed event load leaves the control editable', (
+      tester,
+    ) async {
+      // A wrong lock would strand an offline scout with no way to pick their
+      // program; a wrong unlock only means the document wins, as it does today.
+      await growViewport(tester);
+      await tester.pumpWidget(
+        wrap([
+          ...await baseOverrides(),
+          currentEventProvider.overrideWith(
+            (ref) async => throw Exception('offline'),
+          ),
+        ]),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('set by event'), findsNothing);
+    });
   });
 }

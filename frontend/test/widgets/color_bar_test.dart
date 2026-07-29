@@ -105,6 +105,43 @@ void main() {
     expect(rect.top, lessThan(300), reason: 'rect was $rect');
   });
 
+  // Exactly the ColorBar bug above, in the widget that was dead code until the
+  // 15° cut was wired in: the slice reserved its 56dp and painted nothing,
+  // because a childless ColoredBox collapses to zero WIDTH under the Column's
+  // default (centre) cross-axis constraints. Caught on device, not in review.
+  testWidgets('BrandSkewField paints bands at full width', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.dark(brand),
+        home: const Scaffold(
+          body: Center(child: BrandSkewField(brand: brand, height: 56)),
+        ),
+      ),
+    );
+
+    final bands = find.descendant(
+      of: find.byType(BrandSkewField),
+      matching: find.byType(ColoredBox),
+    );
+    // One background box plus one band per accent.
+    expect(bands, findsNWidgets(brand.accents.length + 1));
+
+    final field = tester.getSize(find.byType(BrandSkewField));
+    expect(field.height, 56);
+
+    // Skip the background box; every band must be oversized so the rotated
+    // field still bleeds past all four edges.
+    for (var i = 1; i <= brand.accents.length; i++) {
+      final s = tester.getSize(bands.at(i));
+      expect(
+        s.width,
+        greaterThanOrEqualTo(field.width),
+        reason: 'band $i painted at width ${s.width}',
+      );
+      expect(s.height, greaterThan(0), reason: 'band $i height ${s.height}');
+    }
+  });
+
   testWidgets('BrandActionBar renders its inline ColorBar', (tester) async {
     await tester.pumpWidget(
       MaterialApp(

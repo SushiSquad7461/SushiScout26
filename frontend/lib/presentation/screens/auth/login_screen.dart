@@ -76,7 +76,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               height: 300,
             ),
           ),
-          ColorBar(brand: brand, thickness: 8),
+          // The 15° cut. The Initiative composes its splash pages as a diagonal
+          // slice rather than a stack of bands, and sign-in is the splash page.
+          // This carries the same four accents as the flat ColorBar it replaces,
+          // so the ownership mark is intact — the guide notes the colour bar
+          // "does not have to be a bar".
+          BrandSkewField(brand: brand, height: 84, background: ink),
 
           Expanded(
             child: Material(

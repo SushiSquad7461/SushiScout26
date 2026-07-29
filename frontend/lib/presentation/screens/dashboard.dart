@@ -416,6 +416,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 width: double.infinity,
                 height: 260,
               ),
+              // The 15° cut. An empty state is a splash-like page, which is
+              // where the Initiative puts the motif — not on the match list
+              // itself, which is a dense data surface.
+              BrandSkewField(
+                brand: brand,
+                height: 56,
+                background: colorScheme.surface,
+              ),
               const SizedBox(height: AppTheme.spacingLg),
               Text(
                 "No matches scouted yet",

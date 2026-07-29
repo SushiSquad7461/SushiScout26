@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'team_brand.dart';
@@ -42,6 +44,24 @@ abstract final class AppTheme {
   /// De-emphasised text on [chrome]. Always the on-ink neutral, since chrome
   /// is ink in both modes.
   static Color mutedOnChrome(TeamBrand brand) => brand.neutralOnInk;
+
+  /// Text or icon colour that reads on an arbitrary [fill].
+  ///
+  /// Derive a label from its own fill rather than hardcoding one, so a phase
+  /// chip can never come out black-on-black or black-on-dark-red.
+  static Color onFill(TeamBrand brand, Color fill) =>
+      fill.computeLuminance() > 0.42 ? brand.ink : brand.paper;
+
+  /// [candidate] if it reads against [background], otherwise [fallback].
+  ///
+  /// For thin lines and icons, where a dark accent on ink disappears: a 4px
+  /// progress line in #c10000 on black is 2.2:1.
+  static Color legibleOn(Color background, Color candidate, Color fallback) {
+    final bg = background.computeLuminance();
+    final fg = candidate.computeLuminance();
+    final ratio = (max(bg, fg) + 0.05) / (min(bg, fg) + 0.05);
+    return ratio >= 3.0 ? candidate : fallback;
+  }
 
   // ---------------------------------------------------------------------------
   // Colour scheme — written, not generated
@@ -186,17 +206,32 @@ abstract final class AppTheme {
         color: color,
       ).copyWith(fontFeatures: const [FontFeature.tabularFigures()]);
 
-  /// Codepoints Sushi Sans declares an advance width for but draws no outline
-  /// for. Measured on canvas at 80px: 0 ink pixels each, against 1327 for "a".
-  /// Flutter will NOT fall back for a glyph that exists-but-is-empty — it draws
-  /// nothing and leaves a gap — so these must never be set in the display face.
+  /// Codepoints Sushi Sans once declared an advance width for but drew no
+  /// outline for. Measured on canvas at 80px: 0 ink pixels each, against 1327
+  /// for "a". Flutter will NOT fall back for a glyph that exists-but-is-empty —
+  /// it draws nothing and leaves a gap.
+  ///
+  /// **No longer a constraint.** The bundled TTF has these codepoints (and 169
+  /// more, including all of Latin-1's accented letters) removed from its `cmap`,
+  /// and an *absent* codepoint falls back normally — which is why `•` (U+2022)
+  /// always rendered: it was never in the cmap. Setting any of these in the
+  /// display face is now safe.
+  ///
+  /// Kept only so the list survives if the font patch is ever reverted, e.g.
+  /// once the glyphs are drawn upstream in `SushiSquad7461/sushi-sans`.
+  @Deprecated('The bundled font no longer maps these; they fall back normally.')
   static const String displayMissingGlyphs = r"""·/-'"+:;,?<>""";
 
   /// Builds a line of display type whose separators are set in the body face.
   ///
-  /// Use for anything that mixes words with punctuation from
-  /// [displayMissingGlyphs] — match titles ("Q28 · Team 254"), a timer
-  /// ("2:03"), a date. [parts] are set in Sushi Sans; [separator] in Mohave.
+  /// Was needed for anything mixing words with punctuation the display face
+  /// couldn't draw — match titles ("Q28 · Team 254"), a timer ("2:03"), a date.
+  /// [parts] are set in Sushi Sans; [separator] in Mohave.
+  ///
+  /// Redundant since the font patch (see [displayMissingGlyphs]): a plain
+  /// `Text` in the display face renders this punctuation correctly now. New
+  /// code shouldn't need it. Kept for one release in case the patch is
+  /// reverted; existing call sites still work.
   ///
   ///     Text.rich(AppTheme.displayRun(
   ///       brand, ['Q${m.matchNumber}', 'Team ${m.teamNumber}'],

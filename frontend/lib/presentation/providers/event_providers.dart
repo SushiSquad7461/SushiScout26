@@ -1,5 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../data/models/event.dart';
 import '../../data/local/preferences.dart';
+import '../../data/repositories/providers.dart';
 import 'auth_provider.dart';
 
 /// Composes the team-scoped event id used for `events` and `matches`.
@@ -26,4 +28,27 @@ final currentEventIdProvider = Provider<String>((ref) {
   final teamId = ref.watch(currentTeamIdProvider);
   final eventCode = ref.watch(currentEventCodeProvider);
   return composeEventId(teamId, eventCode);
+});
+
+/// The event document for the current event id, or `null` when none exists yet.
+///
+/// `programType` is a property of the event, not of the scout: `dashboard.dart`
+/// reads this document on every Scout Match tap and, when it exists, overwrites
+/// the scout's `programType` with the event's. Settings watches this so it can
+/// state that fact rather than offer a control that silently reverts.
+///
+/// Failures resolve to `null` rather than propagating. Offline or
+/// permission-denied means "no event document known", which leaves the control
+/// editable — the safe direction, since a wrong lock would strand a scout with
+/// no way to pick their program.
+final currentEventProvider = FutureProvider<Event?>((ref) async {
+  final eventId = ref.watch(currentEventIdProvider);
+  try {
+    return await ref
+        .read(firestoreRepositoryProvider)
+        .getEvent(eventId)
+        .timeout(const Duration(seconds: 5));
+  } catch (_) {
+    return null;
+  }
 });
