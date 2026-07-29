@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'team_brand.dart';
@@ -42,6 +44,24 @@ abstract final class AppTheme {
   /// De-emphasised text on [chrome]. Always the on-ink neutral, since chrome
   /// is ink in both modes.
   static Color mutedOnChrome(TeamBrand brand) => brand.neutralOnInk;
+
+  /// Text or icon colour that reads on an arbitrary [fill].
+  ///
+  /// Derive a label from its own fill rather than hardcoding one, so a phase
+  /// chip can never come out black-on-black or black-on-dark-red.
+  static Color onFill(TeamBrand brand, Color fill) =>
+      fill.computeLuminance() > 0.42 ? brand.ink : brand.paper;
+
+  /// [candidate] if it reads against [background], otherwise [fallback].
+  ///
+  /// For thin lines and icons, where a dark accent on ink disappears: a 4px
+  /// progress line in #c10000 on black is 2.2:1.
+  static Color legibleOn(Color background, Color candidate, Color fallback) {
+    final bg = background.computeLuminance();
+    final fg = candidate.computeLuminance();
+    final ratio = (max(bg, fg) + 0.05) / (min(bg, fg) + 0.05);
+    return ratio >= 3.0 ? candidate : fallback;
+  }
 
   // ---------------------------------------------------------------------------
   // Colour scheme — written, not generated
