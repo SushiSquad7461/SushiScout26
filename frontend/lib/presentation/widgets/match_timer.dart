@@ -4,23 +4,27 @@ import '../../core/animations.dart';
 import '../theme/app_theme.dart';
 import '../theme/team_brand.dart';
 
-/// Controller for programmatically starting the match timer.
+/// Match timer.
+///
+/// **This widget is mounted as `AppBar(bottom: MatchTimer(...))` by both
+/// scouting forms, so it sits INSIDE the app bar.** The app bar is "chrome" —
+/// ink in both brightnesses (see [AppTheme.chrome]) — so every colour in here
+/// must be read from the chrome pair, never from `colorScheme.surface` /
+/// `onSurface`.
+///
+/// Painting it from the surface pair is what broke light mode: `surface` is
+/// white in light mode, so the timer rendered as a white slab wedged inside the
+/// black app bar, and the phase chip (fill `onSurface` = black, label hardcoded
+/// `brand.ink` = black) came out as an empty black box.
+///
+/// All timer behaviour below — durations, phase thresholds, haptics, the
+/// controller, `onMatchFinished` — is unchanged.
 class MatchTimerController extends ChangeNotifier {
   void start() {
     notifyListeners();
   }
 }
 
-/// Material 3 styled match timer widget.
-///
-/// Features:
-/// - Visual phase indicator (Auto, Teleop, Endgame)
-/// - M3 color tokens for phase colors
-/// - Linear progress indicator
-/// - 48dp minimum touch targets for controls
-/// - Visible reset button when timer is running or paused mid-match
-/// - Haptic feedback on start, pause, and reset
-/// - Semantic labels for accessibility
 class MatchTimer extends StatefulWidget implements PreferredSizeWidget {
   final VoidCallback? onMatchFinished;
   final MatchTimerController? controller;
@@ -51,18 +55,21 @@ class _MatchTimerState extends State<MatchTimer> {
   /// Whether the timer has been started at least once (not at initial state).
   bool get _hasStarted => _isRunning || _secondsRemaining != _totalDuration;
 
-  Color _getPhaseColor(TeamBrand brand, ColorScheme colorScheme) {
+  /// The chip fill for the current phase. Every value here is chosen to sit on
+  /// ink chrome, and the chip's label colour is derived from it by luminance —
+  /// so ENDGAME's dark red gets a white label rather than a black one.
+  Color _phaseFill(TeamBrand brand, ColorScheme colorScheme) {
     switch (_currentPhase) {
       case "AUTO":
         return brand.accentHighlight; // french
       case "TELEOP":
-        return colorScheme.onSurface;
+        return AppTheme.onChrome(brand); // paper, in both brightnesses
       case "ENDGAME":
         return colorScheme.error;
       case "FINISHED":
         return colorScheme.error;
       default:
-        return colorScheme.outline;
+        return AppTheme.mutedOnChrome(brand);
     }
   }
 
@@ -126,7 +133,16 @@ class _MatchTimerState extends State<MatchTimer> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final brand = BrandScope.of(context);
-    final phaseColor = _getPhaseColor(brand, colorScheme);
+
+    // Chrome, not surface — this widget lives inside the app bar.
+    final chrome = AppTheme.chrome(brand);
+    final onChrome = AppTheme.onChrome(brand);
+
+    final phaseFill = _phaseFill(brand, colorScheme);
+    // A thin progress line or a 28dp icon in #c10000 on black is 2.2:1, so the
+    // line and the icon step up to paper when the fill is too dark to read;
+    // the chip keeps the true phase colour.
+    final phaseAccent = AppTheme.legibleOn(chrome, phaseFill, onChrome);
 
     final minutes = _secondsRemaining ~/ 60;
     final seconds = (_secondsRemaining % 60).toString().padLeft(2, '0');
@@ -134,16 +150,10 @@ class _MatchTimerState extends State<MatchTimer> {
 
     return Container(
       height: 64,
-      // A tinted-down accent over a surface is the one thing the Initiative
-      // rules out — at 50% this was a washed pink / mid-grey ground. The phase
-      // colour reads from the chip fill and the progress bar instead.
       decoration: BoxDecoration(
-        color: colorScheme.surface,
+        color: chrome,
         border: Border(
-          bottom: BorderSide(
-            color: colorScheme.outline,
-            width: AppTheme.ruleWidth,
-          ),
+          bottom: BorderSide(color: onChrome, width: AppTheme.ruleWidth),
         ),
       ),
       child: Column(
@@ -156,7 +166,7 @@ class _MatchTimerState extends State<MatchTimer> {
               return LinearProgressIndicator(
                 value: value,
                 backgroundColor: Colors.transparent,
-                valueColor: AlwaysStoppedAnimation<Color>(phaseColor),
+                valueColor: AlwaysStoppedAnimation<Color>(phaseAccent),
                 minHeight: 4,
               );
             },
@@ -187,7 +197,7 @@ class _MatchTimerState extends State<MatchTimer> {
                       ),
                       iconSize: 28,
                       style: IconButton.styleFrom(
-                        foregroundColor: phaseColor,
+                        foregroundColor: phaseAccent,
                         minimumSize: const Size(48, 48),
                       ),
                       tooltip: _isRunning ? "Pause" : "Start",
@@ -204,7 +214,7 @@ class _MatchTimerState extends State<MatchTimer> {
                         icon: const Icon(Icons.replay_rounded),
                         iconSize: 22,
                         style: IconButton.styleFrom(
-                          foregroundColor: colorScheme.onSurfaceVariant,
+                          foregroundColor: AppTheme.mutedOnChrome(brand),
                           minimumSize: const Size(48, 48),
                         ),
                         tooltip: "Reset",
@@ -222,11 +232,13 @@ class _MatchTimerState extends State<MatchTimer> {
                         horizontal: AppTheme.spacingSm,
                         vertical: AppTheme.spacingXs,
                       ),
-                      decoration: BoxDecoration(color: phaseColor),
+                      decoration: BoxDecoration(color: phaseFill),
                       child: Text(
                         _currentPhase,
                         style: theme.textTheme.labelMedium?.copyWith(
-                          color: brand.ink,
+                          // Derived from the fill, so it can never come out
+                          // black-on-black or black-on-dark-red.
+                          color: AppTheme.onFill(brand, phaseFill),
                           letterSpacing: 1.2,
                         ),
                       ),
@@ -245,13 +257,13 @@ class _MatchTimerState extends State<MatchTimer> {
                         horizontal: AppTheme.spacingMd,
                         vertical: AppTheme.spacingSm,
                       ),
-                      child: Text.rich(
-                        AppTheme.displayRun(
+                      child: Text(
+                        '$minutes:$seconds',
+                        style: AppTheme.display(
                           brand,
-                          ['$minutes', seconds],
-                          separator: ':',
                           size: 24,
-                          color: colorScheme.onSurface,
+                          letterSpacing: 0.02,
+                          color: onChrome,
                         ),
                       ),
                     ),
