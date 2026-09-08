@@ -106,7 +106,8 @@ firebase deploy --only hosting
 ```
 
 `hosting.predeploy` in `firebase.json` runs `flutter build web --release` for
-you, so there is no way to ship a stale `build/web`.
+you, so there is no way to ship a stale `build/web`. The CI deploy additionally
+runs `flutter analyze` and the test suite before deploying.
 
 ### One-time CI setup
 

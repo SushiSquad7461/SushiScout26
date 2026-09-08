@@ -17,12 +17,30 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Pinned, and kept in step with test.yml: an unpinned stable channel lets
+      # the tested SDK and the deployed SDK drift apart on the same commit, and
+      # a stable bump that breaks `flutter build web` would break production on
+      # the next unrelated push with nothing in the repo to explain it.
+      #
       # firebase.json's hosting.predeploy hook runs `flutter build web
-      # --release`, so the Flutter SDK has to be on PATH before the deploy
-      # step -- the deploy is what triggers the build, not a separate step.
+      # --release`, so the SDK has to be on PATH before the deploy step -- the
+      # deploy is what triggers the build, not a separate step.
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+          flutter-version: 3.41.4
+          cache: true
+
+      # test.yml runs on the same trigger but as an independent workflow, so it
+      # cannot block this one. Web regressions ship straight to scouts' phones,
+      # so gate the deploy on the suite here rather than deploying in parallel
+      # with the thing that would have caught the breakage.
+      - run: flutter pub get
+        working-directory: frontend
+      - run: flutter analyze --no-fatal-infos
+        working-directory: frontend
+      - run: flutter test
+        working-directory: frontend
 
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:

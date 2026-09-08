@@ -17,6 +17,10 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+          # Keep in step with deploy-web.yml, or the SDK that tested a commit
+          # and the SDK that built its deploy can differ.
+          flutter-version: 3.41.4
+          cache: true
       - run: flutter pub get
       - run: flutter analyze --no-fatal-infos
       - run: flutter test

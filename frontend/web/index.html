@@ -7,16 +7,20 @@
   <meta name="description" content="SushiScout 26 - FRC & FTC Scouting App">
 
   <!-- Without this, iOS Safari lays the page out at 980px and renders the app
-       zoomed out. viewport-fit=cover lets Flutter's SafeArea handle the notch
-       rather than letterboxing the page. -->
-  <meta name="viewport"
-        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+       zoomed out. No maximum-scale/user-scalable: iOS has ignored those since
+       iOS 10, and on Android they'd only take pinch-zoom away from scouts
+       reading dense match tables. No viewport-fit=cover either -- see the
+       status bar note below. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
-  <!-- black-translucent so the ink login page runs under the status bar
-       instead of stopping at an opaque bar in a different black. -->
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <!-- Opaque, NOT black-translucent. Translucent puts page content under the
+       iOS status bar and expects the app to inset it, but Flutter's web engine
+       never plumbs env(safe-area-inset-*) into FlutterView.padding, so every
+       SafeArea in lib/presentation is a no-op on web and the login header and
+       form app bars would render under the clock. -->
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <meta name="apple-mobile-web-app-title" content="SushiScout 26">
   <meta name="theme-color" content="#000000">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">

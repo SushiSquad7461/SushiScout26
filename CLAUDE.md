@@ -82,11 +82,24 @@ Subject: imperative mood, no capitalization, no trailing period, max 50 chars.
   install it from Safari as a PWA instead of paying for an Apple Developer
   account, so web regressions are user-facing. `hosting.predeploy` runs
   `flutter build web --release`, so never point `public` at a hand-built
-  directory or the stale-build footgun comes back.
-- **`index.html` and `flutter_service_worker.js` must stay `no-cache`** (set in
-  `firebase.json` `hosting.headers`). Flutter's web output is not
-  content-hashed; caching the bootstrap or service worker pins scouts to an old
-  build with no way to recover but clearing site data.
+  directory or the stale-build footgun comes back. The deploy job also runs
+  `flutter analyze` and `flutter test` first: `test.yml` shares the trigger but
+  is an independent workflow and cannot block a deploy.
+- **Hosting `headers[].source` matches the REQUEST path, not the file served.**
+  A scout loading `https://…web.app/` requests `/`, which does NOT match a
+  `/index.html` glob — that shipped the app shell with Hosting's default
+  `max-age=3600`. Both `/` and `/index.html` are listed in
+  `firebase.json` `hosting.headers`; keep them together. The `no-cache` list
+  covers the shell plus every unhashed entrypoint (`flutter_bootstrap.js`,
+  `flutter.js`, `main.dart.js`, `flutter_service_worker.js`) because Flutter's
+  web output is not content-hashed, and caching any of them pins scouts to an
+  old build with no way to recover but clearing site data.
+- **There is deliberately no SPA rewrite.** A `"**" -> /index.html` catch-all
+  makes every missing asset a `200` of `text/html`, which a stale service worker
+  will cache in place of JS and hand the scout a blank page. The app has no
+  router (no `go_router`, no named routes, no `setUrlStrategy`), so nothing
+  deep-links and `/` is served by Hosting's directory index anyway. If routing
+  is ever added, the rewrite comes back — and narrowed to extension-less paths.
 - **`frontend/web/` icons are referenced by `index.html` and `manifest.json` and
   must actually exist.** They were missing entirely at first, which 404'd the
   apple-touch-icon and gave iOS home-screen installs a screenshot thumbnail.
