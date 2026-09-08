@@ -76,6 +76,22 @@ Subject: imperative mood, no capitalization, no trailing period, max 50 chars.
 - Firestore composite queries (teamId + eventId + isDeleted + createdAt) may require composite indexes — deploy with `firebase deploy --only firestore:indexes`
 - **`functions/venv` must be Python 3.11**, matching `"runtime": "python311"` in `firebase.json`. The CLI looks for `venv/bin/python3.11` and otherwise fails with `Missing virtual environment at venv directory`. If the system lacks 3.11: `uv python install 3.11 && uv venv functions/venv --python 3.11`. A venv missing `bin/activate` (created when `python3-venv` isn't installed) also fails.
 - **Never run the web app with `flutter run -d web-server`** — in debug it loads all ~1371 DDC modules with zero errors but `main()` waits on a Dart debugger handshake that only the Chrome extension satisfies, so you get a silent blank page. Use `flutter build web --release` + a static server, or `-d chrome`.
+- **Web is a shipping platform, not a dev convenience.** `firebase.json` has a
+  `hosting` block serving `frontend/build/web`, deployed by
+  `.github/workflows/deploy-web.yml` on every push to `master`. iOS scouts
+  install it from Safari as a PWA instead of paying for an Apple Developer
+  account, so web regressions are user-facing. `hosting.predeploy` runs
+  `flutter build web --release`, so never point `public` at a hand-built
+  directory or the stale-build footgun comes back.
+- **`index.html` and `flutter_service_worker.js` must stay `no-cache`** (set in
+  `firebase.json` `hosting.headers`). Flutter's web output is not
+  content-hashed; caching the bootstrap or service worker pins scouts to an old
+  build with no way to recover but clearing site data.
+- **`frontend/web/` icons are referenced by `index.html` and `manifest.json` and
+  must actually exist.** They were missing entirely at first, which 404'd the
+  apple-touch-icon and gave iOS home-screen installs a screenshot thumbnail.
+  They are currently resized copies of the stock Flutter app icon, not a brand
+  mark.
 - **Composite ids must be bound to the team on WRITE, not just trusted on read.** `events` and `matches` create/update rules both require the document's `eventId` to match `^{teamId}_`. Checking only the `teamId` *field* let anyone create `events/{victimTeamId}_{code}` owned by their own team, which permanently locked the victim out of an event id they could no longer read, update, or delete (event codes are public, so future competitions were pre-squattable).
 - **CSV export must neutralize formulas, not just quote fields.** Excel/Sheets/LibreOffice evaluate a leading `= + - @` even inside a quoted field, and scout-supplied `comments`/`scouterName` reach that sink. `ExportService._escapeCsvField` prefixes `'` on those; all CSV must go through it rather than string interpolation. The backend Sheets export is safe for a different reason — `valueInputOption='RAW'` stores values literally — so don't "harmonize" it to `USER_ENTERED`.
 - **Firestore rules: `resource` is null when the doc doesn't exist.** `allow read: if isTeamMember(resource.data.teamId)` throws `Null value error` (=> denied) on a get-or-create path. Guard with `resource == null ? <fallback> : <check>` — this broke the first match written to every new event.

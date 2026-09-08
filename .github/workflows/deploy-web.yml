@@ -1,0 +1,32 @@
+name: deploy-web
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+# A queued deploy should replace an in-flight one rather than race it onto the
+# same live channel.
+concurrency:
+  group: hosting-live
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # firebase.json's hosting.predeploy hook runs `flutter build web
+      # --release`, so the Flutter SDK has to be on PATH before the deploy
+      # step -- the deploy is what triggers the build, not a separate step.
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          projectId: sushiscout26-a8f5d
+          channelId: live
