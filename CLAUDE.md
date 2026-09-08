@@ -76,6 +76,41 @@ Subject: imperative mood, no capitalization, no trailing period, max 50 chars.
 - Firestore composite queries (teamId + eventId + isDeleted + createdAt) may require composite indexes — deploy with `firebase deploy --only firestore:indexes`
 - **`functions/venv` must be Python 3.11**, matching `"runtime": "python311"` in `firebase.json`. The CLI looks for `venv/bin/python3.11` and otherwise fails with `Missing virtual environment at venv directory`. If the system lacks 3.11: `uv python install 3.11 && uv venv functions/venv --python 3.11`. A venv missing `bin/activate` (created when `python3-venv` isn't installed) also fails.
 - **Never run the web app with `flutter run -d web-server`** — in debug it loads all ~1371 DDC modules with zero errors but `main()` waits on a Dart debugger handshake that only the Chrome extension satisfies, so you get a silent blank page. Use `flutter build web --release` + a static server, or `-d chrome`.
+- **Web is a shipping platform, not a dev convenience.** `firebase.json` has a
+  `hosting` block serving `frontend/build/web`, deployed by
+  `.github/workflows/deploy-web.yml` on every push to `master`. iOS scouts
+  install it from Safari as a PWA instead of paying for an Apple Developer
+  account, so web regressions are user-facing. `hosting.predeploy` runs
+  `flutter build web --release`, so never point `public` at a hand-built
+  directory or the stale-build footgun comes back. The deploy job also runs
+  `flutter analyze` and `flutter test` first: `test.yml` shares the trigger but
+  is an independent workflow and cannot block a deploy.
+- **Hosting `headers[].source` matches the REQUEST path, not the file served.**
+  A scout loading `https://…web.app/` requests `/`, which does NOT match a
+  `/index.html` glob — that shipped the app shell with Hosting's default
+  `max-age=3600`. Both `/` and `/index.html` are listed in
+  `firebase.json` `hosting.headers`; keep them together. The `no-cache` list
+  covers the shell plus every unhashed entrypoint (`flutter_bootstrap.js`,
+  `flutter.js`, `main.dart.js`, `flutter_service_worker.js`) because Flutter's
+  web output is not content-hashed, and caching any of them pins scouts to an
+  old build with no way to recover but clearing site data.
+- **There is deliberately no SPA rewrite.** A `"**" -> /index.html` catch-all
+  makes every missing asset a `200` of `text/html`, which a stale service worker
+  will cache in place of JS and hand the scout a blank page. The app has no
+  router (no `go_router`, no named routes, no `setUrlStrategy`), so nothing
+  deep-links and `/` is served by Hosting's directory index anyway. If routing
+  is ever added, the rewrite comes back — and narrowed to extension-less paths.
+- **`frontend/web/` icons are referenced by `index.html` and `manifest.json` and
+  must actually exist.** They were missing entirely at first, which 404'd the
+  apple-touch-icon and gave iOS home-screen installs a screenshot thumbnail.
+  They are rasterized from `assets/mascots/peepo.svg` on the lilac plate
+  `Mascots.plate()` assigns it, with the 1/8 clearance `BrandMascot` enforces --
+  regenerate them from that SVG rather than drawing a new mark. The art sits
+  inside the maskable safe zone, so both entries carry `purpose: "any maskable"`.
+- **Firestore web persistence needs `WebPersistentMultipleTabManager`** (set in
+  `main.dart`). Without it the persistent cache is owned by the first tab that
+  claimed it and every other tab throws `failed-precondition`. The setting is
+  web-only and ignored on other platforms, so it needs no `kIsWeb` guard.
 - **Composite ids must be bound to the team on WRITE, not just trusted on read.** `events` and `matches` create/update rules both require the document's `eventId` to match `^{teamId}_`. Checking only the `teamId` *field* let anyone create `events/{victimTeamId}_{code}` owned by their own team, which permanently locked the victim out of an event id they could no longer read, update, or delete (event codes are public, so future competitions were pre-squattable).
 - **CSV export must neutralize formulas, not just quote fields.** Excel/Sheets/LibreOffice evaluate a leading `= + - @` even inside a quoted field, and scout-supplied `comments`/`scouterName` reach that sink. `ExportService._escapeCsvField` prefixes `'` on those; all CSV must go through it rather than string interpolation. The backend Sheets export is safe for a different reason — `valueInputOption='RAW'` stores values literally — so don't "harmonize" it to `USER_ENTERED`.
 - **Firestore rules: `resource` is null when the doc doesn't exist.** `allow read: if isTeamMember(resource.data.teamId)` throws `Null value error` (=> denied) on a get-or-create path. Guard with `resource == null ? <fallback> : <check>` — this broke the first match written to every new event.
@@ -83,7 +118,7 @@ Subject: imperative mood, no capitalization, no trailing period, max 50 chars.
 
 ## Testing
 
-- Run `flutter test` from `frontend/` for the full Dart suite (currently 367 tests). Repository tests use `fake_cloud_firestore`.
+- Run `flutter test` from `frontend/` for the full Dart suite (currently 371 tests). Repository tests use `fake_cloud_firestore`.
 - Run `./venv/bin/python -m pytest tests/` from `functions/` for the Python suite (currently 117 tests).
 - Firestore rules have an automated isolation suite (37 tests): `firebase emulators:exec --only firestore "cd test/firestore-rules && ./node_modules/.bin/jest --runInBand"` (run from repo root; `npm test` inside `emulators:exec` hits a shell-quoting bug on Linux — call the jest binary directly). Emulator is pinned to port 8099 so it doesn't collide with a local app server on 8080.
 - Generated files (`*.g.dart`, `*.mocks.dart`, `*.freezed.dart`) are excluded from `flutter analyze` via `analysis_options.yaml`.
