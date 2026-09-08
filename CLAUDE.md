@@ -105,7 +105,7 @@ Subject: imperative mood, no capitalization, no trailing period, max 50 chars.
 
 ## Testing
 
-- Run `flutter test` from `frontend/` for the full Dart suite (currently 367 tests). Repository tests use `fake_cloud_firestore`.
+- Run `flutter test` from `frontend/` for the full Dart suite (currently 371 tests). Repository tests use `fake_cloud_firestore`.
 - Run `./venv/bin/python -m pytest tests/` from `functions/` for the Python suite (currently 117 tests).
 - Firestore rules have an automated isolation suite (37 tests): `firebase emulators:exec --only firestore "cd test/firestore-rules && ./node_modules/.bin/jest --runInBand"` (run from repo root; `npm test` inside `emulators:exec` hits a shell-quoting bug on Linux — call the jest binary directly). Emulator is pinned to port 8099 so it doesn't collide with a local app server on 8080.
 - Generated files (`*.g.dart`, `*.mocks.dart`, `*.freezed.dart`) are excluded from `flutter analyze` via `analysis_options.yaml`.

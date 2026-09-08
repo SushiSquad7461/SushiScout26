@@ -128,6 +128,12 @@ Read this before telling scouts to rely on the web build at a competition:
   Spark free tier allows ~360 MB/day of transfer, so about 60 cold loads per
   day. Repeat visits are served from the service worker cache and cost nothing,
   but every deploy invalidates it for all scouts -- avoid deploying mid-event.
+- **Safari evicts site data after 7 days without opening the app.** Firestore's
+  offline cache is IndexedDB, and iOS clears it for sites not visited in a week,
+  so a scout with unsynced matches queued could in principle lose them. Not a
+  practical concern for us -- the app gets opened far more often than weekly
+  during a season -- but worth knowing before anyone treats the local cache as
+  durable storage. Anything that must survive is synced to Firestore.
 
 ## How It Works
 
