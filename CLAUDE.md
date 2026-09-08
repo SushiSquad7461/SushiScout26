@@ -90,8 +90,14 @@ Subject: imperative mood, no capitalization, no trailing period, max 50 chars.
 - **`frontend/web/` icons are referenced by `index.html` and `manifest.json` and
   must actually exist.** They were missing entirely at first, which 404'd the
   apple-touch-icon and gave iOS home-screen installs a screenshot thumbnail.
-  They are currently resized copies of the stock Flutter app icon, not a brand
-  mark.
+  They are rasterized from `assets/mascots/peepo.svg` on the lilac plate
+  `Mascots.plate()` assigns it, with the 1/8 clearance `BrandMascot` enforces --
+  regenerate them from that SVG rather than drawing a new mark. The art sits
+  inside the maskable safe zone, so both entries carry `purpose: "any maskable"`.
+- **Firestore web persistence needs `WebPersistentMultipleTabManager`** (set in
+  `main.dart`). Without it the persistent cache is owned by the first tab that
+  claimed it and every other tab throws `failed-precondition`. The setting is
+  web-only and ignored on other platforms, so it needs no `kIsWeb` guard.
 - **Composite ids must be bound to the team on WRITE, not just trusted on read.** `events` and `matches` create/update rules both require the document's `eventId` to match `^{teamId}_`. Checking only the `teamId` *field* let anyone create `events/{victimTeamId}_{code}` owned by their own team, which permanently locked the victim out of an event id they could no longer read, update, or delete (event codes are public, so future competitions were pre-squattable).
 - **CSV export must neutralize formulas, not just quote fields.** Excel/Sheets/LibreOffice evaluate a leading `= + - @` even inside a quoted field, and scout-supplied `comments`/`scouterName` reach that sink. `ExportService._escapeCsvField` prefixes `'` on those; all CSV must go through it rather than string interpolation. The backend Sheets export is safe for a different reason — `valueInputOption='RAW'` stores values literally — so don't "harmonize" it to `USER_ENTERED`.
 - **Firestore rules: `resource` is null when the doc doesn't exist.** `allow read: if isTeamMember(resource.data.teamId)` throws `Null value error` (=> denied) on a get-or-create path. Guard with `resource == null ? <fallback> : <check>` — this broke the first match written to every new event.

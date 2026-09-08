@@ -120,16 +120,10 @@ firebase init hosting:github
 
 ### iOS PWA caveats
 
-Read these before telling scouts to rely on the web build at a competition:
+Read this before telling scouts to rely on the web build at a competition:
 
-- **Safari evicts all site data after 7 days without opening the app.** Firestore's
-  offline cache is IndexedDB, so a scout who queues matches offline and doesn't
-  reopen the app for a week can lose pending writes. Open the app at least once
-  a week, and always let it finish syncing before closing.
 - **iOS has no background sync.** Queued writes only flush while the app is open
   and in the foreground. Watch the connection indicator clear before closing.
-- **Firestore web persistence is single-tab.** A second browser tab on the same
-  device fails with `failed-precondition`.
 - **First load is roughly 5-6 MB** (CanvasKit + `main.dart.js`, gzipped). The
   Spark free tier allows ~360 MB/day of transfer, so about 60 cold loads per
   day. Repeat visits are served from the service worker cache and cost nothing,

@@ -19,6 +19,11 @@ void main() async {
   FirebaseFirestore.instance.settings = const Settings(
     persistenceEnabled: true,
     cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
+    // Web only (ignored elsewhere): without a multi-tab manager the persistent
+    // cache is owned by whichever tab claimed it first, and every other tab
+    // fails with `failed-precondition`. Scouts on the web build open the app in
+    // a second tab often enough that single-tab is a real outage.
+    webPersistentTabManager: WebPersistentMultipleTabManager(),
   );
 
   final prefs = await SharedPreferences.getInstance();
