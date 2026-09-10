@@ -89,11 +89,17 @@ Subject: imperative mood, no capitalization, no trailing period, max 50 chars.
   A scout loading `https://…web.app/` requests `/`, which does NOT match a
   `/index.html` glob — that shipped the app shell with Hosting's default
   `max-age=3600`. Both `/` and `/index.html` are listed in
-  `firebase.json` `hosting.headers`; keep them together. The `no-cache` list
-  covers the shell plus every unhashed entrypoint (`flutter_bootstrap.js`,
-  `flutter.js`, `main.dart.js`, `flutter_service_worker.js`) because Flutter's
-  web output is not content-hashed, and caching any of them pins scouts to an
-  old build with no way to recover but clearing site data.
+  `firebase.json` `hosting.headers`; keep them together.
+- **Flutter 3.41's `flutter_service_worker.js` is an 815-byte stub that
+  unregisters itself** — it precaches NOTHING, and `flutter build web` no longer
+  has a `--pwa-strategy` flag to change that. So the browser HTTP cache is the
+  only thing that lets the app open when venue wifi drops. The shell
+  (`/`, `/index.html`, `flutter_bootstrap.js`, `flutter.js`, `main.dart.js`)
+  is therefore `max-age=300, must-revalidate`, NOT `no-store`: `no-store` both
+  guarantees a blank page offline and re-downloads 1.27 MB of `main.dart.js` on
+  every single load. Five minutes of staleness is the price of that grace
+  period. Real offline launch needs a hand-written service worker — see the
+  README; the bootstrap fights one, so it is not a drop-in.
 - **There is deliberately no SPA rewrite.** A `"**" -> /index.html` catch-all
   makes every missing asset a `200` of `text/html`, which a stale service worker
   will cache in place of JS and hand the scout a blank page. The app has no

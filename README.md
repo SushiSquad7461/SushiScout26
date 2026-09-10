@@ -125,10 +125,19 @@ Read this before telling scouts to rely on the web build at a competition:
 
 - **iOS has no background sync.** Queued writes only flush while the app is open
   and in the foreground. Watch the connection indicator clear before closing.
-- **First load is roughly 5-6 MB** (CanvasKit + `main.dart.js`, gzipped). The
-  Spark free tier allows ~360 MB/day of transfer, so about 60 cold loads per
-  day. Repeat visits are served from the service worker cache and cost nothing,
-  but every deploy invalidates it for all scouts -- avoid deploying mid-event.
+- **A cold load transfers 3.6 MB** (`main.dart.js` 1.27 MB + `canvaskit.wasm`
+  2.12 MB + fonts/assets, all gzipped); a repeat load inside the cache window is
+  free. The project is on Blaze, so the 360 MB/day Hosting allowance is a free
+  tier and not a cap -- overage bills at $0.15/GB. A realistic competition day
+  (15 scouts, 20 loads each) is ~390 MB, i.e. under a cent. Cost is not a risk.
+- **There is no offline app shell.** Flutter 3.41 ships a service worker that
+  only unregisters itself, and the build has no `--pwa-strategy` flag to change
+  it, so nothing precaches the app. The shell is served `max-age=300`, which
+  means a scout whose wifi drops can reopen the app for about five minutes and
+  no longer. Firestore still holds their data offline -- this is only about
+  whether the app itself will *start*. Fixing it properly needs a hand-written
+  service worker, and Flutter's bootstrap actively clobbers one (it registers
+  its stub over any existing registration), so it is not a drop-in change.
 - **Safari evicts site data after 7 days without opening the app.** Firestore's
   offline cache is IndexedDB, and iOS clears it for sites not visited in a week,
   so a scout with unsynced matches queued could in principle lose them. Not a
