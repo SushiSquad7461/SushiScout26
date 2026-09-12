@@ -101,7 +101,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           Align(
                             alignment: Alignment.centerLeft,
                             child: Text(
-                              'SushiScout 26',
+                              'sushiscout 26',
                               style: AppTheme.display(
                                 brand,
                                 size: 46,
@@ -115,7 +115,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           Align(
                             alignment: Alignment.centerLeft,
                             child: Text(
-                              'FRC & FTC Scouting · ${brand.name}',
+                              'FRC + FTC scouting · ${brand.name}',
                               style: AppTheme.helper(
                                 brand,
                                 size: 17,
@@ -284,7 +284,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                           const Text('Signing in...'),
                                         ],
                                       )
-                                    : const Text('Sign in with Google'),
+                                    : const Text('sign in with google'),
                               ),
                             ),
                           ],
@@ -293,8 +293,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
                           Text(
                             _isDesktop
-                                ? 'First time? Sign in on mobile/web with Google first'
-                                : 'Sign in required for team-based data',
+                                ? 'first time? sign in on mobile/web with google first'
+                                : 'sign-in is required for team data',
                             style: AppTheme.helper(
                               brand,
                               color: brand.neutralOnInk,

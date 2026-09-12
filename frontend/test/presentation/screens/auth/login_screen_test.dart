@@ -19,7 +19,7 @@ void main() {
         ),
       );
 
-      expect(find.textContaining('Google'), findsOneWidget);
+      expect(find.textContaining('google'), findsOneWidget);
       debugDefaultTargetPlatformOverride = null;
     });
 

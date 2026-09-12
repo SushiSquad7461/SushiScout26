@@ -8,9 +8,11 @@ import '../../data/models/match_report.dart';
 import '../../data/repositories/providers.dart';
 import '../widgets/scouting_form_widget.dart';
 import '../widgets/match_timer.dart';
+import '../widgets/color_bar.dart';
 import '../widgets/counter_card.dart';
 import '../../data/local/preferences.dart';
 import '../theme/app_theme.dart';
+import '../theme/team_brand.dart';
 import '../../core/animations.dart';
 import '../../data/services/schedule_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart' show FirebaseFirestore;
@@ -198,7 +200,20 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm>
       child: Scaffold(
         appBar: AppBar(
           title: Text(widget.event.name),
-          bottom: MatchTimer(controller: _timerController),
+          // Brand band sits between the app bar and the timer, as in the
+          // design — the scout screen was the one screen missing it.
+          bottom: PreferredSize(
+            preferredSize: const Size.fromHeight(
+              64 + AppTheme.colorBarThickness,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ColorBar(brand: BrandScope.of(context)),
+                MatchTimer(controller: _timerController),
+              ],
+            ),
+          ),
         ),
         body: SafeArea(
           child: Form(
@@ -208,11 +223,11 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm>
               physics: const NeverScrollableScrollPhysics(),
               onPageChanged: (idx) => setState(() => _currentPage = idx),
               children: [
-                _buildPage("Setup", _buildSetup(context)),
-                _buildPage("Autonomous", _buildAuto(context)),
-                _buildPage("Teleop", _buildTeleop(context)),
-                _buildPage("Endgame", _buildEndgame(context)),
-                _buildPage("Review & Submit", _buildReview(context)),
+                _buildPage("setup", _buildSetup(context)),
+                _buildPage("autonomous", _buildAuto(context)),
+                _buildPage("teleop", _buildTeleop(context)),
+                _buildPage("endgame", _buildEndgame(context)),
+                _buildPage("review & submit", _buildReview(context)),
               ],
             ),
           ),
@@ -241,7 +256,7 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm>
             TextButton.icon(
               onPressed: _prevPage,
               icon: const Icon(Icons.arrow_back_rounded),
-              label: const Text("Back"),
+              label: const Text("back"),
             )
           else
             const SizedBox(width: 100),
@@ -254,22 +269,31 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm>
           const Spacer(),
 
           // Next/Submit button
-          FilledButton.icon(
+          // Label then chevron, per the design's "next ›" — FilledButton.icon
+          // puts the icon first, which read as "← next".
+          FilledButton(
             onPressed: _submitting ? null : _nextPage,
-            icon: _submitting
-                ? const SizedBox(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(_currentPage == 4
+                    ? (_submitting ? "saving…" : "submit")
+                    : "next"),
+                const SizedBox(width: AppTheme.spacingSm),
+                if (_submitting)
+                  const SizedBox(
                     width: 18,
                     height: 18,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : Icon(
+                else
+                  Icon(
                     _currentPage == 4
                         ? Icons.check_rounded
                         : Icons.arrow_forward_rounded,
                   ),
-            label: Text(_currentPage == 4
-                ? (_submitting ? "Saving..." : "Submit")
-                : "Next"),
+              ],
+            ),
           ),
         ],
       ),
@@ -288,13 +312,16 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm>
           margin: const EdgeInsets.symmetric(horizontal: 3),
           width: isActive ? 24 : 8,
           height: 8,
+          // Square, per the design's indicator — the Initiative's geometry
+          // is rectangles, and these were the one rounded element left.
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(4),
             color: isActive
                 ? colorScheme.primary
                 : isPast
                 ? colorScheme.primary.withValues(alpha: 0.5)
-                : colorScheme.surfaceContainerHighest,
+                // surfaceContainerHighest is ~(64,64,64) on this near-black
+                // bar — the upcoming dots were invisible at 1.5:1.
+                : colorScheme.outline,
           ),
         );
       }),
@@ -328,7 +355,7 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm>
         TextFormField(
           controller: _scouterNameCtrl,
           decoration: const InputDecoration(
-            labelText: "Scouter Name",
+            labelText: "scouter name",
             prefixIcon: Icon(Icons.person_outline),
             border: OutlineInputBorder(),
           ),
@@ -339,7 +366,7 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm>
         const SizedBox(height: AppTheme.spacingMd),
         OutlinedButton.icon(
           icon: const Icon(Icons.calendar_month_rounded),
-          label: const Text('Load Schedule'),
+          label: const Text('load schedule'),
           onPressed: _loadSchedule,
         ),
         const SizedBox(height: AppTheme.spacingMd),
@@ -351,7 +378,7 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm>
                 controller: _matchNumberCtrl,
                 keyboardType: TextInputType.number,
                 decoration: const InputDecoration(
-                  labelText: "Match #",
+                  labelText: "match #",
                   prefixIcon: Icon(Icons.tag),
                   border: OutlineInputBorder(),
                 ),
@@ -367,7 +394,7 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm>
                 controller: _teamNumberCtrl,
                 keyboardType: TextInputType.number,
                 decoration: const InputDecoration(
-                  labelText: "Team #",
+                  labelText: "team #",
                   prefixIcon: Icon(Icons.groups_outlined),
                   border: OutlineInputBorder(),
                 ),
@@ -383,7 +410,7 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm>
         const SizedBox(height: AppTheme.spacingLg),
 
         Text(
-          "Alliance",
+          "alliance",
           style: Theme.of(
             context,
           ).textTheme.labelLarge?.copyWith(color: colorScheme.onSurfaceVariant),
@@ -394,12 +421,12 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm>
           segments: const [
             ButtonSegment(
               value: 'Red',
-              label: Text('Red Alliance'),
+              label: Text('red alliance'),
               icon: Icon(Icons.shield, color: AppTheme.allianceRed),
             ),
             ButtonSegment(
               value: 'Blue',
-              label: Text('Blue Alliance'),
+              label: Text('blue alliance'),
               icon: Icon(Icons.shield, color: AppTheme.allianceBlue),
             ),
           ],

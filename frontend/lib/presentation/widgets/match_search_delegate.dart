@@ -83,7 +83,7 @@ class MatchSearchDelegate extends SearchDelegate<MatchReport?> {
             ),
           ),
           title: Text("Team ${match.teamNumber}"),
-          subtitle: Text("Scouted by ${match.scouterName}"),
+          subtitle: Text("scouted by ${match.scouterName}"),
           trailing: const Icon(Icons.chevron_right),
           onTap: () {
             close(context, null); // Close search

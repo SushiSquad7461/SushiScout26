@@ -5,8 +5,8 @@ import 'package:frontend/presentation/theme/team_brand.dart';
 import 'package:frontend/presentation/widgets/color_bar.dart';
 
 /// Diagnostic probe: is the colour bar actually painting at a non-zero size
-/// inside BrandEventBar and BrandActionBar? Both render a ColorBar in code but
-/// neither showed one on device.
+/// where it is mounted? It is rendered in code in an app bar's `bottom` and in
+/// BrandActionBar, and neither showed one on device.
 void main() {
   const brand = TeamBrands.fallback;
 
@@ -50,7 +50,7 @@ void main() {
     }
   });
 
-  testWidgets('BrandEventBar renders a ColorBar with non-zero size', (
+  testWidgets('a ColorBar in an AppBar bottom has non-zero size', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -58,8 +58,11 @@ void main() {
         theme: AppTheme.dark(brand),
         home: Scaffold(
           appBar: AppBar(
-            title: const Text('SushiScout 26'),
-            bottom: const BrandEventBar(brand: brand, eventCode: '2026test'),
+            title: const Text('sushiscout 26'),
+            bottom: const PreferredSize(
+              preferredSize: Size.fromHeight(AppTheme.colorBarThickness),
+              child: ColorBar(brand: brand),
+            ),
           ),
         ),
       ),
@@ -70,7 +73,7 @@ void main() {
     expect(size.width, greaterThan(0), reason: 'width was ${size.width}');
   });
 
-  testWidgets('SliverAppBar.medium (as dashboard uses it) shows the ColorBar', (
+  testWidgets('SliverAppBar (as dashboard uses it) shows the ColorBar', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -79,11 +82,12 @@ void main() {
         home: Scaffold(
           body: CustomScrollView(
             slivers: [
-              SliverAppBar.medium(
-                title: const Text('SushiScout 26'),
-                bottom: const BrandEventBar(
-                  brand: brand,
-                  eventCode: '2026test',
+              const SliverAppBar(
+                pinned: true,
+                title: Text('sushiscout 26'),
+                bottom: PreferredSize(
+                  preferredSize: Size.fromHeight(AppTheme.colorBarThickness),
+                  child: ColorBar(brand: brand),
                 ),
               ),
               const SliverToBoxAdapter(child: SizedBox(height: 2000)),

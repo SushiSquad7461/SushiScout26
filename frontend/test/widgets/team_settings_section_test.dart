@@ -111,7 +111,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.textContaining('ABC123'), findsOneWidget);
-    expect(find.widgetWithText(TextButton, 'Regenerate'), findsOneWidget);
+    expect(find.widgetWithText(TextButton, 'regenerate'), findsOneWidget);
   });
 
   testWidgets('Regenerate is hidden for a non-admin member', (tester) async {
@@ -124,7 +124,7 @@ void main() {
 
     // Active team teamB -> role 'member' -> not admin.
     expect(find.textContaining('ABC123'), findsOneWidget);
-    expect(find.widgetWithText(TextButton, 'Regenerate'), findsNothing);
+    expect(find.widgetWithText(TextButton, 'regenerate'), findsNothing);
   });
 
   testWidgets('tapping a non-active team switches the active team',
@@ -162,8 +162,8 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.enterText(
-        find.widgetWithText(TextField, 'Invite code'), 'JOINME');
-    await tester.tap(find.widgetWithText(FilledButton, 'Join'));
+        find.widgetWithText(TextField, 'invite code'), 'JOINME');
+    await tester.tap(find.widgetWithText(FilledButton, 'join'));
     await tester.pumpAndSettle();
 
     verify(mockTeamRepository.joinTeamByCode(
@@ -187,8 +187,8 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.enterText(
-        find.widgetWithText(TextField, 'Invite code'), 'NOPE');
-    await tester.tap(find.widgetWithText(FilledButton, 'Join'));
+        find.widgetWithText(TextField, 'invite code'), 'NOPE');
+    await tester.tap(find.widgetWithText(FilledButton, 'join'));
     await tester.pumpAndSettle();
 
     expect(find.textContaining('invalid code'), findsOneWidget);
@@ -225,8 +225,8 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.enterText(
-        find.widgetWithText(TextField, 'New team number'), 'Sushi Robotics');
-    await tester.tap(find.widgetWithText(OutlinedButton, 'Create'));
+        find.widgetWithText(TextField, 'new team number'), 'Sushi Robotics');
+    await tester.tap(find.widgetWithText(OutlinedButton, 'create'));
     await tester.pumpAndSettle();
 
     expect(find.text('Team number must be 1-5 digits'), findsOneWidget);
@@ -255,8 +255,8 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.enterText(
-        find.widgetWithText(TextField, 'New team number'), '254');
-    await tester.tap(find.widgetWithText(OutlinedButton, 'Create'));
+        find.widgetWithText(TextField, 'new team number'), '254');
+    await tester.tap(find.widgetWithText(OutlinedButton, 'create'));
     await tester.pumpAndSettle();
 
     expect(find.text('Team number must be 1-5 digits'), findsNothing);

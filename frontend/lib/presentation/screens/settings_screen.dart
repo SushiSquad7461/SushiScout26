@@ -151,7 +151,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     return Scaffold(
       appBar: BrandAppBar(
         brand: brand,
-        title: 'Settings',
+        title: 'settings',
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.pop(context),
@@ -160,7 +160,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       ),
       bottomNavigationBar: BrandActionBar(
         brand: brand,
-        label: 'Done',
+        label: 'done',
         onPressed: () => Navigator.pop(context),
       ),
       body: SingleChildScrollView(
@@ -174,14 +174,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Profile section
-            BrandSectionLabel(brand: brand, text: "Profile"),
+            BrandSectionLabel(brand: brand, text: "profile"),
             const SizedBox(height: AppTheme.spacingMd),
 
             TextField(
               controller: _scouterNameCtrl,
               decoration: const InputDecoration(
-                labelText: "Your Name",
-                prefixIcon: Icon(Icons.person_outline),
+                labelText: "your name",
               ),
               onChanged: (val) =>
                   ref.read(settingsProvider.notifier).setScouterName(val),
@@ -194,8 +193,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               autovalidateMode: AutovalidateMode.onUserInteraction,
               validator: FormValidators.eventCode,
               decoration: const InputDecoration(
-                labelText: "Event Code",
-                prefixIcon: Icon(Icons.event_outlined),
+                labelText: "event code",
                 helperText: "e.g., 2026casj",
               ),
               onChanged: (val) =>
@@ -209,7 +207,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             const SizedBox(height: AppTheme.spacingLg),
 
             // Appearance section
-            BrandSectionLabel(brand: brand, text: "Appearance"),
+            BrandSectionLabel(brand: brand, text: "appearance"),
             const SizedBox(height: AppTheme.spacingMd),
 
             _buildThemeSelector(context),
@@ -217,7 +215,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             const SizedBox(height: AppTheme.spacingMd),
 
             Text(
-              "Team Brand",
+              "team brand",
               style: AppTheme.label(
                 brand,
                 size: 14,
@@ -234,7 +232,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
             if (ref.watch(isTeamAdminProvider)) ...[
               const SizedBox(height: AppTheme.spacingXl),
-              BrandSectionLabel(brand: brand, text: "Sheets export"),
+              BrandSectionLabel(brand: brand, text: "sheets export"),
               const SizedBox(height: AppTheme.spacingSm),
               Row(
                 children: [
@@ -274,7 +272,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               TextField(
                 controller: _sheetCtrl,
                 decoration: const InputDecoration(
-                  labelText: "Google Sheet link or id",
+                  labelText: "google sheet link or id",
                 ),
               ),
               // Rendered outside the field's InputDecoration on purpose:
@@ -302,7 +300,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 children: [
                   FilledButton(
                     onPressed: _saving ? null : _saveSheet,
-                    child: Text(_saving ? "Saving…" : "Save"),
+                    child: Text(_saving ? "saving…" : "save"),
                   ),
                   OutlinedButton(
                     onPressed:
@@ -310,7 +308,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         ? null
                         : _backfillEvent,
                     child: Text(
-                      _backfilling ? "Backfilling…" : "Backfill this event",
+                      _backfilling ? "backfilling…" : "backfill this event",
                     ),
                   ),
                 ],
@@ -354,7 +352,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          "Program Type",
+          "program type",
           style: AppTheme.label(
             brand,
             size: 14,
@@ -428,22 +426,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         ref.watch(settingsProvider)[PrefKeys.themeMode] ?? 'system';
 
     return SegmentedButton<String>(
+      // The design's selected segment is a plain ink fill; Material's default
+      // check glyph is not in it.
+      showSelectedIcon: false,
       segments: const [
-        ButtonSegment(
-          value: 'system',
-          icon: Icon(Icons.brightness_auto),
-          label: Text('Auto'),
-        ),
-        ButtonSegment(
-          value: 'light',
-          icon: Icon(Icons.light_mode_outlined),
-          label: Text('Light'),
-        ),
-        ButtonSegment(
-          value: 'dark',
-          icon: Icon(Icons.dark_mode_outlined),
-          label: Text('Dark'),
-        ),
+        ButtonSegment(value: 'system', label: Text('auto')),
+        ButtonSegment(value: 'light', label: Text('light')),
+        ButtonSegment(value: 'dark', label: Text('dark')),
       ],
       selected: {currentTheme},
       onSelectionChanged: (selection) {
