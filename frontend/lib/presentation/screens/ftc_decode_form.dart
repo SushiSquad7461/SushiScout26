@@ -35,7 +35,7 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm>
   final PageController _pageController = PageController();
   final MatchTimerController _timerController = MatchTimerController();
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
-  
+
   int _currentPage = 0;
   bool _submitting = false;
 
@@ -85,14 +85,17 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm>
     if (eventCode.isEmpty) return;
 
     try {
-      await ref.read(scheduleServiceProvider).fetchSchedule(
-        eventCode: eventCode,
-        programType: programType,
-      );
+      await ref
+          .read(scheduleServiceProvider)
+          .fetchSchedule(eventCode: eventCode, programType: programType);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not fetch schedule. Enter match details manually.')),
+          const SnackBar(
+            content: Text(
+              'Could not fetch schedule. Enter match details manually.',
+            ),
+          ),
         );
       }
       return;
@@ -113,7 +116,11 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm>
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not load schedule. Enter match details manually.')),
+          const SnackBar(
+            content: Text(
+              'Could not load schedule. Enter match details manually.',
+            ),
+          ),
         );
       }
       return;
@@ -123,7 +130,9 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm>
 
     if (scheduleMatches.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No schedule found. Enter match details manually.')),
+        const SnackBar(
+          content: Text('No schedule found. Enter match details manually.'),
+        ),
       );
       return;
     }
@@ -139,15 +148,19 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm>
           final teams = m['teams'] as List<dynamic>?;
           String subtitle = '';
           if (alliances != null) {
-            final red = (alliances['red']?['team_keys'] as List?)?.join(', ') ?? '';
-            final blue = (alliances['blue']?['team_keys'] as List?)?.join(', ') ?? '';
+            final red =
+                (alliances['red']?['team_keys'] as List?)?.join(', ') ?? '';
+            final blue =
+                (alliances['blue']?['team_keys'] as List?)?.join(', ') ?? '';
             subtitle = 'Red: $red | Blue: $blue';
           } else if (teams != null) {
             subtitle = teams.map((t) => '${t['teamNumber']}').join(', ');
           }
           return ListTile(
             title: Text('Match $matchNum'),
-            subtitle: subtitle.isNotEmpty ? Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis) : null,
+            subtitle: subtitle.isNotEmpty
+                ? Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis)
+                : null,
             onTap: () {
               _matchNumberCtrl.text = '$matchNum';
               Navigator.pop(ctx);
@@ -195,7 +208,9 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm>
       child: Scaffold(
         appBar: AppBar(
           title: Text(widget.event.name),
-          bottom: MatchTimer(controller: _timerController),
+          // Brand band sits between the app bar and the timer, as in the
+          // design — the scout screen was the one screen missing it.
+          bottom: ScoutingFormBrandBand(timerController: _timerController),
         ),
         body: SafeArea(
           child: Form(
@@ -205,11 +220,11 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm>
               physics: const NeverScrollableScrollPhysics(),
               onPageChanged: (idx) => setState(() => _currentPage = idx),
               children: [
-                _buildPage("Setup", _buildSetup(context)),
-                _buildPage("Autonomous", _buildAuto(context)),
-                _buildPage("Teleop", _buildTeleop(context)),
-                _buildPage("Endgame", _buildEndgame(context)),
-                _buildPage("Review & Submit", _buildReview(context)),
+                _buildPage("setup", _buildSetup(context)),
+                _buildPage("autonomous", _buildAuto(context)),
+                _buildPage("teleop", _buildTeleop(context)),
+                _buildPage("endgame", _buildEndgame(context)),
+                _buildPage("review & submit", _buildReview(context)),
               ],
             ),
           ),
@@ -237,7 +252,7 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm>
             TextButton.icon(
               onPressed: _prevPage,
               icon: const Icon(Icons.arrow_back_rounded),
-              label: const Text("Back"),
+              label: const Text("back"),
             )
           else
             const SizedBox(width: 100),
@@ -248,22 +263,12 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm>
 
           const Spacer(),
 
-          FilledButton.icon(
-            onPressed: _submitting ? null : _nextPage,
-            icon: _submitting
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : Icon(
-                    _currentPage == 4
-                        ? Icons.check_rounded
-                        : Icons.arrow_forward_rounded,
-                  ),
-            label: Text(_currentPage == 4
-                ? (_submitting ? "Saving..." : "Submit")
-                : "Next"),
+          // Label then chevron, per the design's "next ›" — FilledButton.icon
+          // puts the icon first, which read as "← next".
+          ScoutingWizardNextButton(
+            isLastPage: _currentPage == 4,
+            submitting: _submitting,
+            onPressed: _nextPage,
           ),
         ],
       ),
@@ -271,27 +276,10 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm>
   }
 
   Widget _buildPageIndicator(ColorScheme colorScheme) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: List.generate(5, (index) {
-        final isActive = _currentPage == index;
-        final isPast = index < _currentPage;
-
-        return AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          margin: const EdgeInsets.symmetric(horizontal: 3),
-          width: isActive ? 24 : 8,
-          height: 8,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(4),
-            color: isActive
-                ? colorScheme.primary
-                : isPast
-                ? colorScheme.primary.withValues(alpha: 0.5)
-                : colorScheme.surfaceContainerHighest,
-          ),
-        );
-      }),
+    return ScoutingWizardPageIndicator(
+      colorScheme: colorScheme,
+      currentPage: _currentPage,
+      pageCount: 5,
     );
   }
 
@@ -322,7 +310,7 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm>
         TextFormField(
           controller: _scouterNameCtrl,
           decoration: const InputDecoration(
-            labelText: "Scouter Name",
+            labelText: "scouter name",
             prefixIcon: Icon(Icons.person_outline),
             border: OutlineInputBorder(),
           ),
@@ -333,7 +321,7 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm>
         const SizedBox(height: AppTheme.spacingMd),
         OutlinedButton.icon(
           icon: const Icon(Icons.calendar_month_rounded),
-          label: const Text('Load Schedule'),
+          label: const Text('load schedule'),
           onPressed: _loadSchedule,
         ),
         const SizedBox(height: AppTheme.spacingMd),
@@ -345,7 +333,7 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm>
                 controller: _matchNumberCtrl,
                 keyboardType: TextInputType.number,
                 decoration: const InputDecoration(
-                  labelText: "Match #",
+                  labelText: "match #",
                   prefixIcon: Icon(Icons.tag),
                   border: OutlineInputBorder(),
                 ),
@@ -361,7 +349,7 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm>
                 controller: _teamNumberCtrl,
                 keyboardType: TextInputType.number,
                 decoration: const InputDecoration(
-                  labelText: "Team #",
+                  labelText: "team #",
                   prefixIcon: Icon(Icons.groups_outlined),
                   border: OutlineInputBorder(),
                 ),
@@ -377,7 +365,7 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm>
         const SizedBox(height: AppTheme.spacingLg),
 
         Text(
-          "Alliance",
+          "alliance",
           style: Theme.of(
             context,
           ).textTheme.labelLarge?.copyWith(color: colorScheme.onSurfaceVariant),
@@ -388,12 +376,12 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm>
           segments: const [
             ButtonSegment(
               value: 'Red',
-              label: Text('Red Alliance'),
+              label: Text('red alliance'),
               icon: Icon(Icons.shield, color: AppTheme.allianceRed),
             ),
             ButtonSegment(
               value: 'Blue',
-              label: Text('Blue Alliance'),
+              label: Text('blue alliance'),
               icon: Icon(Icons.shield, color: AppTheme.allianceBlue),
             ),
           ],
@@ -736,7 +724,9 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm>
     );
 
     try {
-      await ref.read(firestoreRepositoryProvider).createMatch(widget.eventId, report);
+      await ref
+          .read(firestoreRepositoryProvider)
+          .createMatch(widget.eventId, report);
       if (mounted) {
         ScaffoldMessenger.of(
           context,
@@ -745,15 +735,21 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm>
       }
     } on AppError catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(e.message), backgroundColor: Theme.of(context).colorScheme.error));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.message),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text("Error saving: $e"), backgroundColor: Theme.of(context).colorScheme.error));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Error saving: $e"),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => _submitting = false);

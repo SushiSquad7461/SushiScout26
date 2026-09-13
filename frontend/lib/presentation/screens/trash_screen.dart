@@ -314,7 +314,7 @@ class _TrashCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        "Scouted by ${match.scouterName}",
+                        "scouted by ${match.scouterName}",
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: colorScheme.onSurfaceVariant,
                         ),

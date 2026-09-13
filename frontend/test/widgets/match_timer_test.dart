@@ -36,7 +36,7 @@ void main() {
     testWidgets('displays PRE-MATCH phase initially', (tester) async {
       await tester.pumpWidget(buildTestWidget());
 
-      expect(find.text('PRE-MATCH'), findsOneWidget);
+      expect(find.text('pre-match'), findsOneWidget);
     });
 
     testWidgets('shows play button initially', (tester) async {
@@ -82,7 +82,7 @@ void main() {
       await tester.tap(find.byIcon(Icons.play_arrow_rounded));
       await tester.pump();
 
-      expect(find.text('AUTO'), findsOneWidget);
+      expect(find.text('auto'), findsOneWidget);
     });
 
     testWidgets('has proper preferred size', (tester) async {

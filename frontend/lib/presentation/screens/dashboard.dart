@@ -36,6 +36,33 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     ).push(MaterialPageRoute(builder: (_) => const SettingsScreen()));
   }
 
+  Future<void> _confirmAndSignOut(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        // '?' has no glyph in Sushi Sans and the dialog title
+        // is the display face, so it would render as a gap.
+        title: const Text('sign out'),
+        content: const Text(
+          'You will need to sign in again to access your team data.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('sign out'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      await ref.read(authProvider.notifier).signOut();
+    }
+  }
+
   Future<void> _showExportOptions(BuildContext context, WidgetRef ref) async {
     final matches =
         ref.read(matchesViewProvider).value?.matches ?? const <MatchReport>[];
@@ -57,7 +84,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           children: [
             ListTile(
               leading: const Icon(Icons.table_chart),
-              title: const Text("Export as CSV"),
+              title: const Text("export as csv"),
               onTap: () {
                 Navigator.pop(context);
                 _exportCsv(context, ref);
@@ -65,7 +92,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             ),
             ListTile(
               leading: const Icon(Icons.grid_on),
-              title: const Text("Export as Excel"),
+              title: const Text("export as excel"),
               onTap: () {
                 Navigator.pop(context);
                 _exportExcel(matches);
@@ -73,7 +100,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             ),
             ListTile(
               leading: const Icon(Icons.picture_as_pdf),
-              title: const Text("Export as PDF"),
+              title: const Text("export as pdf"),
               onTap: () {
                 Navigator.pop(context);
                 _exportPdf(matches);
@@ -160,6 +187,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   Widget build(BuildContext context) {
     final settings = ref.watch(settingsProvider);
     final eventCode = settings[PrefKeys.eventCode] ?? "Unknown Event";
+    final brand = BrandScope.of(context);
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final matchesAsync = ref.watch(matchesViewProvider);
@@ -177,42 +205,47 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               child: CustomScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 slivers: [
-                  // M3 Large App Bar with collapsing behavior
-                  SliverAppBar.medium(
-                    title: const Text("SushiScout 26"),
+                  // Slim ink bar: mascot + wordmark, then only the two
+                  // actions the design carries — the status circle and the
+                  // menu. Search and export moved into the menu rather than
+                  // being dropped.
+                  SliverAppBar(
+                    pinned: true,
+                    backgroundColor: AppTheme.chrome(brand),
+                    foregroundColor: AppTheme.onChrome(brand),
+                    titleSpacing: 0,
+                    leading: Center(
+                      child: BrandMascot(
+                        name: Mascots.nori,
+                        size: 30,
+                        color: AppTheme.onChrome(brand),
+                      ),
+                    ),
+                    title: const Text("sushiscout 26"),
                     actions: [
-                      // Sync status indicator
-                      const Padding(
-                        padding: EdgeInsets.only(right: 8),
-                        child: Center(
-                          child: ConnectionStatusChip(compact: true),
-                        ),
-                      ),
-                      // Search button
-                      IconButton(
-                        icon: const Icon(Icons.search),
-                        tooltip: "Search Matches",
-                        onPressed: () {
-                          final matches =
-                              ref.read(matchesViewProvider).value?.matches ??
-                              const <MatchReport>[];
-                          showSearch(
-                            context: context,
-                            delegate: MatchSearchDelegate(matches),
-                          );
-                        },
-                      ),
-                      // Export button
-                      IconButton(
-                        icon: const Icon(Icons.download_rounded),
-                        tooltip: "Export",
-                        onPressed: () => _showExportOptions(context, ref),
-                      ),
+                      // No status chip here: EventSyncRow below the band now
+                      // carries the synced/pending count persistently, and the
+                      // chip rendered nothing at all on the happy path.
                       // More options menu
                       PopupMenuButton<String>(
-                        icon: const Icon(Icons.more_vert),
+                        icon: const Icon(Icons.menu),
                         onSelected: (value) async {
                           switch (value) {
+                            case 'search':
+                              final matches =
+                                  ref
+                                      .read(matchesViewProvider)
+                                      .value
+                                      ?.matches ??
+                                  const <MatchReport>[];
+                              showSearch(
+                                context: context,
+                                delegate: MatchSearchDelegate(matches),
+                              );
+                              break;
+                            case 'export':
+                              _showExportOptions(context, ref);
+                              break;
                             case 'trash':
                               Navigator.of(context).push(
                                 MaterialPageRoute(
@@ -224,41 +257,35 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                               _openSettings(context);
                               break;
                             case 'sign_out':
-                              final confirmed = await showDialog<bool>(
-                                context: context,
-                                builder: (context) => AlertDialog(
-                                  // '?' has no glyph in Sushi Sans and the dialog title
-                          // is the display face, so it would render as a gap.
-                          title: const Text('Sign out'),
-                                  content: const Text(
-                                    'You will need to sign in again to access your team data.',
-                                  ),
-                                  actions: [
-                                    TextButton(
-                                      onPressed: () =>
-                                          Navigator.of(context).pop(false),
-                                      child: const Text('Cancel'),
-                                    ),
-                                    FilledButton(
-                                      onPressed: () =>
-                                          Navigator.of(context).pop(true),
-                                      child: const Text('Sign Out'),
-                                    ),
-                                  ],
-                                ),
-                              );
-                              if (confirmed == true) {
-                                await ref.read(authProvider.notifier).signOut();
-                              }
+                              await _confirmAndSignOut(context, ref);
                               break;
                           }
                         },
                         itemBuilder: (context) => [
                           const PopupMenuItem(
+                            value: 'search',
+                            child: ListTile(
+                              leading: Icon(Icons.search),
+                              title: Text("search matches"),
+                              contentPadding: EdgeInsets.zero,
+                              visualDensity: VisualDensity.compact,
+                            ),
+                          ),
+                          const PopupMenuItem(
+                            value: 'export',
+                            child: ListTile(
+                              leading: Icon(Icons.download_rounded),
+                              title: Text("export"),
+                              contentPadding: EdgeInsets.zero,
+                              visualDensity: VisualDensity.compact,
+                            ),
+                          ),
+                          const PopupMenuDivider(),
+                          const PopupMenuItem(
                             value: 'trash',
                             child: ListTile(
                               leading: Icon(Icons.auto_delete_outlined),
-                              title: Text("Trash"),
+                              title: Text("trash"),
                               contentPadding: EdgeInsets.zero,
                               visualDensity: VisualDensity.compact,
                             ),
@@ -267,7 +294,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                             value: 'settings',
                             child: ListTile(
                               leading: Icon(Icons.settings_outlined),
-                              title: Text("Settings"),
+                              title: Text("settings"),
                               contentPadding: EdgeInsets.zero,
                               visualDensity: VisualDensity.compact,
                             ),
@@ -277,7 +304,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                             value: 'sign_out',
                             child: ListTile(
                               leading: Icon(Icons.logout),
-                              title: Text("Sign Out"),
+                              title: Text("sign out"),
                               contentPadding: EdgeInsets.zero,
                               visualDensity: VisualDensity.compact,
                             ),
@@ -285,10 +312,18 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         ],
                       ),
                     ],
-                    bottom: BrandEventBar(
-                      brand: BrandScope.of(context),
-                      eventCode: eventCode,
+                    // Band immediately under the ink bar; the event row sits
+                    // BELOW it on paper, not above it on chrome.
+                    bottom: PreferredSize(
+                      preferredSize: const Size.fromHeight(
+                        AppTheme.colorBarThickness,
+                      ),
+                      child: ColorBar(brand: brand),
                     ),
+                  ),
+
+                  SliverToBoxAdapter(
+                    child: EventSyncRow(brand: brand, eventCode: eventCode),
                   ),
 
                   // Match list
@@ -332,7 +367,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       ),
       bottomNavigationBar: BrandActionBar(
         brand: BrandScope.of(context),
-        label: 'Scout Match',
+        label: 'scout match',
         onPressed: () async {
           try {
             AppHaptics.medium();
@@ -426,14 +461,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               ),
               const SizedBox(height: AppTheme.spacingLg),
               Text(
-                "No matches scouted yet",
+                "no matches yet",
                 style: theme.textTheme.titleLarge?.copyWith(
                   color: colorScheme.onSurface,
                 ),
               ),
               const SizedBox(height: AppTheme.spacingSm),
               Text(
-                "Tap the button below to scout your first match",
+                "scout your first match and it lands here, synced to the team.",
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: colorScheme.onSurfaceVariant,
                 ),
@@ -488,12 +523,12 @@ class _MatchCard extends ConsumerWidget {
     String summary = "";
     if (match.gameData.containsKey('auto_fuel')) {
       summary =
-          "Auto: ${match.gameData['auto_fuel']} | Tele: ${match.gameData['teleop_fuel']}";
+          "auto ${match.gameData['auto_fuel']} · tele ${match.gameData['teleop_fuel']}";
     } else if (match.gameData.containsKey('artifacts_auto')) {
       summary =
-          "Auto: ${match.gameData['artifacts_auto']} | Tele: ${match.gameData['artifacts_teleop']}";
+          "auto ${match.gameData['artifacts_auto']} · tele ${match.gameData['artifacts_teleop']}";
     } else {
-      summary = "No data recorded";
+      summary = "no data recorded";
     }
 
     final allianceColor = AppTheme.allianceColor(match.alliance);
@@ -537,8 +572,12 @@ class _MatchCard extends ConsumerWidget {
                       Container(
                         width: 48,
                         height: 48,
+                        // An ink plate with paper digits in BOTH brightnesses.
+                        // colorScheme.onSurface inverted this to a white slab
+                        // on dark; the design keeps it black either way, so in
+                        // dark it reads as a bare numeral on the card.
                         decoration: BoxDecoration(
-                          color: colorScheme.onSurface,
+                          color: AppTheme.chrome(brand),
                           borderRadius: BorderRadius.circular(
                             AppTheme.buttonRadius,
                           ),
@@ -547,7 +586,7 @@ class _MatchCard extends ConsumerWidget {
                           child: Text(
                             "${match.matchNumber}",
                             style: theme.textTheme.titleMedium?.copyWith(
-                              color: colorScheme.surface,
+                              color: AppTheme.onChrome(brand),
                             ),
                           ),
                         ),
@@ -561,30 +600,12 @@ class _MatchCard extends ConsumerWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Row(
-                              children: [
-                                Flexible(
-                                  child: Text(
-                                    "Q${match.matchNumber} \u2022 Team ${match.teamNumber}",
-                                    style: theme.textTheme.titleMedium,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                                const SizedBox(width: AppTheme.spacingSm),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 6,
-                                    vertical: 2,
-                                  ),
-                                  decoration: BoxDecoration(color: allianceColor),
-                                  child: Text(
-                                    match.alliance,
-                                    style: theme.textTheme.labelSmall?.copyWith(
-                                      color: brand.paper,
-                                    ),
-                                  ),
-                                ),
-                              ],
+                            // Alliance is carried by the coloured left rail
+                            // alone \u2014 the design has no separate chip here.
+                            Text(
+                              "q${match.matchNumber} \u2022 team ${match.teamNumber}",
+                              style: theme.textTheme.titleMedium,
+                              overflow: TextOverflow.ellipsis,
                             ),
                             const SizedBox(height: 2),
                             Text(
@@ -597,7 +618,7 @@ class _MatchCard extends ConsumerWidget {
                             if (match.scouterName.isNotEmpty) ...[
                               const SizedBox(height: 2),
                               Text(
-                                "Scouted by ${match.scouterName}",
+                                "scouted by ${match.scouterName}",
                                 style: theme.textTheme.bodySmall?.copyWith(
                                   color: colorScheme.onSurfaceVariant
                                       .withValues(alpha: 0.7),
@@ -654,7 +675,7 @@ class _MatchCard extends ConsumerWidget {
             const Divider(height: 1),
             ListTile(
               leading: Icon(Icons.info_outline, color: colorScheme.primary),
-              title: const Text("View Details"),
+              title: const Text("view details"),
               onTap: () {
                 AppHaptics.selection();
                 Navigator.pop(sheetContext);

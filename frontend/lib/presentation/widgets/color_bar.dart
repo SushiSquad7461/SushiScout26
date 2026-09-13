@@ -238,61 +238,6 @@ class BrandSkewField extends StatelessWidget {
   }
 }
 
-/// The event bar that goes in `SliverAppBar.medium`'s `bottom:` slot.
-///
-/// IMPORTANT: the dashboard's app bar is a *sliver* with collapsing behaviour,
-/// and it carries the connection chip, search, export and the overflow menu.
-/// Do NOT replace it with [BrandAppBar] — that would delete all four. Instead
-/// keep the `SliverAppBar.medium` exactly as it is and swap only its `bottom:`
-/// for this, which puts the event code in brand type and hangs the colour bar
-/// off the bottom edge of the bar.
-class BrandEventBar extends StatelessWidget implements PreferredSizeWidget {
-  final TeamBrand brand;
-  final String eventCode;
-
-  const BrandEventBar({
-    super.key,
-    required this.brand,
-    required this.eventCode,
-  });
-
-  @override
-  Size get preferredSize =>
-      const Size.fromHeight(40 + AppTheme.colorBarThickness);
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        SizedBox(
-          height: 40,
-          width: double.infinity,
-          child: Padding(
-            padding: const EdgeInsets.only(
-              left: AppTheme.spacingMd,
-              right: AppTheme.spacingMd,
-              bottom: AppTheme.spacingSm,
-            ),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                eventCode,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                // Sits inside the app bar, so it reads against chrome — not
-                // against the surface (which made it white-on-white in dark).
-                style: AppTheme.label(brand, color: AppTheme.onChrome(brand)),
-              ),
-            ),
-          ),
-        ),
-        ColorBar(brand: brand),
-      ],
-    );
-  }
-}
-
 /// The full-width action bar that replaces the floating action button.
 ///
 /// A 66dp ink bar spanning the screen is a bigger, faster target than a FAB
@@ -339,64 +284,64 @@ class BrandActionBar extends StatelessWidget {
         child: SizedBox(
           height: 66,
           child: Row(
-          children: [
-            if (secondaryLabel != null)
-              InkWell(
-                onTap: onSecondary,
-                child: Container(
-                  width: 116,
-                  height: 66,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    border: Border(
-                      top: BorderSide(
-                        color: AppTheme.mutedOnChrome(brand),
-                        width: AppTheme.ruleWidth,
-                      ),
-                      right: BorderSide(
-                        color: AppTheme.mutedOnChrome(brand),
-                        width: AppTheme.ruleWidth,
-                      ),
-                    ),
-                  ),
-                  child: Text(
-                    secondaryLabel!,
-                    style: AppTheme.display(
-                      brand,
-                      size: 17,
-                      letterSpacing: 0.1,
-                      color: AppTheme.mutedOnChrome(brand),
-                    ),
-                  ),
-                ),
-              ),
-            Expanded(
-              child: Material(
-                color: barColor,
-                child: InkWell(
-                  onTap: onPressed,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        label,
-                        style: AppTheme.display(
-                          brand,
-                          size: 21,
-                          letterSpacing: 0.1,
-                          color: AppTheme.onChrome(brand),
+            children: [
+              if (secondaryLabel != null)
+                InkWell(
+                  onTap: onSecondary,
+                  child: Container(
+                    width: 116,
+                    height: 66,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      border: Border(
+                        top: BorderSide(
+                          color: AppTheme.mutedOnChrome(brand),
+                          width: AppTheme.ruleWidth,
+                        ),
+                        right: BorderSide(
+                          color: AppTheme.mutedOnChrome(brand),
+                          width: AppTheme.ruleWidth,
                         ),
                       ),
-                      if (showColorBar) ...[
-                        const SizedBox(width: 14),
-                        ColorBar(brand: brand, thickness: 7, extent: 44),
+                    ),
+                    child: Text(
+                      secondaryLabel!,
+                      style: AppTheme.display(
+                        brand,
+                        size: 17,
+                        letterSpacing: 0.1,
+                        color: AppTheme.mutedOnChrome(brand),
+                      ),
+                    ),
+                  ),
+                ),
+              Expanded(
+                child: Material(
+                  color: barColor,
+                  child: InkWell(
+                    onTap: onPressed,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          label,
+                          style: AppTheme.display(
+                            brand,
+                            size: 21,
+                            letterSpacing: 0.1,
+                            color: AppTheme.onChrome(brand),
+                          ),
+                        ),
+                        if (showColorBar) ...[
+                          const SizedBox(width: 14),
+                          ColorBar(brand: brand, thickness: 7, extent: 44),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
           ),
         ),
       ),

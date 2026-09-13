@@ -3,6 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/repositories/firestore_repository.dart';
 import '../../data/repositories/providers.dart';
 import '../providers/event_providers.dart';
+import '../../data/models/match_report.dart';
+import '../theme/app_theme.dart';
+import '../theme/team_brand.dart';
+import 'color_bar.dart';
 
 /// What the app can honestly say about its connection.
 ///
@@ -101,8 +105,8 @@ class ConnectionStatusBar extends ConsumerWidget {
                 status.hasError
                     ? Icons.sync_problem
                     : status.isOffline
-                        ? Icons.cloud_off
-                        : Icons.cloud_upload,
+                    ? Icons.cloud_off
+                    : Icons.cloud_upload,
                 size: 18,
                 color: foreground,
               ),
@@ -110,10 +114,9 @@ class ConnectionStatusBar extends ConsumerWidget {
               Expanded(
                 child: Text(
                   status.message,
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodySmall
-                      ?.copyWith(color: foreground),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(color: foreground),
                 ),
               ),
             ],
@@ -124,59 +127,68 @@ class ConnectionStatusBar extends ConsumerWidget {
   }
 }
 
-/// A compact indicator for the app bar. Shows nothing when fully synced.
-class ConnectionStatusChip extends ConsumerWidget {
-  final bool compact;
+/// The event row that sits under the brand band on the dashboard: the active
+/// event code on the left, a running "N synced · M pending" on the right.
+///
+/// This is the design's persistent counter, and it is deliberately NOT the
+/// same thing as [ConnectionStatusBar] — that bar is a transient alert that
+/// hides itself on the happy path, so with everything uploaded the scout saw
+/// no confirmation at all that their reports had landed.
+class EventSyncRow extends ConsumerWidget {
+  final TeamBrand brand;
+  final String eventCode;
 
-  const ConnectionStatusChip({super.key, this.compact = false});
+  const EventSyncRow({super.key, required this.brand, required this.eventCode});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final view = ref.watch(matchesViewProvider);
+    // Reuse connectionStatusProvider's count (and its error state) instead of
+    // re-filtering the match list here — a stream failure must show as a
+    // failure, not as a stale "N synced" carried over from the last good
+    // snapshot.
     final status = ref.watch(connectionStatusProvider);
-    if (status.isFullySynced) return const SizedBox.shrink();
+    final matches = view.value?.matches ?? const <MatchReport>[];
+    final pending = status.pendingCount;
+    final synced = matches.length - pending;
+    final countLabel = status.hasError
+        ? "can't reach server"
+        : (pending == 0
+              ? '$synced synced'
+              : '$synced synced · $pending pending');
 
-    final colorScheme = Theme.of(context).colorScheme;
-    final color = (status.isOffline || status.hasError)
-        ? colorScheme.error
-        : colorScheme.primary;
-    final icon = status.hasError
-        ? Icons.sync_problem
-        : status.isOffline
-            ? Icons.cloud_off
-            : Icons.cloud_upload;
-
-    if (compact) {
-      return Tooltip(
-        message: status.message,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 18, color: color),
-            if (status.pendingCount > 0) ...[
-              const SizedBox(width: 4),
-              Text(
-                '${status.pendingCount}',
-                style: Theme.of(context)
-                    .textTheme
-                    .labelSmall
-                    ?.copyWith(color: color),
-              ),
-            ],
-          ],
-        ),
-      );
-    }
-
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: 18, color: color),
-        const SizedBox(width: 8),
-        Text(
-          status.message,
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: color),
-        ),
-      ],
+    return Container(
+      width: double.infinity,
+      color: colorScheme.surface,
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppTheme.spacingMd,
+        vertical: AppTheme.spacingSm,
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              eventCode,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTheme.label(brand, color: colorScheme.onSurface),
+            ),
+          ),
+          const SizedBox(width: AppTheme.spacingSm),
+          SyncSquare(brand: brand, synced: !status.hasError && pending == 0),
+          const SizedBox(width: AppTheme.spacingXs),
+          Text(
+            countLabel,
+            style: AppTheme.helper(
+              brand,
+              size: 13,
+              color: colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

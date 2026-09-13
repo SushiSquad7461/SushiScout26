@@ -99,7 +99,7 @@ void main() {
     await tester.pumpWidget(wrap(await baseOverrides()));
     await tester.pumpAndSettle();
 
-    expect(find.text('Sheets export'), findsOneWidget);
+    expect(find.text('sheets export'), findsOneWidget);
   });
 
   testWidgets('hides the Sheets export section for a non-admin member', (
@@ -109,7 +109,7 @@ void main() {
     await tester.pumpWidget(wrap(await baseOverrides(isAdmin: false)));
     await tester.pumpAndSettle();
 
-    expect(find.text('Sheets export'), findsNothing);
+    expect(find.text('sheets export'), findsNothing);
   });
 
   testWidgets(
@@ -136,10 +136,10 @@ void main() {
       await tester.pumpAndSettle();
 
       await tester.enterText(
-        find.widgetWithText(TextField, 'Google Sheet link or id'),
+        find.widgetWithText(TextField, 'google sheet link or id'),
         'https://docs.google.com/spreadsheets/d/abc123',
       );
-      await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+      await tester.tap(find.widgetWithText(FilledButton, 'save'));
       await tester.pumpAndSettle();
 
       expect(
@@ -182,10 +182,10 @@ void main() {
       await tester.pumpAndSettle();
 
       await tester.enterText(
-        find.widgetWithText(TextField, 'Google Sheet link or id'),
+        find.widgetWithText(TextField, 'google sheet link or id'),
         'https://docs.google.com/spreadsheets/d/abc123',
       );
-      await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+      await tester.tap(find.widgetWithText(FilledButton, 'save'));
       await tester.pumpAndSettle();
 
       final errorFinder = find.widgetWithText(
@@ -197,7 +197,7 @@ void main() {
       expect(selectable.maxLines, isNull);
 
       final textField = tester.widget<TextField>(
-        find.widgetWithText(TextField, 'Google Sheet link or id'),
+        find.widgetWithText(TextField, 'google sheet link or id'),
       );
       expect(textField.decoration?.errorText, isNull);
     },
@@ -232,10 +232,10 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.enterText(
-      find.widgetWithText(TextField, 'Google Sheet link or id'),
+      find.widgetWithText(TextField, 'google sheet link or id'),
       'abc123',
     );
-    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.tap(find.widgetWithText(FilledButton, 'save'));
     await tester.pumpAndSettle();
 
     expect(find.text('Connected'), findsOneWidget);
@@ -254,7 +254,7 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.tap(
-      find.widgetWithText(OutlinedButton, 'Backfill this event'),
+      find.widgetWithText(OutlinedButton, 'backfill this event'),
     );
     await tester.pumpAndSettle();
 
@@ -274,7 +274,7 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.tap(
-      find.widgetWithText(OutlinedButton, 'Backfill this event'),
+      find.widgetWithText(OutlinedButton, 'backfill this event'),
     );
     await tester.pumpAndSettle();
 
@@ -289,7 +289,7 @@ void main() {
     await tester.pumpAndSettle();
 
     final button = tester.widget<OutlinedButton>(
-      find.widgetWithText(OutlinedButton, 'Backfill this event'),
+      find.widgetWithText(OutlinedButton, 'backfill this event'),
     );
     expect(button.onPressed, isNull);
   });
@@ -321,7 +321,7 @@ void main() {
     await tester.pumpWidget(wrap(await baseOverrides()));
     await tester.pumpAndSettle();
 
-    expect(find.text('Team'), findsOneWidget);
+    expect(find.text('team'), findsOneWidget);
     expect(find.textContaining('ABC123'), findsOneWidget);
   });
 

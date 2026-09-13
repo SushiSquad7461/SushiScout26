@@ -88,17 +88,20 @@ class _TeamSettingsSectionState extends ConsumerState<TeamSettingsSection> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Regenerate invite code?'),
+        title: const Text('regenerate invite code?'),
         content: const Text(
-            'The current code stops working immediately. Anyone with the old '
-            'code will no longer be able to join.'),
+          'The current code stops working immediately. Anyone with the old '
+          'code will no longer be able to join.',
+        ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('cancel'),
+          ),
           FilledButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Regenerate')),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('regenerate'),
+          ),
         ],
       ),
     );
@@ -111,10 +114,9 @@ class _TeamSettingsSectionState extends ConsumerState<TeamSettingsSection> {
       _error = null;
     });
     try {
-      await ref.read(teamRepositoryProvider).regenerateInviteCode(
-            teamId: teamId,
-            requestingUserId: userId,
-          );
+      await ref
+          .read(teamRepositoryProvider)
+          .regenerateInviteCode(teamId: teamId, requestingUserId: userId);
       if (!mounted) return;
       ref.invalidate(userTeamsProvider);
     } catch (e) {
@@ -136,7 +138,7 @@ class _TeamSettingsSectionState extends ConsumerState<TeamSettingsSection> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Team',
+          'team',
           style: theme.textTheme.titleSmall?.copyWith(
             color: colorScheme.primary,
             fontWeight: FontWeight.w600,
@@ -150,17 +152,26 @@ class _TeamSettingsSectionState extends ConsumerState<TeamSettingsSection> {
           ),
           error: (e, _) => Text(
             "Couldn't load your teams",
-            style: theme.textTheme.bodySmall
-                ?.copyWith(color: colorScheme.error),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: colorScheme.error,
+            ),
           ),
           data: (teams) => _buildBody(
-              context, teams, currentTeamId, isAdmin, theme, colorScheme),
+            context,
+            teams,
+            currentTeamId,
+            isAdmin,
+            theme,
+            colorScheme,
+          ),
         ),
         if (_error != null) ...[
           const SizedBox(height: AppTheme.spacingSm),
           Text(
             _error!,
-            style: theme.textTheme.bodySmall?.copyWith(color: colorScheme.error),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: colorScheme.error,
+            ),
           ),
         ],
       ],
@@ -188,57 +199,81 @@ class _TeamSettingsSectionState extends ConsumerState<TeamSettingsSection> {
           Text(current.name, style: theme.textTheme.titleMedium),
           Text(
             '${isAdmin ? 'Admin' : 'Member'} · ${current.memberCount} members',
-            style: theme.textTheme.bodySmall
-                ?.copyWith(color: colorScheme.onSurfaceVariant),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: colorScheme.onSurfaceVariant,
+            ),
           ),
           const SizedBox(height: AppTheme.spacingXs),
-          Row(
-            children: [
-              Text('Invite code: ',
-                  style: theme.textTheme.bodyMedium),
-              SelectableText(
-                current.inviteCode,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: colorScheme.primary,
+          // Regenerate belongs beside the code it acts on, right-aligned.
+          // A Row with a Spacer overflowed by ~157px at phone width, so this
+          // is a Wrap: same line when it fits, reflowed when it doesn't.
+          // Full width so spaceBetween can actually push regenerate to the
+          // trailing edge — a bare Wrap in a Column sizes to its content.
+          SizedBox(
+            width: double.infinity,
+            child: Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              runSpacing: AppTheme.spacingXs,
+              children: [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('invite code: ', style: theme.textTheme.bodyMedium),
+                    SelectableText(
+                      current.inviteCode,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: colorScheme.primary,
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Copy invite code',
+                      icon: const Icon(Icons.copy, size: 18),
+                      onPressed: () {
+                        Clipboard.setData(
+                          ClipboardData(text: current!.inviteCode),
+                        );
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('invite code copied')),
+                        );
+                      },
+                    ),
+                  ],
                 ),
-              ),
-              IconButton(
-                tooltip: 'Copy invite code',
-                icon: const Icon(Icons.copy, size: 18),
-                onPressed: () {
-                  Clipboard.setData(ClipboardData(text: current!.inviteCode));
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Invite code copied')),
-                  );
-                },
-              ),
-            ],
-          ),
-          if (isAdmin)
-            TextButton(
-              onPressed:
-                  _regenerating ? null : () => _regenerate(current!.id),
-              child: Text(_regenerating ? 'Regenerating…' : 'Regenerate'),
+                if (isAdmin)
+                  TextButton(
+                    onPressed: _regenerating
+                        ? null
+                        : () => _regenerate(current!.id),
+                    child: Text(_regenerating ? 'regenerating…' : 'regenerate'),
+                  ),
+              ],
             ),
+          ),
           const SizedBox(height: AppTheme.spacingMd),
         ],
 
         // Team list.
-        Text('Your teams',
-            style: theme.textTheme.labelLarge
-                ?.copyWith(color: colorScheme.onSurfaceVariant)),
+        Text(
+          'your teams',
+          style: theme.textTheme.labelLarge?.copyWith(
+            color: colorScheme.onSurfaceVariant,
+          ),
+        ),
         const SizedBox(height: AppTheme.spacingXs),
         ...teams.map((t) {
           final active = t.id == currentTeamId;
+          // `onTap: null` already makes the active row inert. `enabled: false`
+          // on top of that greyed it out, so the SELECTED team was the one
+          // that looked unavailable — exactly backwards.
           return ListTile(
             contentPadding: EdgeInsets.zero,
-            leading: Icon(active
-                ? Icons.check_circle
-                : Icons.circle_outlined),
+            leading: Icon(
+              active ? Icons.check_box : Icons.check_box_outline_blank,
+            ),
             title: Text(t.name),
             subtitle: Text('${t.memberCount} members'),
-            enabled: !active,
             onTap: active ? null : () => _switch(t.id),
           );
         }),
@@ -246,9 +281,12 @@ class _TeamSettingsSectionState extends ConsumerState<TeamSettingsSection> {
         const SizedBox(height: AppTheme.spacingMd),
 
         // Add a team (join / create).
-        Text('Add a team',
-            style: theme.textTheme.labelLarge
-                ?.copyWith(color: colorScheme.onSurfaceVariant)),
+        Text(
+          'add a team',
+          style: theme.textTheme.labelLarge?.copyWith(
+            color: colorScheme.onSurfaceVariant,
+          ),
+        ),
         const SizedBox(height: AppTheme.spacingXs),
         Row(
           children: [
@@ -257,7 +295,7 @@ class _TeamSettingsSectionState extends ConsumerState<TeamSettingsSection> {
                 controller: _joinCtrl,
                 textCapitalization: TextCapitalization.characters,
                 decoration: const InputDecoration(
-                  labelText: 'Invite code',
+                  labelText: 'invite code',
                   isDense: true,
                 ),
               ),
@@ -269,8 +307,9 @@ class _TeamSettingsSectionState extends ConsumerState<TeamSettingsSection> {
                   ? const SizedBox(
                       width: 18,
                       height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Text('Join'),
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('join'),
             ),
           ],
         ),
@@ -282,7 +321,7 @@ class _TeamSettingsSectionState extends ConsumerState<TeamSettingsSection> {
                 controller: _createCtrl,
                 keyboardType: TextInputType.number,
                 decoration: const InputDecoration(
-                  labelText: 'New team number',
+                  labelText: 'new team number',
                   isDense: true,
                 ),
               ),
@@ -294,8 +333,9 @@ class _TeamSettingsSectionState extends ConsumerState<TeamSettingsSection> {
                   ? const SizedBox(
                       width: 18,
                       height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Text('Create'),
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('create'),
             ),
           ],
         ),

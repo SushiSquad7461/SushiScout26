@@ -3,6 +3,7 @@ import '../../data/models/match_report.dart';
 import '../theme/app_theme.dart';
 import '../theme/team_brand.dart';
 import '../widgets/color_bar.dart';
+import '../widgets/brand_mascot.dart';
 
 /// Material 3 styled match details screen with comprehensive data display.
 class MatchDetailsScreen extends StatelessWidget {
@@ -33,7 +34,7 @@ class MatchDetailsScreen extends StatelessWidget {
             foregroundColor: AppTheme.onChrome(brand),
             flexibleSpace: FlexibleSpaceBar(
               title: Text(
-                "Team ${match.teamNumber}",
+                "team ${match.teamNumber}",
                 // A bare TextStyle inherits no family — this was rendering in
                 // the default face rather than Sushi Sans.
                 style: AppTheme.display(
@@ -58,22 +59,26 @@ class MatchDetailsScreen extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: AppTheme.spacingSm),
-                      // Outlined alliance pill
+                      // Alliance pill. Paper fill with ink text, per the
+                      // design — an alliance-coloured outline around
+                      // alliance-coloured text was unreadable on the chrome.
+                      // The M-badge above already carries the alliance colour.
                       Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: AppTheme.spacingSm,
                           vertical: AppTheme.spacingXs,
                         ),
                         decoration: BoxDecoration(
+                          color: brand.paper,
                           border: Border.all(
-                            color: allianceColor,
+                            color: brand.ink,
                             width: AppTheme.ruleWidth,
                           ),
                         ),
                         child: Text(
-                          "${match.alliance} Alliance",
+                          "${match.alliance.toLowerCase()} alliance",
                           style: theme.textTheme.titleMedium?.copyWith(
-                            color: AppTheme.onChrome(brand),
+                            color: AppTheme.onFill(brand, brand.paper),
                           ),
                         ),
                       ),
@@ -83,6 +88,10 @@ class MatchDetailsScreen extends StatelessWidget {
               ),
             ),
           ),
+
+          // The brand band divides the alliance header from the report body,
+          // as it does on every other screen.
+          SliverToBoxAdapter(child: ColorBar(brand: brand)),
 
           // Scouter info and status chips
           SliverToBoxAdapter(
@@ -95,14 +104,16 @@ class MatchDetailsScreen extends StatelessWidget {
               ),
               child: Row(
                 children: [
-                  Icon(
-                    Icons.person_outline,
-                    size: 16,
+                  // The mascot mark is the scout avatar in the design, not a
+                  // generic person glyph.
+                  BrandMascot(
+                    name: Mascots.nori,
+                    size: 20,
                     color: colorScheme.onSurfaceVariant,
                   ),
                   const SizedBox(width: AppTheme.spacingXs),
                   Text(
-                    "Scouted by ${match.scouterName}",
+                    "scouted by ${match.scouterName}",
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: colorScheme.onSurfaceVariant,
                     ),
@@ -110,27 +121,40 @@ class MatchDetailsScreen extends StatelessWidget {
                   const Spacer(),
                   // Program type chip — square and outlined from the chip
                   // theme; an accent tint on a surface is what the Initiative
-                  // rules out, so no container fill here.
+                  // rules out, so no container fill here. No avatar: the
+                  // design's FRC chip is the bare word in a box.
                   Chip(
-                    avatar: Icon(
-                      isFtc ? Icons.precision_manufacturing : Icons.build,
-                      size: 16,
-                      color: colorScheme.onSurface,
-                    ),
                     label: Text(isFtc ? "FTC" : "FRC"),
                     padding: EdgeInsets.zero,
-                    labelPadding: const EdgeInsets.only(
-                      right: AppTheme.spacingSm,
+                    labelPadding: const EdgeInsets.symmetric(
+                      horizontal: AppTheme.spacingSm,
                     ),
                   ),
                   const SizedBox(width: AppTheme.spacingXs),
-                  // Synced status chip — the arita square carries the state.
+                  // Synced chip: the arita fill IS the state in the design —
+                  // a solid mint chip, not an outlined one carrying a square.
+                  // Label colour is derived from the fill (not the chip
+                  // theme's default onSurface) so "synced" doesn't render as
+                  // white-on-mint in dark mode.
                   Chip(
-                    avatar: SyncSquare(brand: brand, synced: match.isSynced),
-                    label: Text(match.isSynced ? "Synced" : "Local"),
+                    backgroundColor: match.isSynced
+                        ? brand.accentSuccess
+                        : null,
+                    label: Text(
+                      match.isSynced ? "synced" : "local",
+                      style: match.isSynced
+                          ? AppTheme.label(
+                              brand,
+                              color: AppTheme.onFill(
+                                brand,
+                                brand.accentSuccess,
+                              ),
+                            )
+                          : null,
+                    ),
                     padding: EdgeInsets.zero,
-                    labelPadding: const EdgeInsets.only(
-                      right: AppTheme.spacingSm,
+                    labelPadding: const EdgeInsets.symmetric(
+                      horizontal: AppTheme.spacingSm,
                     ),
                   ),
                 ],
@@ -152,8 +176,7 @@ class MatchDetailsScreen extends StatelessWidget {
                 if (match.comments.isNotEmpty) ...[
                   const SizedBox(height: AppTheme.spacingMd),
                   _SectionCard(
-                    title: "Comments",
-                    icon: Icons.comment_outlined,
+                    title: "comments",
                     accentColor: allianceColor,
                     children: [
                       Text(match.comments, style: theme.textTheme.bodyMedium),
@@ -205,8 +228,7 @@ class MatchDetailsScreen extends StatelessWidget {
 
     return [
       _SectionCard(
-        title: "Autonomous",
-        icon: Icons.smart_toy_outlined,
+        title: "autonomous",
         accentColor: allianceColor,
         children: [
           _DataRow(label: "Fuel Scored", value: "${data['auto_fuel'] ?? 0}"),
@@ -218,8 +240,7 @@ class MatchDetailsScreen extends StatelessWidget {
       ),
       const SizedBox(height: AppTheme.spacingMd),
       _SectionCard(
-        title: "Teleop",
-        icon: Icons.sports_esports_outlined,
+        title: "teleop",
         accentColor: allianceColor,
         children: [
           _DataRow(label: "Fuel Scored", value: "${data['teleop_fuel'] ?? 0}"),
@@ -231,8 +252,7 @@ class MatchDetailsScreen extends StatelessWidget {
       ),
       const SizedBox(height: AppTheme.spacingMd),
       _SectionCard(
-        title: "Traversal",
-        icon: Icons.route_outlined,
+        title: "traversal",
         accentColor: allianceColor,
         children: [
           _DataRow(
@@ -247,8 +267,7 @@ class MatchDetailsScreen extends StatelessWidget {
       ),
       const SizedBox(height: AppTheme.spacingMd),
       _SectionCard(
-        title: "Shooting Range",
-        icon: Icons.gps_fixed_outlined,
+        title: "shooting range",
         accentColor: allianceColor,
         children: [
           _DataRow(
@@ -267,8 +286,7 @@ class MatchDetailsScreen extends StatelessWidget {
       ),
       const SizedBox(height: AppTheme.spacingMd),
       _SectionCard(
-        title: "Performance",
-        icon: Icons.analytics_outlined,
+        title: "performance",
         accentColor: allianceColor,
         children: [
           _RatingRow(
@@ -286,8 +304,7 @@ class MatchDetailsScreen extends StatelessWidget {
 
     return [
       _SectionCard(
-        title: "Autonomous",
-        icon: Icons.smart_toy_outlined,
+        title: "autonomous",
         accentColor: allianceColor,
         children: [
           _DataRow(
@@ -303,8 +320,7 @@ class MatchDetailsScreen extends StatelessWidget {
       ),
       const SizedBox(height: AppTheme.spacingMd),
       _SectionCard(
-        title: "Teleop",
-        icon: Icons.sports_esports_outlined,
+        title: "teleop",
         accentColor: allianceColor,
         children: [
           _DataRow(
@@ -319,8 +335,7 @@ class MatchDetailsScreen extends StatelessWidget {
       ),
       const SizedBox(height: AppTheme.spacingMd),
       _SectionCard(
-        title: "Endgame",
-        icon: Icons.flag_outlined,
+        title: "endgame",
         accentColor: allianceColor,
         children: [
           _DataRow(
@@ -337,16 +352,17 @@ class MatchDetailsScreen extends StatelessWidget {
   }
 }
 
-/// Section card with title, icon, and alliance-colored accent strip
+/// Section card with title and alliance-coloured accent strip.
+///
+/// No heading icon: the design's section cards are a lowercase word over a
+/// rule, nothing else.
 class _SectionCard extends StatelessWidget {
   final String title;
-  final IconData icon;
   final Color accentColor;
   final List<Widget> children;
 
   const _SectionCard({
     required this.title,
-    required this.icon,
     required this.accentColor,
     required this.children,
   });
@@ -378,17 +394,11 @@ class _SectionCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        Icon(icon, size: 20, color: colorScheme.primary),
-                        const SizedBox(width: AppTheme.spacingSm),
-                        Text(
-                          title,
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            color: colorScheme.primary,
-                          ),
-                        ),
-                      ],
+                    Text(
+                      title,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        color: colorScheme.primary,
+                      ),
                     ),
                     const Divider(height: AppTheme.spacingLg),
                     ...children,

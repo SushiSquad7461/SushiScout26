@@ -83,8 +83,8 @@ abstract final class AppTheme {
       onPrimaryContainer: surface,
       secondary: brand.neutral,
       onSecondary: brand.paper,
-      // ConnectionStatusBar and ConnectionStatusChip paint themselves with
-      // these, so the pair has to be a visible band in both brightnesses:
+      // ConnectionStatusBar paints itself with these, so the pair has to be
+      // a visible band in both brightnesses:
       // lilac with ink on top. Mapping it to the surface colour made the
       // "Uploading N reports…" bar invisible.
       secondaryContainer: brand.accents[3],

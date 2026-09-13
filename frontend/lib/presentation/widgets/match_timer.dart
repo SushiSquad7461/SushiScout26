@@ -234,7 +234,9 @@ class _MatchTimerState extends State<MatchTimer> {
                       ),
                       decoration: BoxDecoration(color: phaseFill),
                       child: Text(
-                        _currentPhase,
+                        // Lowercased at render only — the raw value is a
+                        // switch key for _phaseFill and the phase tests.
+                        _currentPhase.toLowerCase(),
                         style: theme.textTheme.labelMedium?.copyWith(
                           // Derived from the fill, so it can never come out
                           // black-on-black or black-on-dark-red.
