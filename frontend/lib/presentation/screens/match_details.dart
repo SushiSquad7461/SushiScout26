@@ -133,10 +133,25 @@ class MatchDetailsScreen extends StatelessWidget {
                   const SizedBox(width: AppTheme.spacingXs),
                   // Synced chip: the arita fill IS the state in the design —
                   // a solid mint chip, not an outlined one carrying a square.
+                  // Label colour is derived from the fill (not the chip
+                  // theme's default onSurface) so "synced" doesn't render as
+                  // white-on-mint in dark mode.
                   Chip(
-                    backgroundColor:
-                        match.isSynced ? brand.accents[0] : null,
-                    label: Text(match.isSynced ? "synced" : "local"),
+                    backgroundColor: match.isSynced
+                        ? brand.accentSuccess
+                        : null,
+                    label: Text(
+                      match.isSynced ? "synced" : "local",
+                      style: match.isSynced
+                          ? AppTheme.label(
+                              brand,
+                              color: AppTheme.onFill(
+                                brand,
+                                brand.accentSuccess,
+                              ),
+                            )
+                          : null,
+                    ),
                     padding: EdgeInsets.zero,
                     labelPadding: const EdgeInsets.symmetric(
                       horizontal: AppTheme.spacingSm,

@@ -8,11 +8,9 @@ import '../../data/models/match_report.dart';
 import '../../data/repositories/providers.dart';
 import '../widgets/scouting_form_widget.dart';
 import '../widgets/match_timer.dart';
-import '../widgets/color_bar.dart';
 import '../widgets/counter_card.dart';
 import '../../data/local/preferences.dart';
 import '../theme/app_theme.dart';
-import '../theme/team_brand.dart';
 import '../../core/animations.dart';
 import '../../data/services/schedule_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart' show FirebaseFirestore;
@@ -37,7 +35,7 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm>
   final PageController _pageController = PageController();
   final MatchTimerController _timerController = MatchTimerController();
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
-  
+
   int _currentPage = 0;
   bool _submitting = false;
 
@@ -90,14 +88,17 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm>
     if (eventCode.isEmpty) return;
 
     try {
-      await ref.read(scheduleServiceProvider).fetchSchedule(
-        eventCode: eventCode,
-        programType: programType,
-      );
+      await ref
+          .read(scheduleServiceProvider)
+          .fetchSchedule(eventCode: eventCode, programType: programType);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not fetch schedule. Enter match details manually.')),
+          const SnackBar(
+            content: Text(
+              'Could not fetch schedule. Enter match details manually.',
+            ),
+          ),
         );
       }
       return;
@@ -118,7 +119,11 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm>
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not load schedule. Enter match details manually.')),
+          const SnackBar(
+            content: Text(
+              'Could not load schedule. Enter match details manually.',
+            ),
+          ),
         );
       }
       return;
@@ -128,7 +133,9 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm>
 
     if (scheduleMatches.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No schedule found. Enter match details manually.')),
+        const SnackBar(
+          content: Text('No schedule found. Enter match details manually.'),
+        ),
       );
       return;
     }
@@ -144,15 +151,19 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm>
           final teams = m['teams'] as List<dynamic>?;
           String subtitle = '';
           if (alliances != null) {
-            final red = (alliances['red']?['team_keys'] as List?)?.join(', ') ?? '';
-            final blue = (alliances['blue']?['team_keys'] as List?)?.join(', ') ?? '';
+            final red =
+                (alliances['red']?['team_keys'] as List?)?.join(', ') ?? '';
+            final blue =
+                (alliances['blue']?['team_keys'] as List?)?.join(', ') ?? '';
             subtitle = 'Red: $red | Blue: $blue';
           } else if (teams != null) {
             subtitle = teams.map((t) => '${t['teamNumber']}').join(', ');
           }
           return ListTile(
             title: Text('Match $matchNum'),
-            subtitle: subtitle.isNotEmpty ? Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis) : null,
+            subtitle: subtitle.isNotEmpty
+                ? Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis)
+                : null,
             onTap: () {
               _matchNumberCtrl.text = '$matchNum';
               Navigator.pop(ctx);
@@ -202,18 +213,7 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm>
           title: Text(widget.event.name),
           // Brand band sits between the app bar and the timer, as in the
           // design — the scout screen was the one screen missing it.
-          bottom: PreferredSize(
-            preferredSize: const Size.fromHeight(
-              64 + AppTheme.colorBarThickness,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ColorBar(brand: BrandScope.of(context)),
-                MatchTimer(controller: _timerController),
-              ],
-            ),
-          ),
+          bottom: ScoutingFormBrandBand(timerController: _timerController),
         ),
         body: SafeArea(
           child: Form(
@@ -269,31 +269,10 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm>
           const Spacer(),
 
           // Next/Submit button
-          // Label then chevron, per the design's "next ›" — FilledButton.icon
-          // puts the icon first, which read as "← next".
-          FilledButton(
-            onPressed: _submitting ? null : _nextPage,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(_currentPage == 4
-                    ? (_submitting ? "saving…" : "submit")
-                    : "next"),
-                const SizedBox(width: AppTheme.spacingSm),
-                if (_submitting)
-                  const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                else
-                  Icon(
-                    _currentPage == 4
-                        ? Icons.check_rounded
-                        : Icons.arrow_forward_rounded,
-                  ),
-              ],
-            ),
+          ScoutingWizardNextButton(
+            isLastPage: _currentPage == 4,
+            submitting: _submitting,
+            onPressed: _nextPage,
           ),
         ],
       ),
@@ -301,30 +280,10 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm>
   }
 
   Widget _buildPageIndicator(ColorScheme colorScheme) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: List.generate(5, (index) {
-        final isActive = _currentPage == index;
-        final isPast = index < _currentPage;
-
-        return AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          margin: const EdgeInsets.symmetric(horizontal: 3),
-          width: isActive ? 24 : 8,
-          height: 8,
-          // Square, per the design's indicator — the Initiative's geometry
-          // is rectangles, and these were the one rounded element left.
-          decoration: BoxDecoration(
-            color: isActive
-                ? colorScheme.primary
-                : isPast
-                ? colorScheme.primary.withValues(alpha: 0.5)
-                // surfaceContainerHighest is ~(64,64,64) on this near-black
-                // bar — the upcoming dots were invisible at 1.5:1.
-                : colorScheme.outline,
-          ),
-        );
-      }),
+    return ScoutingWizardPageIndicator(
+      colorScheme: colorScheme,
+      currentPage: _currentPage,
+      pageCount: 5,
     );
   }
 
@@ -471,7 +430,8 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm>
 
   Widget _buildAuto(BuildContext context) {
     final settings = ref.watch(settingsProvider);
-    final fuelIncrement = int.tryParse(settings[PrefKeys.fuelIncrement] ?? '1') ?? 1;
+    final fuelIncrement =
+        int.tryParse(settings[PrefKeys.fuelIncrement] ?? '1') ?? 1;
 
     return Column(
       children: [
@@ -482,7 +442,9 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm>
           onChanged: (v) => setState(() => _autoFuel = v),
           stepSize: fuelIncrement,
           showStepControl: true,
-          onStepChanged: (step) => ref.read(settingsProvider.notifier).setFuelIncrement(step.toString()),
+          onStepChanged: (step) => ref
+              .read(settingsProvider.notifier)
+              .setFuelIncrement(step.toString()),
           accentColor: Theme.of(context).colorScheme.tertiary,
         ),
         const SizedBox(height: AppTheme.spacingMd),
@@ -502,7 +464,8 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm>
   Widget _buildTeleop(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final settings = ref.watch(settingsProvider);
-    final fuelIncrement = int.tryParse(settings[PrefKeys.fuelIncrement] ?? '1') ?? 1;
+    final fuelIncrement =
+        int.tryParse(settings[PrefKeys.fuelIncrement] ?? '1') ?? 1;
 
     return Column(
       children: [
@@ -513,7 +476,9 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm>
           onChanged: (v) => setState(() => _teleopFuel = v),
           stepSize: fuelIncrement,
           showStepControl: true,
-          onStepChanged: (step) => ref.read(settingsProvider.notifier).setFuelIncrement(step.toString()),
+          onStepChanged: (step) => ref
+              .read(settingsProvider.notifier)
+              .setFuelIncrement(step.toString()),
         ),
 
         const SizedBox(height: AppTheme.spacingMd),
@@ -821,7 +786,9 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm>
     );
 
     try {
-      await ref.read(firestoreRepositoryProvider).createMatch(widget.eventId, report);
+      await ref
+          .read(firestoreRepositoryProvider)
+          .createMatch(widget.eventId, report);
       if (mounted) {
         ScaffoldMessenger.of(
           context,
@@ -830,15 +797,21 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm>
       }
     } on AppError catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(e.message), backgroundColor: Theme.of(context).colorScheme.error));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.message),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text("Error saving: $e"), backgroundColor: Theme.of(context).colorScheme.error));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Error saving: $e"),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => _submitting = false);

@@ -238,14 +238,6 @@ class BrandSkewField extends StatelessWidget {
   }
 }
 
-/// The event bar that goes in `SliverAppBar.medium`'s `bottom:` slot.
-///
-/// IMPORTANT: the dashboard's app bar is a *sliver* with collapsing behaviour,
-/// and it carries the connection chip, search, export and the overflow menu.
-/// Do NOT replace it with [BrandAppBar] — that would delete all four. Instead
-/// keep the `SliverAppBar.medium` exactly as it is and swap only its `bottom:`
-/// for this, which puts the event code in brand type and hangs the colour bar
-/// off the bottom edge of the bar.
 /// The full-width action bar that replaces the floating action button.
 ///
 /// A 66dp ink bar spanning the screen is a bigger, faster target than a FAB

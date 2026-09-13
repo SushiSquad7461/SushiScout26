@@ -145,9 +145,19 @@ class EventSyncRow extends ConsumerWidget {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final view = ref.watch(matchesViewProvider);
+    // Reuse connectionStatusProvider's count (and its error state) instead of
+    // re-filtering the match list here — a stream failure must show as a
+    // failure, not as a stale "N synced" carried over from the last good
+    // snapshot.
+    final status = ref.watch(connectionStatusProvider);
     final matches = view.value?.matches ?? const <MatchReport>[];
-    final pending = matches.where((m) => !m.isSynced).length;
+    final pending = status.pendingCount;
     final synced = matches.length - pending;
+    final countLabel = status.hasError
+        ? "can't reach server"
+        : (pending == 0
+              ? '$synced synced'
+              : '$synced synced · $pending pending');
 
     return Container(
       width: double.infinity,
@@ -167,12 +177,10 @@ class EventSyncRow extends ConsumerWidget {
             ),
           ),
           const SizedBox(width: AppTheme.spacingSm),
-          SyncSquare(brand: brand, synced: pending == 0),
+          SyncSquare(brand: brand, synced: !status.hasError && pending == 0),
           const SizedBox(width: AppTheme.spacingXs),
           Text(
-            pending == 0
-                ? '$synced synced'
-                : '$synced synced · $pending pending',
+            countLabel,
             style: AppTheme.helper(
               brand,
               size: 13,

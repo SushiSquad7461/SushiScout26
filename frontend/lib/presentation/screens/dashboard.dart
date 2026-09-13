@@ -36,6 +36,33 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     ).push(MaterialPageRoute(builder: (_) => const SettingsScreen()));
   }
 
+  Future<void> _confirmAndSignOut(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        // '?' has no glyph in Sushi Sans and the dialog title
+        // is the display face, so it would render as a gap.
+        title: const Text('sign out'),
+        content: const Text(
+          'You will need to sign in again to access your team data.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('sign out'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      await ref.read(authProvider.notifier).signOut();
+    }
+  }
+
   Future<void> _showExportOptions(BuildContext context, WidgetRef ref) async {
     final matches =
         ref.read(matchesViewProvider).value?.matches ?? const <MatchReport>[];
@@ -230,32 +257,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                               _openSettings(context);
                               break;
                             case 'sign_out':
-                              final confirmed = await showDialog<bool>(
-                                context: context,
-                                builder: (context) => AlertDialog(
-                                  // '?' has no glyph in Sushi Sans and the dialog title
-                          // is the display face, so it would render as a gap.
-                          title: const Text('sign out'),
-                                  content: const Text(
-                                    'You will need to sign in again to access your team data.',
-                                  ),
-                                  actions: [
-                                    TextButton(
-                                      onPressed: () =>
-                                          Navigator.of(context).pop(false),
-                                      child: const Text('cancel'),
-                                    ),
-                                    FilledButton(
-                                      onPressed: () =>
-                                          Navigator.of(context).pop(true),
-                                      child: const Text('sign out'),
-                                    ),
-                                  ],
-                                ),
-                              );
-                              if (confirmed == true) {
-                                await ref.read(authProvider.notifier).signOut();
-                              }
+                              await _confirmAndSignOut(context, ref);
                               break;
                           }
                         },
