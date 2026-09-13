@@ -1,7 +1,9 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 import 'firebase_options.dart';
 import 'data/repositories/firestore_repository.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -12,7 +14,14 @@ import 'presentation/widgets/auth_wrapper.dart';
 import 'presentation/theme/app_theme.dart';
 import 'presentation/theme/team_brand.dart';
 
-void main() async {
+// Empty by default so local dev/CI never needs an account: supply
+// `--dart-define=SENTRY_DSN=<dsn>` (and optionally SENTRY_ENVIRONMENT) when
+// building an alpha/release artifact you want error reports from. Sentry DSNs
+// are write-only and meant to ship in client code, unlike the Firebase
+// secrets above — no secret manager needed.
+const _sentryDsn = String.fromEnvironment('SENTRY_DSN');
+
+Future<void> _startApp() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
@@ -46,6 +55,24 @@ void main() async {
       container: container,
       child: const SushiScoutApp(),
     ),
+  );
+}
+
+void main() async {
+  if (_sentryDsn.isEmpty) {
+    await _startApp();
+    return;
+  }
+
+  await SentryFlutter.init(
+    (options) {
+      options.dsn = _sentryDsn;
+      options.environment = const String.fromEnvironment(
+        'SENTRY_ENVIRONMENT',
+        defaultValue: kReleaseMode ? 'production' : 'development',
+      );
+    },
+    appRunner: _startApp,
   );
 }
 

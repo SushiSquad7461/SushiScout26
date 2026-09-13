@@ -42,7 +42,12 @@ jobs:
       - run: flutter test
         working-directory: frontend
 
+      # firebase.json's predeploy hook reads $SENTRY_DSN to bake it into the
+      # web build via --dart-define; this action is what invokes that hook,
+      # so the secret has to be in ITS env, not a separate step's.
       - uses: FirebaseExtended/action-hosting-deploy@v0
+        env:
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
