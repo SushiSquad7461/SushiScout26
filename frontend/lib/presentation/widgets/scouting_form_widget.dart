@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/models/event.dart';
+import '../../data/models/match_report.dart';
 import '../theme/app_theme.dart';
 import '../theme/team_brand.dart';
 import 'color_bar.dart';
@@ -10,10 +11,17 @@ abstract class ScoutingFormWidget extends ConsumerStatefulWidget {
   final String eventId;
   final Event event;
 
+  /// When non-null, the wizard edits this match in place instead of
+  /// submitting a new one: the setup page (scouter/match/team/alliance) is
+  /// skipped so those identifying fields can't be changed, and the wizard
+  /// writes back via `updateMatch` using this match's original document id.
+  final MatchReport? existingMatch;
+
   const ScoutingFormWidget({
     super.key,
     required this.eventId,
     required this.event,
+    this.existingMatch,
   });
 
   /// Returns the game-specific data Map to be stored in Firestore.
@@ -114,12 +122,14 @@ class ScoutingWizardNextButton extends StatelessWidget {
   final bool isLastPage;
   final bool submitting;
   final VoidCallback? onPressed;
+  final String finishLabel;
 
   const ScoutingWizardNextButton({
     super.key,
     required this.isLastPage,
     required this.submitting,
     required this.onPressed,
+    this.finishLabel = "submit",
   });
 
   @override
@@ -129,7 +139,7 @@ class ScoutingWizardNextButton extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(isLastPage ? (submitting ? "saving…" : "submit") : "next"),
+          Text(isLastPage ? (submitting ? "saving…" : finishLabel) : "next"),
           const SizedBox(width: AppTheme.spacingSm),
           if (submitting)
             const SizedBox(

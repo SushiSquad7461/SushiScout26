@@ -21,6 +21,7 @@ class FtcDecodeForm extends ScoutingFormWidget {
     super.key,
     required super.eventId,
     required super.event,
+    super.existingMatch,
   });
 
   @override
@@ -61,11 +62,30 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm>
   double _driverQuality = 0;
   final _commentsCtrl = TextEditingController();
 
+  bool get _isEditing => widget.existingMatch != null;
+
   @override
   void initState() {
     super.initState();
-    final settings = ref.read(settingsProvider);
-    _scouterNameCtrl.text = settings[PrefKeys.scouterName] ?? '';
+    final existing = widget.existingMatch;
+    if (existing != null) {
+      _scouterNameCtrl.text = existing.scouterName;
+      _matchNumberCtrl.text = '${existing.matchNumber}';
+      _teamNumberCtrl.text = '${existing.teamNumber}';
+      _alliance = existing.alliance;
+      _autoArtifacts = existing.artifactsAuto;
+      _autoIndexing = existing.indexingAuto;
+      _leave = existing.leave;
+      _teleArtifacts = existing.artifactsTeleop;
+      _teleIndexing = existing.indexingTeleop;
+      _robotDied = existing.robotDied;
+      _baseExpansion = existing.baseExpansion;
+      _driverQuality = existing.driverQuality;
+      _commentsCtrl.text = existing.comments;
+    } else {
+      final settings = ref.read(settingsProvider);
+      _scouterNameCtrl.text = settings[PrefKeys.scouterName] ?? '';
+    }
   }
 
   @override
@@ -171,16 +191,18 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm>
     );
   }
 
+  int get _pageCount => _isEditing ? 4 : 5;
+
   void _nextPage() {
     if (_submitting) return;
-    if (_currentPage == 0) {
+    if (_currentPage == 0 && !_isEditing) {
       if (!_formKey.currentState!.validate()) {
         return;
       }
       _timerController.start();
     }
 
-    if (_currentPage < 4) {
+    if (_currentPage < _pageCount - 1) {
       _pageController.nextPage(
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeInOut,
@@ -207,29 +229,75 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm>
     return dismissKeyboardOnTap(
       child: Scaffold(
         appBar: AppBar(
-          title: Text(widget.event.name),
+          title: Text(
+            _isEditing ? "edit • ${widget.event.name}" : widget.event.name,
+          ),
           // Brand band sits between the app bar and the timer, as in the
           // design — the scout screen was the one screen missing it.
           bottom: ScoutingFormBrandBand(timerController: _timerController),
         ),
         body: SafeArea(
-          child: Form(
-            key: _formKey,
-            child: PageView(
-              controller: _pageController,
-              physics: const NeverScrollableScrollPhysics(),
-              onPageChanged: (idx) => setState(() => _currentPage = idx),
-              children: [
-                _buildPage("setup", _buildSetup(context)),
-                _buildPage("autonomous", _buildAuto(context)),
-                _buildPage("teleop", _buildTeleop(context)),
-                _buildPage("endgame", _buildEndgame(context)),
-                _buildPage("review & submit", _buildReview(context)),
-              ],
-            ),
+          child: Column(
+            children: [
+              if (_isEditing) _buildLockedMatchBanner(context),
+              Expanded(
+                child: Form(
+                  key: _formKey,
+                  child: PageView(
+                    controller: _pageController,
+                    physics: const NeverScrollableScrollPhysics(),
+                    onPageChanged: (idx) => setState(() => _currentPage = idx),
+                    children: [
+                      if (!_isEditing) _buildPage("setup", _buildSetup(context)),
+                      _buildPage("autonomous", _buildAuto(context)),
+                      _buildPage("teleop", _buildTeleop(context)),
+                      _buildPage("endgame", _buildEndgame(context)),
+                      _buildPage("review & submit", _buildReview(context)),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
         bottomNavigationBar: _buildBottomBar(context, colorScheme),
+      ),
+    );
+  }
+
+  /// Read-only strip shown only in edit mode, since the setup page (where
+  /// this info is normally entered/changed) is skipped — a scout correcting
+  /// game data shouldn't also be able to reassign the match to a different
+  /// team or alliance.
+  Widget _buildLockedMatchBanner(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppTheme.spacingMd,
+        vertical: AppTheme.spacingSm,
+      ),
+      color: colorScheme.surfaceContainerHighest,
+      child: Row(
+        children: [
+          Icon(
+            Icons.lock_outline,
+            size: 16,
+            color: colorScheme.onSurfaceVariant,
+          ),
+          const SizedBox(width: AppTheme.spacingSm),
+          Expanded(
+            child: Text(
+              "Team ${_teamNumberCtrl.text} • Q${_matchNumberCtrl.text} • "
+              "$_alliance Alliance",
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -266,9 +334,10 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm>
           // Label then chevron, per the design's "next ›" — FilledButton.icon
           // puts the icon first, which read as "← next".
           ScoutingWizardNextButton(
-            isLastPage: _currentPage == 4,
+            isLastPage: _currentPage == _pageCount - 1,
             submitting: _submitting,
             onPressed: _nextPage,
+            finishLabel: _isEditing ? "save" : "submit",
           ),
         ],
       ),
@@ -279,7 +348,7 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm>
     return ScoutingWizardPageIndicator(
       colorScheme: colorScheme,
       currentPage: _currentPage,
-      pageCount: 5,
+      pageCount: _pageCount,
     );
   }
 
@@ -710,28 +779,45 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm>
       'robot_died': _robotDied,
     };
 
-    final report = MatchReport(
-      id: "${widget.eventId}_qm${_matchNumberCtrl.text}_${_teamNumberCtrl.text}",
-      matchId: "${widget.eventId}_qm${_matchNumberCtrl.text}",
-      matchNumber: int.tryParse(_matchNumberCtrl.text) ?? 0,
-      teamNumber: int.tryParse(_teamNumberCtrl.text) ?? 0,
-      alliance: _alliance,
-      scouterName: _scouterNameCtrl.text,
-      gameData: gameData,
-      comments: _commentsCtrl.text,
-      createdAt: DateTime.now(),
-      isSynced: false,
-    );
+    final existing = widget.existingMatch;
+    final report = existing != null
+        ? existing.copyWith(
+            matchNumber: int.tryParse(_matchNumberCtrl.text) ?? 0,
+            teamNumber: int.tryParse(_teamNumberCtrl.text) ?? 0,
+            alliance: _alliance,
+            scouterName: _scouterNameCtrl.text,
+            gameData: gameData,
+            comments: _commentsCtrl.text,
+          )
+        : MatchReport(
+            id: "${widget.eventId}_qm${_matchNumberCtrl.text}_${_teamNumberCtrl.text}",
+            matchId: "${widget.eventId}_qm${_matchNumberCtrl.text}",
+            matchNumber: int.tryParse(_matchNumberCtrl.text) ?? 0,
+            teamNumber: int.tryParse(_teamNumberCtrl.text) ?? 0,
+            alliance: _alliance,
+            scouterName: _scouterNameCtrl.text,
+            gameData: gameData,
+            comments: _commentsCtrl.text,
+            createdAt: DateTime.now(),
+            isSynced: false,
+          );
 
     try {
-      await ref
-          .read(firestoreRepositoryProvider)
-          .createMatch(widget.eventId, report);
+      final repo = ref.read(firestoreRepositoryProvider);
+      if (existing != null) {
+        await repo.updateMatch(widget.eventId, report);
+      } else {
+        await repo.createMatch(widget.eventId, report);
+      }
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text("FTC Match Saved!")));
-        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              existing != null ? "Match Updated!" : "FTC Match Saved!",
+            ),
+          ),
+        );
+        Navigator.pop(context, existing != null);
       }
     } on AppError catch (e) {
       if (mounted) {

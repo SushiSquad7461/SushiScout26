@@ -1,18 +1,59 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../data/models/event.dart';
 import '../../data/models/match_report.dart';
+import '../../data/repositories/providers.dart';
+import '../factories/scouting_form_factory.dart';
 import '../theme/app_theme.dart';
 import '../theme/team_brand.dart';
 import '../widgets/color_bar.dart';
 import '../widgets/brand_mascot.dart';
 
 /// Material 3 styled match details screen with comprehensive data display.
-class MatchDetailsScreen extends StatelessWidget {
+class MatchDetailsScreen extends ConsumerWidget {
   final MatchReport match;
 
   const MatchDetailsScreen({super.key, required this.match});
 
+  /// Fetches the owning event (falling back to a dummy built from the match
+  /// itself, mirroring dashboard.dart's "scout match" fallback) and pushes
+  /// the scouting wizard pre-loaded with this match. On a successful save,
+  /// pops this screen too — it holds a frozen snapshot of `match`, so
+  /// leaving it up would show stale data until the matches list catches up.
+  Future<void> _openEditForm(BuildContext context, WidgetRef ref) async {
+    final repo = ref.read(firestoreRepositoryProvider);
+    Event? event;
+    try {
+      event = await repo
+          .getEvent(match.eventId)
+          .timeout(const Duration(seconds: 5), onTimeout: () => null);
+    } catch (_) {
+      event = null;
+    }
+    event ??= Event(
+      id: match.eventId,
+      name: match.eventId,
+      programType: match.programType,
+      tbaKey: match.eventId,
+      startDate: match.createdAt,
+      teamId: match.teamId,
+    );
+
+    if (!context.mounted) return;
+    final updated = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (context) =>
+            ScoutingFormFactory.create(event!, existingMatch: match),
+      ),
+    );
+
+    if (updated == true && context.mounted) {
+      Navigator.of(context).pop();
+    }
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final brand = BrandScope.of(context);
@@ -32,6 +73,13 @@ class MatchDetailsScreen extends StatelessWidget {
             expandedHeight: 200,
             backgroundColor: AppTheme.chrome(brand),
             foregroundColor: AppTheme.onChrome(brand),
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.edit_outlined),
+                tooltip: "edit match",
+                onPressed: () => _openEditForm(context, ref),
+              ),
+            ],
             flexibleSpace: FlexibleSpaceBar(
               title: Text(
                 "team ${match.teamNumber}",
