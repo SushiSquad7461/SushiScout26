@@ -4,8 +4,10 @@
 
 ### Prerequisites
 
-- [Flutter SDK](https://docs.flutter.dev/get-started/install) (3.10+)
-- [Python 3.11+](https://www.python.org/downloads/)
+Install these tools first:
+
+- [Flutter SDK](https://docs.flutter.dev/get-started/install), version 3.10 or later
+- [Python 3.11 or later](https://www.python.org/downloads/)
 - [Firebase CLI](https://firebase.google.com/docs/cli)
 - [Git](https://git-scm.com/)
 
@@ -19,7 +21,7 @@ cd SushiScout26
 # Frontend
 cd frontend
 flutter pub get
-dart run build_runner build --delete-conflicting-outputs  # Generate Drift/Riverpod code
+dart run build_runner build --delete-conflicting-outputs  # Generate Riverpod code
 
 # Cloud Functions
 cd ../functions
@@ -31,10 +33,12 @@ pip install -r requirements.txt
 
 ## Development Workflow
 
-1. Create a feature branch from `master`
-2. Make your changes with clear, atomic commits
-3. Run tests and `flutter analyze`
-4. Submit a PR against `master`
+Follow these steps for a change:
+
+1. Create a feature branch from `master`.
+2. Make your changes. Write clear, atomic commits.
+3. Run the tests and `flutter analyze`.
+4. Submit a pull request against `master`.
 
 ## Running the App
 
@@ -62,24 +66,26 @@ flutter analyze                                        # Static analysis
 
 ```bash
 cd functions
-source venv/Scripts/activate    # Activate venv first
+source venv/Scripts/activate    # Activate the venv first
 python -m pytest tests/ -v      # Run tests
 ```
 
 ## Code Generation
 
-Drift (SQLite) and Riverpod use code generation. After modifying table definitions or annotated providers:
+Riverpod uses code generation. After you change an annotated provider, run
+this command:
 
 ```bash
 cd frontend
 dart run build_runner build --delete-conflicting-outputs
 ```
 
-**Never hand-edit** `*.g.dart` or `*.mocks.dart` files — they are regenerated automatically.
+**Do not hand-edit** `*.g.dart` or `*.mocks.dart` files. The build tool
+regenerates them automatically.
 
 ## Commit Message Convention
 
-We follow [Conventional Commits](https://www.conventionalcommits.org/).
+This project follows [Conventional Commits](https://www.conventionalcommits.org/).
 
 ### Format
 
@@ -94,13 +100,13 @@ We follow [Conventional Commits](https://www.conventionalcommits.org/).
 | `feat` | New feature |
 | `fix` | Bug fix |
 | `docs` | Documentation changes |
-| `style` | Code style (formatting, no logic changes) |
-| `refactor` | Code refactoring without changing functionality |
-| `perf` | Performance improvements |
-| `test` | Adding or updating tests |
-| `chore` | Build process or auxiliary tool changes |
+| `style` | Code style; no logic changes |
+| `refactor` | Code refactor; no functional changes |
+| `perf` | Performance improvement |
+| `test` | New or updated tests |
+| `chore` | Build process or tool changes |
 | `ci` | CI/CD changes |
-| `revert` | Revert previous commit |
+| `revert` | Revert of a previous commit |
 
 ### Scopes
 
@@ -108,10 +114,12 @@ We follow [Conventional Commits](https://www.conventionalcommits.org/).
 
 ### Subject Rules
 
-1. Use imperative mood ("add" not "added" or "adds")
-2. Don't capitalize first letter
-3. No period at the end
-4. Maximum 50 characters
+Follow these four rules for the commit subject:
+
+1. Use the imperative mood: write "add", not "added" or "adds".
+2. Do not capitalize the first letter.
+3. Do not add a period at the end.
+4. Keep the subject to 50 characters or fewer.
 
 ### Examples
 
@@ -124,27 +132,37 @@ fix(auth): add team ownership check to security rules
 
 ## Branch Naming
 
-- `feature/<description>` — New features
-- `fix/<description>` — Bug fixes
-- `docs/<description>` — Documentation
-- `refactor/<description>` — Refactoring
-- `test/<description>` — Tests
-- `chore/<description>` — Maintenance
+Name your branch by change type:
+
+- `feature/<description>` — a new feature
+- `fix/<description>` — a bug fix
+- `docs/<description>` — a documentation change
+- `refactor/<description>` — a code refactor
+- `test/<description>` — a test change
+- `chore/<description>` — a maintenance task
 
 ## Code Style
 
-### Flutter/Dart
+### Flutter and Dart
 
-- Follow [Effective Dart](https://dart.dev/guides/language/effective-dart)
-- Run `dart format .` before committing
-- Run `flutter analyze` to check for issues
-- Use Riverpod for state management (not setState for shared state)
+- Follow [Effective Dart](https://dart.dev/guides/language/effective-dart).
+- Run `dart format .` before you commit.
+- Run `flutter analyze` to find issues.
+- Use Riverpod for state management. Do not use `setState` for shared
+  state.
 
 ### Python
 
-- Follow [PEP 8](https://pep8.org/)
-- Use type hints for function signatures
-- Keep Cloud Functions focused — one responsibility per function
+- Follow [PEP 8](https://pep8.org/).
+- Add type hints to every function signature.
+- Give each Cloud Function one responsibility.
+
+## Documentation Style
+
+Write new docs, specs, and plans in ASD-STE100 Simplified Technical
+English (STE): short sentences, active voice, simple verb tenses, and no
+semicolons. See CLAUDE.md, section "Documentation Style", for the full
+rule list.
 
 ## Project Structure
 
@@ -152,12 +170,12 @@ fix(auth): add team ownership check to security rules
 sushiscout26/
 ├── frontend/                # Flutter application
 │   ├── lib/
-│   │   ├── core/            # Auth, errors, results, utilities
+│   │   ├── core/            # Auth, errors, Result type, utilities
 │   │   ├── data/
-│   │   │   ├── local/       # Drift DB, sync manager, preferences
+│   │   │   ├── local/       # Local preferences (no local database)
 │   │   │   ├── models/      # Event, MatchReport, Team, UserProfile
-│   │   │   ├── repositories/ # Hybrid, Firestore, Auth, Team repos
-│   │   │   └── services/    # Schedule service
+│   │   │   ├── repositories/ # Firestore, Auth, Team, Scouting repos
+│   │   │   └── services/    # Schedule service, export service
 │   │   ├── presentation/
 │   │   │   ├── providers/   # Riverpod providers (auth, settings)
 │   │   │   ├── screens/     # Dashboard, auth, scouting forms
@@ -176,8 +194,11 @@ sushiscout26/
 ├── firestore.rules          # Firestore security rules
 ├── firestore.indexes.json   # Composite index definitions
 ├── CLAUDE.md                # AI assistant context
-└── CONTRIBUTING.md           # This file
+└── CONTRIBUTING.md          # This file
 ```
+
+Firestore is the app's only data store. The app has no local SQLite
+database and no separate sync queue.
 
 ## Firebase
 
@@ -191,11 +212,14 @@ firebase deploy --only firestore:indexes  # Composite indexes
 
 ### Environment Secrets
 
-Cloud Functions use these secrets (configured via Firebase):
-- `GOOGLE_SHEETS_CREDENTIALS` — Service account for Sheets API (one-way export, per team)
-- `TBA_API_KEY` — The Blue Alliance API key (FRC schedules)
-- `FTC_API_USERNAME` / `FTC_API_KEY` — FIRST Events API credentials (FTC schedules)
+Cloud Functions use these secrets, set through Firebase:
+
+- `GOOGLE_SHEETS_CREDENTIALS` — service account for the Sheets API
+  (one-way export, per team)
+- `TBA_API_KEY` — The Blue Alliance API key, for FRC schedules
+- `FTC_API_USERNAME` and `FTC_API_KEY` — FIRST Events API credentials,
+  for FTC schedules
 
 ## Questions?
 
-Open an issue for discussion before making major changes.
+Open an issue for discussion before you make a major change.

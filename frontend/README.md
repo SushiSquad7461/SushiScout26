@@ -1,16 +1,17 @@
-# frontend
+# SushiScout 26 — Frontend
 
-A new Flutter project.
+This directory holds the Flutter app for SushiScout 26. The app runs on
+Windows, macOS, Linux, Android, iOS, and the web.
 
-## Getting Started
+For setup steps, run commands, and the project layout, see the
+[root README](../README.md) and [CONTRIBUTING.md](../CONTRIBUTING.md).
 
-This project is a starting point for a Flutter application.
+## Flutter Resources
 
-A few resources to get you started if this is your first Flutter project:
+If this is your first Flutter project, these two guides can help:
 
 - [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
 - [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+The [Flutter documentation](https://docs.flutter.dev/) has tutorials,
+samples, mobile development guidance, and a full API reference.

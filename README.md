@@ -2,16 +2,16 @@
 
 [![test](https://github.com/SushiSquad7461/SushiScout26/actions/workflows/test.yml/badge.svg)](https://github.com/SushiSquad7461/SushiScout26/actions/workflows/test.yml)
 
-A cross-platform FRC & FTC scouting app built by [SushiSquad 7461](https://github.com/SushiSquad7461). Scouts record match data on any device, even offline, and it syncs automatically to Firestore and Google Sheets for real-time analysis.
+SushiScout 26 is a scouting app for FRC and FTC robotics competitions. It is built by [SushiSquad 7461](https://github.com/SushiSquad7461). Scouts use the app to record match data on any device, even offline. The app syncs the data to Firestore and to Google Sheets for analysis.
 
 ## Features
 
-- **Multi-platform** — Windows, macOS, Linux, Android, iOS, and web
-- **Offline-first** — Full functionality without internet; syncs when back online
-- **FRC + FTC** — Separate scouting forms tailored to each program
-- **Team isolation** — server-enforced: every team's events and matches are private to that team, so multiple teams can scout the same competition independently
-- **Sheets export** — Each team can connect its own Google Sheet; match data exports one-way from Firestore to that sheet for analysis
-- **Schedule import** — Pull match schedules from The Blue Alliance (FRC) and FIRST Events API (FTC)
+- **Multi-platform.** The app runs on Windows, macOS, Linux, Android, iOS, and the web.
+- **Offline-first.** The app works fully without internet access. It syncs when the connection returns.
+- **FRC and FTC support.** The app shows a different scouting form for each program.
+- **Team isolation.** The server enforces this rule: a team's events and matches stay private to that team. Two teams can scout the same competition at the same time and not see each other's data.
+- **Sheets export.** Each team can connect its own Google Sheet. Match data flows one way, from Firestore to that sheet, for analysis.
+- **Schedule import.** The app can pull match schedules from The Blue Alliance (for FRC) and from the FIRST Events API (for FTC).
 
 ## Architecture
 
@@ -37,18 +37,21 @@ A cross-platform FRC & FTC scouting app built by [SushiSquad 7461](https://githu
                     │  │  Sync  │ │ Fetch  │ │Member│ │
                     │  └────────┘ └────────┘ └─────┘ │
                     └───────────────────────────────┘
-   Team membership is mutated ONLY by the create_team/join_team/leave_team
-   callables, which set a custom auth claim that Firestore rules enforce.
+   The create_team, join_team, and leave_team callables are the only
+   code that can change team membership. Each callable sets a custom
+   auth claim, and Firestore rules enforce that claim.
 ```
 
 ## Quick Start
 
 ### Prerequisites
 
-- [Flutter SDK](https://docs.flutter.dev/get-started/install) 3.10+
-- [Python **3.11**](https://www.python.org/downloads/) (for Cloud Functions — must be 3.11 exactly, matching the `python311` runtime in `firebase.json`; the Firebase CLI looks for `functions/venv/bin/python3.11` and fails to deploy otherwise)
+Install these tools before you set up the project:
+
+- [Flutter SDK](https://docs.flutter.dev/get-started/install), version 3.10 or later
+- [Python 3.11](https://www.python.org/downloads/), for Cloud Functions. Use exactly version 3.11. This must match the `python311` runtime in `firebase.json`. The Firebase CLI looks for `functions/venv/bin/python3.11` and fails to deploy if that path is missing.
 - [Firebase CLI](https://firebase.google.com/docs/cli)
-- [Node.js](https://nodejs.org/) (only for the Firestore rules test suite)
+- [Node.js](https://nodejs.org/), for the Firestore rules test suite only
 
 ### Setup
 
@@ -65,10 +68,11 @@ dart run build_runner build --delete-conflicting-outputs
 flutter run -d windows    # or macos, linux, chrome
 ```
 
-> **Running on the web:** use `flutter run -d chrome`, or build and serve a
-> release bundle (`flutter build web --release` then serve `build/web`).
-> Avoid `flutter run -d web-server` — in debug it loads every module without
-> error but never starts the app, giving a silent blank page.
+> **Note on the web build:** use `flutter run -d chrome`. Or build a release
+> bundle with `flutter build web --release` and serve `build/web`.
+> Do not use `flutter run -d web-server`. In debug mode this command loads
+> every module without an error, but the app never starts. You see a blank
+> page with no error message.
 
 ### Cloud Functions (optional, for deployment)
 
@@ -88,86 +92,115 @@ firebase emulators:exec --only firestore \
   "cd test/firestore-rules && ./node_modules/.bin/jest --runInBand"
 ```
 
-## Web app / iOS without the App Store
+## Web app and iOS install without the App Store
 
-The Flutter web build is deployed to Firebase Hosting, which lets iPhone users
-install SushiScout from Safari (**Share -> Add to Home Screen**) as a PWA. No
-Apple Developer account, no TestFlight.
+Firebase Hosting serves the Flutter web build. An iPhone user can install
+SushiScout from Safari as a home-screen app: tap **Share**, then **Add to
+Home Screen**. This install method needs no Apple Developer account and no
+TestFlight.
 
-**Live:** https://sushiscout26-a8f5d.web.app
+**Live app:** https://sushiscout26-a8f5d.web.app
 
 ### Deploying
 
-Pushes to `master` deploy automatically (`.github/workflows/deploy-web.yml`).
-To deploy by hand:
+Every push to `master` deploys the web app automatically
+(`.github/workflows/deploy-web.yml`). To deploy by hand, run this command:
 
 ```bash
 firebase deploy --only hosting
 ```
 
-`hosting.predeploy` in `firebase.json` runs `flutter build web --release` for
-you, so there is no way to ship a stale `build/web`. The CI deploy additionally
-runs `flutter analyze` and the test suite before deploying.
+The `hosting.predeploy` setting in `firebase.json` runs
+`flutter build web --release` for you. This step prevents a stale
+`build/web` directory from reaching production. The CI deploy also runs
+`flutter analyze` and the test suite first.
 
 ### One-time CI setup
 
-The deploy workflow needs a `FIREBASE_SERVICE_ACCOUNT` repo secret:
+The deploy workflow needs a `FIREBASE_SERVICE_ACCOUNT` repository secret.
+Run this command to create it:
 
 ```bash
-# Creates the service account, grants the Hosting roles, and prints the JSON
-# to paste into GitHub -> Settings -> Secrets -> Actions.
+# This command creates the service account, grants the Hosting roles, and
+# prints JSON output. Paste that output into GitHub, under Settings,
+# Secrets, Actions.
 firebase init hosting:github
 ```
 
-### iOS PWA caveats
+### iOS PWA limits
 
-Read this before telling scouts to rely on the web build at a competition:
+Read this section before you tell scouts to rely on the web build at a
+competition.
 
-- **iOS has no background sync.** Queued writes only flush while the app is open
-  and in the foreground. Watch the connection indicator clear before closing.
-- **A cold load transfers 3.6 MB** (`main.dart.js` 1.27 MB + `canvaskit.wasm`
-  2.12 MB + fonts/assets, all gzipped); a repeat load inside the cache window is
-  free. The project is on Blaze, so the 360 MB/day Hosting allowance is a free
-  tier and not a cap -- overage bills at $0.15/GB. A realistic competition day
-  (15 scouts, 20 loads each) is ~390 MB, i.e. under a cent. Cost is not a risk.
-- **There is no offline app shell.** Flutter 3.41 ships a service worker that
-  only unregisters itself, and the build has no `--pwa-strategy` flag to change
-  it, so nothing precaches the app. The shell is served `max-age=300`, which
-  means a scout whose wifi drops can reopen the app for about five minutes and
-  no longer. Firestore still holds their data offline -- this is only about
-  whether the app itself will *start*. Fixing it properly needs a hand-written
-  service worker, and Flutter's bootstrap actively clobbers one (it registers
-  its stub over any existing registration), so it is not a drop-in change.
-- **Safari evicts site data after 7 days without opening the app.** Firestore's
-  offline cache is IndexedDB, and iOS clears it for sites not visited in a week,
-  so a scout with unsynced matches queued could in principle lose them. Not a
-  practical concern for us -- the app gets opened far more often than weekly
-  during a season -- but worth knowing before anyone treats the local cache as
-  durable storage. Anything that must survive is synced to Firestore.
+- **iOS has no background sync.** Queued writes flush to the server only
+  while the app stays open and in the foreground. Watch the connection
+  indicator clear before you close the app.
+- **A cold load transfers 3.6 MB.** This is `main.dart.js` (1.27 MB) plus
+  `canvaskit.wasm` (2.12 MB) plus fonts and other assets, all compressed. A
+  repeat load inside the cache window costs nothing. The project uses the
+  Blaze billing plan, so the first 360 MB per day of Hosting traffic is
+  free; traffic above that costs $0.15 per GB. A typical competition day
+  (15 scouts, 20 loads each) uses about 390 MB. That costs under one cent.
+  Cost is not a risk here.
+- **The app has no offline shell.** Flutter 3.41 ships a service worker
+  that only unregisters itself. The build has no `--pwa-strategy` flag to
+  change this behavior, so nothing precaches the app. The server sends the
+  shell with `max-age=300`. This means a scout whose wifi drops can reopen
+  the app for about five minutes, then can no longer reopen it. Firestore
+  still holds the scout's data offline during this time — this limit is
+  only about whether the app itself can *start*. A correct fix needs a
+  hand-written service worker. Flutter's bootstrap code actively removes
+  any such worker (it registers its own stub over any existing
+  registration), so this is not a simple change.
+- **Safari deletes site data after 7 days without an app open.** Firestore
+  stores its offline cache in IndexedDB, and iOS clears that data for
+  sites the user has not visited in a week. A scout with unsynced matches
+  queued could in principle lose that data. In practice this is not a
+  concern, because scouts open the app far more often than once a week
+  during a season. But keep this limit in mind: do not treat the local
+  cache as durable storage. Anything that must survive syncs to Firestore.
 
 ## How It Works
 
 ### Scouting Flow
 
-1. **Scout opens the app** and selects their event
-2. **Match schedule loads** from TBA/FIRST Events API (or manual entry)
-3. **Scout fills in the form** — FRC or FTC, selected automatically by event type
-4. **Data writes to Firestore** — instant even offline, since Firestore queues the write on disk and flushes it when the connection recovers
-5. **Cloud Function** exports the match one-way to the team's Google Sheet for analysis
+1. The scout opens the app and selects an event.
+2. The app loads the match schedule from the TBA or FIRST Events API. The
+   scout can also enter matches by hand.
+3. The scout fills in the form. The app selects the FRC or FTC form
+   automatically, based on the event type.
+4. The app writes the data to Firestore. This write completes instantly,
+   even offline, because Firestore queues the write on disk and sends it
+   when the connection returns.
+5. A Cloud Function exports the match, one way, to the team's Google Sheet
+   for analysis.
 
 ### Team System
 
-- Sign in with Google (mobile/web) or email/password (desktop)
-- Create or join a team with an 8-character invite code
-- All data is scoped to your team — other teams can't see your matches, even when scouting the same competition
-- Membership is **server-authoritative**: joining is validated by a Cloud Function that mints a signed auth claim, and Firestore rules trust only that claim. Clients cannot grant themselves membership.
-- Team admins can manage settings and regenerate invite codes
+- A scout signs in with Google (on mobile or web) or with email and
+  password (on desktop).
+- A scout can create a team or join one with an 8-character invite code.
+- The app scopes all data to the scout's team. Other teams cannot see
+  these matches, even when they scout the same competition.
+- Team membership is **server-authoritative**. A Cloud Function validates
+  each join request and mints a signed auth claim. Firestore rules trust
+  only that claim. A client cannot grant itself membership.
+- A team admin can manage team settings and can regenerate the invite
+  code.
 
 ### Offline Support
 
-Firestore is the app's only data store, on every platform:
-- **Firestore's on-disk persistence** (`persistenceEnabled`, unlimited cache size) queues writes durably when the network is unreachable and flushes them when the stream recovers — there is no separate local database or sync queue to keep in sync
-- **Connection status** comes from Firestore snapshot metadata (`isFromCache` / `hasPendingWrites`), not device connectivity — a captive portal can report "connected" while blocking all traffic, so the UI trusts what Firestore actually observed instead
+Firestore is the app's only data store, on every platform.
+
+- **Firestore's on-disk persistence** (`persistenceEnabled`, with an
+  unlimited cache size) queues writes durably when the network is
+  unreachable. It sends the writes when the connection returns. The app
+  keeps no separate local database and no separate sync queue.
+- **Connection status comes from Firestore's own snapshot metadata**
+  (`isFromCache` and `hasPendingWrites`), not from the device's network
+  state. A captive portal can report "connected" while it blocks all
+  traffic. The app trusts what Firestore actually observed instead of
+  what the device reports.
 
 ## Tech Stack
 
@@ -175,15 +208,17 @@ Firestore is the app's only data store, on every platform:
 |-------|-----------|
 | Frontend | Flutter, Riverpod |
 | Auth | Firebase Auth, Google Sign-In |
-| Database | Cloud Firestore (with on-disk offline persistence) |
+| Database | Cloud Firestore, with on-disk offline persistence |
 | Backend | Python 3.11 Firebase Cloud Functions |
 | Sync | Google Sheets API, The Blue Alliance API, FIRST Events API |
 | Platforms | Windows, macOS, Linux, Android, iOS, Web |
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for setup instructions, commit conventions, and development workflow.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for setup steps, commit rules, and
+the development workflow.
 
 ## License
 
-This project is maintained by SushiSquad 7461 for FIRST Robotics Competition scouting.
+SushiSquad 7461 maintains this project for FIRST Robotics Competition
+scouting.
