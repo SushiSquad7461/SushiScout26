@@ -787,7 +787,7 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm>
               children: [
                 _ReviewRow(label: "Auto Fuel", value: "$_autoFuel"),
                 _ReviewRow(
-                  label: "Left Line (L1)",
+                  label: "Climb (L1)",
                   value: _autoTowerL1 ? "Yes" : "No",
                 ),
                 const Divider(height: AppTheme.spacingLg),
