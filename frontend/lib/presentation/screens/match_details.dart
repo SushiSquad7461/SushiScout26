@@ -49,13 +49,10 @@ class MatchDetailsScreen extends ConsumerWidget {
     if (event == null) {
       // Event.id is the composite `{teamId}_{eventCode}` doc id, but
       // name/tbaKey must be the raw code (tbaKey feeds TBA/schedule lookups
-      // elsewhere) — mirrors the substring the repository itself uses when
-      // auto-creating an event doc (see FirestoreRepository._getOrCreateEvent).
-      final teamId = match.teamId;
-      final rawCode =
-          teamId.isNotEmpty && match.eventId.startsWith('${teamId}_')
-          ? match.eventId.substring(teamId.length + 1)
-          : match.eventId;
+      // elsewhere) — shares Event.rawCodeFromComposite with the repository's
+      // own auto-create path (see FirestoreRepository._getOrCreateEvent) so
+      // the two can't drift out of sync.
+      final rawCode = Event.rawCodeFromComposite(match.eventId, match.teamId);
       event = Event(
         id: match.eventId,
         name: rawCode,

@@ -17,6 +17,23 @@ class Event {
     this.teamId = '',
   });
 
+  /// Strips the `{teamId}_` prefix from a composite event id (see CLAUDE.md's
+  /// composite-id note), yielding the raw event code used for `name`/`tbaKey`
+  /// and TBA/schedule lookups. Falls back to the id unchanged when it isn't
+  /// prefixed by `teamId` (e.g. a pre-migration event, or `teamId` unknown).
+  /// Single source of truth for this split — used both when auto-creating an
+  /// event doc (`FirestoreRepository._getOrCreateEvent`) and when building a
+  /// fallback `Event` for display (`MatchDetailsScreen._openEditForm`), so
+  /// the two can't drift out of sync.
+  static String rawCodeFromComposite(String compositeId, String? teamId) {
+    if (teamId != null &&
+        teamId.isNotEmpty &&
+        compositeId.startsWith('${teamId}_')) {
+      return compositeId.substring(teamId.length + 1);
+    }
+    return compositeId;
+  }
+
   factory Event.fromFirestore(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
     return Event(
@@ -70,14 +87,8 @@ class Event {
           teamId == other.teamId;
 
   @override
-  int get hashCode => Object.hash(
-        id,
-        name,
-        programType,
-        tbaKey,
-        startDate,
-        teamId,
-      );
+  int get hashCode =>
+      Object.hash(id, name, programType, tbaKey, startDate, teamId);
 
   @override
   String toString() =>

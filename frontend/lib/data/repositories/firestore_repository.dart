@@ -39,14 +39,19 @@ class FirestoreRepository implements ScoutingRepository {
   /// (airplane mode) because no mock can reproduce the offline-never-resolves
   /// behaviour — fake_cloud_firestore always resolves writes immediately.
   void _fireWrite(Future<void> write) {
-    unawaited(write.catchError((Object e) {
-      _logger.w('Deferred Firestore write failed', error: e);
-    }));
+    unawaited(
+      write.catchError((Object e) {
+        _logger.w('Deferred Firestore write failed', error: e);
+      }),
+    );
   }
 
   /// Builds a base query on the matches collection, filtered by eventId and
   /// optionally by teamId if one was provided at construction time.
-  Query<Map<String, dynamic>> _matchesQuery(String eventId, {required bool isDeleted}) {
+  Query<Map<String, dynamic>> _matchesQuery(
+    String eventId, {
+    required bool isDeleted,
+  }) {
     Query<Map<String, dynamic>> query = _firestore
         .collection('matches')
         .where('eventId', isEqualTo: eventId)
@@ -80,13 +85,10 @@ class FirestoreRepository implements ScoutingRepository {
 
   @override
   Stream<List<MatchReport>> watchTrash(String eventId) {
-    return _matchesQuery(eventId, isDeleted: true)
-        .snapshots()
-        .map(
-          (snapshot) => snapshot.docs
-              .map((doc) => MatchReport.fromFirestore(doc))
-              .toList(),
-        );
+    return _matchesQuery(eventId, isDeleted: true).snapshots().map(
+      (snapshot) =>
+          snapshot.docs.map((doc) => MatchReport.fromFirestore(doc)).toList(),
+    );
   }
 
   @override
@@ -104,13 +106,24 @@ class FirestoreRepository implements ScoutingRepository {
   Future<void> createMatch(String eventId, MatchReport match) async {
     _logger.d('Writing match to: matches/${match.id}');
 
-    final programType = await _getOrCreateEvent(eventId, fallbackProgramType: match.programType, teamId: teamId);
+    final programType = await _getOrCreateEvent(
+      eventId,
+      fallbackProgramType: match.programType,
+      teamId: teamId,
+    );
 
-    final prepared = _prepareForFirestore(match, eventId, programType, teamId: teamId);
-    _fireWrite(_firestore
-        .collection('matches')
-        .doc(match.id)
-        .set(_withTeamId(prepared.toFirestore()), SetOptions(merge: true)));
+    final prepared = _prepareForFirestore(
+      match,
+      eventId,
+      programType,
+      teamId: teamId,
+    );
+    _fireWrite(
+      _firestore
+          .collection('matches')
+          .doc(match.id)
+          .set(_withTeamId(prepared.toFirestore()), SetOptions(merge: true)),
+    );
   }
 
   /// Backfill teamId when it isn't already in the payload, so trash/restore
@@ -130,7 +143,12 @@ class FirestoreRepository implements ScoutingRepository {
 
   /// Prepares a match for Firestore by merging robot_died into gameData
   /// and setting eventId + programType + teamId.
-  MatchReport _prepareForFirestore(MatchReport match, String eventId, String programType, {String? teamId}) {
+  MatchReport _prepareForFirestore(
+    MatchReport match,
+    String eventId,
+    String programType, {
+    String? teamId,
+  }) {
     final gameData = Map<String, dynamic>.from(match.gameData)
       ..['robot_died'] = match.robotDied;
     return match.copyWith(
@@ -143,7 +161,11 @@ class FirestoreRepository implements ScoutingRepository {
 
   /// Gets the event's programType, creating the event document if needed.
   /// Combines getEvent + ensureEventExists into a single read to avoid double-reads.
-  Future<String> _getOrCreateEvent(String eventId, {String fallbackProgramType = 'FRC', String? teamId}) async {
+  Future<String> _getOrCreateEvent(
+    String eventId, {
+    String fallbackProgramType = 'FRC',
+    String? teamId,
+  }) async {
     final eventDoc = _firestore.collection('events').doc(eventId);
     DocumentSnapshot<Map<String, dynamic>> docSnapshot;
     try {
@@ -153,9 +175,7 @@ class FirestoreRepository implements ScoutingRepository {
       // ancillary read must not be allowed to block a save longer than that.
       docSnapshot = await eventDoc.get().timeout(const Duration(seconds: 5));
     } on TimeoutException {
-      _logger.w(
-        'Event $eventId read timed out; using fallback programType',
-      );
+      _logger.w('Event $eventId read timed out; using fallback programType');
       return fallbackProgramType;
     } on FirebaseException catch (e, stackTrace) {
       // This read exists only to double-check a programType the caller
@@ -176,7 +196,11 @@ class FirestoreRepository implements ScoutingRepository {
         );
         return fallbackProgramType;
       }
-      _logger.e('Failed to get or create event', error: e, stackTrace: stackTrace);
+      _logger.e(
+        'Failed to get or create event',
+        error: e,
+        stackTrace: stackTrace,
+      );
       rethrow;
     }
 
@@ -185,18 +209,18 @@ class FirestoreRepository implements ScoutingRepository {
     }
 
     _logger.i('Auto-creating event $eventId in Firestore');
-    final rawCode = (teamId != null && teamId.isNotEmpty && eventId.startsWith('${teamId}_'))
-        ? eventId.substring(teamId.length + 1)
-        : eventId;
-    _fireWrite(eventDoc.set({
-      'name': rawCode,
-      'programType': fallbackProgramType,
-      'tbaKey': rawCode,
-      'startDate': Timestamp.fromDate(DateTime.now()),
-      'createdAt': Timestamp.fromDate(DateTime.now()),
-      'teamId': teamId ?? '',
-      'autoCreated': true,
-    }, SetOptions(merge: true)));
+    final rawCode = Event.rawCodeFromComposite(eventId, teamId);
+    _fireWrite(
+      eventDoc.set({
+        'name': rawCode,
+        'programType': fallbackProgramType,
+        'tbaKey': rawCode,
+        'startDate': Timestamp.fromDate(DateTime.now()),
+        'createdAt': Timestamp.fromDate(DateTime.now()),
+        'teamId': teamId ?? '',
+        'autoCreated': true,
+      }, SetOptions(merge: true)),
+    );
     return fallbackProgramType;
   }
 
@@ -204,9 +228,18 @@ class FirestoreRepository implements ScoutingRepository {
   Future<void> updateMatch(String eventId, MatchReport match) async {
     _logger.d('Updating match at: matches/${match.id}');
 
-    final programType = await _getOrCreateEvent(eventId, fallbackProgramType: match.programType, teamId: teamId);
+    final programType = await _getOrCreateEvent(
+      eventId,
+      fallbackProgramType: match.programType,
+      teamId: teamId,
+    );
 
-    final prepared = _prepareForFirestore(match, eventId, programType, teamId: teamId);
+    final prepared = _prepareForFirestore(
+      match,
+      eventId,
+      programType,
+      teamId: teamId,
+    );
     // Editing a match only ever carries a frozen isDeleted snapshot from
     // whenever the scout opened the wizard (see match_details.dart's
     // _openEditForm doc comment). Omitting it from the write payload — with
@@ -214,10 +247,12 @@ class FirestoreRepository implements ScoutingRepository {
     // edit from silently resurrecting a match another scout trashed in the
     // meantime; trashMatch/restoreMatch remain the only writers of isDeleted.
     final payload = prepared.toFirestore()..remove('isDeleted');
-    _fireWrite(_firestore
-        .collection('matches')
-        .doc(match.id)
-        .set(_withTeamId(payload), SetOptions(merge: true)));
+    _fireWrite(
+      _firestore
+          .collection('matches')
+          .doc(match.id)
+          .set(_withTeamId(payload), SetOptions(merge: true)),
+    );
   }
 
   @override
@@ -227,26 +262,27 @@ class FirestoreRepository implements ScoutingRepository {
     // op hasn't synced yet (offline queue) or when another client just
     // hard-deleted the doc. The on_match_written trigger keys off
     // isDeleted, so a self-healing re-creation here is acceptable.
-    _fireWrite(_firestore
-        .collection('matches')
-        .doc(matchId)
-        .set(_withTeamId({'isDeleted': true}), SetOptions(merge: true)));
+    _fireWrite(
+      _firestore
+          .collection('matches')
+          .doc(matchId)
+          .set(_withTeamId({'isDeleted': true}), SetOptions(merge: true)),
+    );
   }
 
   @override
   Future<void> restoreMatch(String eventId, String matchId) async {
-    _fireWrite(_firestore
-        .collection('matches')
-        .doc(matchId)
-        .set(_withTeamId({'isDeleted': false}), SetOptions(merge: true)));
+    _fireWrite(
+      _firestore
+          .collection('matches')
+          .doc(matchId)
+          .set(_withTeamId({'isDeleted': false}), SetOptions(merge: true)),
+    );
   }
 
   @override
   Future<void> deleteMatch(String eventId, String matchId) async {
-    _fireWrite(_firestore
-        .collection('matches')
-        .doc(matchId)
-        .delete());
+    _fireWrite(_firestore.collection('matches').doc(matchId).delete());
   }
 
   @override
