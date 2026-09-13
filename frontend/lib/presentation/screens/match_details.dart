@@ -21,6 +21,22 @@ class MatchDetailsScreen extends ConsumerWidget {
   /// pops this screen too — it holds a frozen snapshot of `match`, so
   /// leaving it up would show stale data until the matches list catches up.
   Future<void> _openEditForm(BuildContext context, WidgetRef ref) async {
+    // A pre-migration match can carry an empty eventId (see CLAUDE.md's
+    // composite-id note). Both the event read below and updateMatch's own
+    // read would target the invalid doc id `events/`, so fail loudly here
+    // instead of opening a wizard that can never save.
+    if (match.eventId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            "Can't edit this match — it's missing event data from before "
+            "the app tracked events per match.",
+          ),
+        ),
+      );
+      return;
+    }
+
     final repo = ref.read(firestoreRepositoryProvider);
     Event? event;
     try {
@@ -30,14 +46,25 @@ class MatchDetailsScreen extends ConsumerWidget {
     } catch (_) {
       event = null;
     }
-    event ??= Event(
-      id: match.eventId,
-      name: match.eventId,
-      programType: match.programType,
-      tbaKey: match.eventId,
-      startDate: match.createdAt,
-      teamId: match.teamId,
-    );
+    if (event == null) {
+      // Event.id is the composite `{teamId}_{eventCode}` doc id, but
+      // name/tbaKey must be the raw code (tbaKey feeds TBA/schedule lookups
+      // elsewhere) — mirrors the substring the repository itself uses when
+      // auto-creating an event doc (see FirestoreRepository._getOrCreateEvent).
+      final teamId = match.teamId;
+      final rawCode =
+          teamId.isNotEmpty && match.eventId.startsWith('${teamId}_')
+          ? match.eventId.substring(teamId.length + 1)
+          : match.eventId;
+      event = Event(
+        id: match.eventId,
+        name: rawCode,
+        programType: match.programType,
+        tbaKey: rawCode,
+        startDate: match.createdAt,
+        teamId: match.teamId,
+      );
+    }
 
     if (!context.mounted) return;
     final updated = await Navigator.of(context).push<bool>(

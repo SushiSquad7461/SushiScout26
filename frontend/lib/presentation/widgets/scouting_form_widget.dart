@@ -73,6 +73,57 @@ class ScoutingFormBrandBand extends StatelessWidget
   }
 }
 
+/// Read-only strip shown at the top of the wizard in edit mode, since the
+/// setup page (where this info is normally entered/changed) is skipped — a
+/// scout correcting game data shouldn't also be able to reassign the match
+/// to a different team or alliance. Shared by FRC and FTC forms so the two
+/// copies can't drift.
+class ScoutingLockedMatchBanner extends StatelessWidget {
+  final String teamNumber;
+  final String matchNumber;
+  final String alliance;
+
+  const ScoutingLockedMatchBanner({
+    super.key,
+    required this.teamNumber,
+    required this.matchNumber,
+    required this.alliance,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppTheme.spacingMd,
+        vertical: AppTheme.spacingSm,
+      ),
+      color: colorScheme.surfaceContainerHighest,
+      child: Row(
+        children: [
+          Icon(
+            Icons.lock_outline,
+            size: 16,
+            color: colorScheme.onSurfaceVariant,
+          ),
+          const SizedBox(width: AppTheme.spacingSm),
+          Expanded(
+            child: Text(
+              "Team $teamNumber • Q$matchNumber • $alliance Alliance",
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// The wizard page-step dots shown in a scouting form's bottom bar. Square,
 /// per the design's geometry; the "upcoming" dot uses [ColorScheme.outline]
 /// rather than `surfaceContainerHighest`, which is ~(64,64,64) and reads at

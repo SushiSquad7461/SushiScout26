@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,6 +11,27 @@ import 'package:frontend/data/repositories/providers.dart';
 import 'package:frontend/presentation/screens/ftc_decode_form.dart';
 import 'package:frontend/presentation/widgets/counter_card.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+/// Repository whose write path always fails the way Firestore does when a
+/// scout is offline on a device that never cached the event doc (e.g. a
+/// fresh mobile-web session): a raw [FirebaseException], not an [AppError].
+class _OfflineUnavailableRepository extends FirestoreRepository {
+  _OfflineUnavailableRepository(super.firestore, {super.teamId});
+
+  Never _throwUnavailable() => throw FirebaseException(
+    plugin: 'cloud_firestore',
+    code: 'unavailable',
+    message: 'Failed to get document because the client is offline.',
+  );
+
+  @override
+  Future<void> createMatch(String eventId, MatchReport match) async =>
+      _throwUnavailable();
+
+  @override
+  Future<void> updateMatch(String eventId, MatchReport match) async =>
+      _throwUnavailable();
+}
 
 const _eventId = 'teamA_2026ftc';
 
@@ -58,12 +80,15 @@ void main() {
     repo = FirestoreRepository(fake, teamId: 'teamA');
   });
 
-  Future<Widget> buildForm({MatchReport? existingMatch}) async {
+  Future<Widget> buildForm({
+    MatchReport? existingMatch,
+    FirestoreRepository? repoOverride,
+  }) async {
     final prefs = await SharedPreferences.getInstance();
     return ProviderScope(
       overrides: [
         sharedPreferencesProvider.overrideWithValue(prefs),
-        firestoreRepositoryProvider.overrideWithValue(repo),
+        firestoreRepositoryProvider.overrideWithValue(repoOverride ?? repo),
       ],
       child: MaterialApp(
         home: FtcDecodeForm(
@@ -120,6 +145,34 @@ void main() {
         final matches = await repo.getMatches(_eventId);
         expect(matches, hasLength(1));
         expect(matches.single.id, 'm1');
+      },
+    );
+
+    testWidgets(
+      'a raw FirebaseException on save shows a friendly message, not the exception text',
+      (tester) async {
+        await tester.pumpWidget(
+          await buildForm(
+            existingMatch: _ftcMatch(),
+            repoOverride: _OfflineUnavailableRepository(fake, teamId: 'teamA'),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        for (var i = 0; i < 3; i++) {
+          await tester.tap(find.text('next'));
+          await tester.pumpAndSettle();
+        }
+
+        await tester.tap(find.text('save'));
+        await tester.pump();
+
+        expect(find.textContaining('cloud_firestore'), findsNothing);
+        expect(find.textContaining('client is offline'), findsNothing);
+        expect(
+          find.textContaining('check your internet'),
+          findsOneWidget,
+        );
       },
     );
   });

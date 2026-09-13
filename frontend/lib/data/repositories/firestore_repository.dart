@@ -144,40 +144,60 @@ class FirestoreRepository implements ScoutingRepository {
   /// Gets the event's programType, creating the event document if needed.
   /// Combines getEvent + ensureEventExists into a single read to avoid double-reads.
   Future<String> _getOrCreateEvent(String eventId, {String fallbackProgramType = 'FRC', String? teamId}) async {
+    final eventDoc = _firestore.collection('events').doc(eventId);
+    DocumentSnapshot<Map<String, dynamic>> docSnapshot;
     try {
-      final eventDoc = _firestore.collection('events').doc(eventId);
-      // This read is the one remaining place a write path can block on the
-      // network. In clean airplane mode a default get() falls back to cache
-      // instantly, and the event doc is almost always already cached (the
-      // scout loaded its matches), so a cache hit needs no network even on a
-      // captive-portal/black-hole network. The residual hang is only the
-      // narrow cache-miss-on-portal case (first match to a brand-new event,
-      // never loaded online, on a network that swallows the socket). Left as a
-      // known limitation — see the roadmap §8 captive-portal note.
-      final docSnapshot = await eventDoc.get();
-
-      if (docSnapshot.exists) {
-        return Event.fromFirestore(docSnapshot).programType;
-      }
-
-      _logger.i('Auto-creating event $eventId in Firestore');
-      final rawCode = (teamId != null && teamId.isNotEmpty && eventId.startsWith('${teamId}_'))
-          ? eventId.substring(teamId.length + 1)
-          : eventId;
-      _fireWrite(eventDoc.set({
-        'name': rawCode,
-        'programType': fallbackProgramType,
-        'tbaKey': rawCode,
-        'startDate': Timestamp.fromDate(DateTime.now()),
-        'createdAt': Timestamp.fromDate(DateTime.now()),
-        'teamId': teamId ?? '',
-        'autoCreated': true,
-      }, SetOptions(merge: true)));
+      // Bounded to match the caller-side read in match_details.dart's
+      // _openEditForm — a captive-portal network can leave a `.get()`
+      // pending indefinitely rather than throwing `unavailable`, and this
+      // ancillary read must not be allowed to block a save longer than that.
+      docSnapshot = await eventDoc.get().timeout(const Duration(seconds: 5));
+    } on TimeoutException {
+      _logger.w(
+        'Event $eventId read timed out; using fallback programType',
+      );
       return fallbackProgramType;
-    } catch (e, stackTrace) {
+    } on FirebaseException catch (e, stackTrace) {
+      // This read exists only to double-check a programType the caller
+      // already supplies, and to opportunistically auto-create the event doc.
+      // Firestore's own write queue already makes match writes durable and
+      // offline-safe (see firestore_repository_offline_write_test.dart) — an
+      // ancillary read must not be allowed to override that guarantee. The
+      // matches stream (not the events collection) is what usually populates
+      // a device's cache, so a device can be offline with this match cached
+      // but its parent event doc not: that cache miss makes Firestore throw
+      // `unavailable` here. Fall back to the caller's programType and skip
+      // auto-create (we can't tell offline whether the event already exists
+      // remotely, and a wrong guess would risk clobbering its real fields).
+      if (e.code == 'unavailable') {
+        _logger.w(
+          'Event $eventId not cached and client is offline; using fallback programType',
+          error: e,
+        );
+        return fallbackProgramType;
+      }
       _logger.e('Failed to get or create event', error: e, stackTrace: stackTrace);
       rethrow;
     }
+
+    if (docSnapshot.exists) {
+      return Event.fromFirestore(docSnapshot).programType;
+    }
+
+    _logger.i('Auto-creating event $eventId in Firestore');
+    final rawCode = (teamId != null && teamId.isNotEmpty && eventId.startsWith('${teamId}_'))
+        ? eventId.substring(teamId.length + 1)
+        : eventId;
+    _fireWrite(eventDoc.set({
+      'name': rawCode,
+      'programType': fallbackProgramType,
+      'tbaKey': rawCode,
+      'startDate': Timestamp.fromDate(DateTime.now()),
+      'createdAt': Timestamp.fromDate(DateTime.now()),
+      'teamId': teamId ?? '',
+      'autoCreated': true,
+    }, SetOptions(merge: true)));
+    return fallbackProgramType;
   }
 
   @override
@@ -187,10 +207,17 @@ class FirestoreRepository implements ScoutingRepository {
     final programType = await _getOrCreateEvent(eventId, fallbackProgramType: match.programType, teamId: teamId);
 
     final prepared = _prepareForFirestore(match, eventId, programType, teamId: teamId);
+    // Editing a match only ever carries a frozen isDeleted snapshot from
+    // whenever the scout opened the wizard (see match_details.dart's
+    // _openEditForm doc comment). Omitting it from the write payload — with
+    // merge:true leaving the field untouched server-side — stops a slow
+    // edit from silently resurrecting a match another scout trashed in the
+    // meantime; trashMatch/restoreMatch remain the only writers of isDeleted.
+    final payload = prepared.toFirestore()..remove('isDeleted');
     _fireWrite(_firestore
         .collection('matches')
         .doc(match.id)
-        .set(_withTeamId(prepared.toFirestore()), SetOptions(merge: true)));
+        .set(_withTeamId(payload), SetOptions(merge: true)));
   }
 
   @override

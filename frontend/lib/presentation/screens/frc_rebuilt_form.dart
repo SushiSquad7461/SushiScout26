@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/errors/app_error.dart';
+import '../../core/errors/error_mapper.dart';
 import '../../core/validation/form_validators.dart';
 import '../../data/models/match_report.dart';
 import '../../data/repositories/providers.dart';
@@ -202,10 +203,10 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm>
 
   void _nextPage() {
     if (_submitting) return;
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
     if (_currentPage == 0 && !_isEditing) {
-      if (!_formKey.currentState!.validate()) {
-        return;
-      }
       _timerController.start();
     }
 
@@ -246,7 +247,12 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm>
         body: SafeArea(
           child: Column(
             children: [
-              if (_isEditing) _buildLockedMatchBanner(context),
+              if (_isEditing)
+                ScoutingLockedMatchBanner(
+                  teamNumber: _teamNumberCtrl.text,
+                  matchNumber: _matchNumberCtrl.text,
+                  alliance: _alliance,
+                ),
               Expanded(
                 child: Form(
                   key: _formKey,
@@ -255,7 +261,8 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm>
                     physics: const NeverScrollableScrollPhysics(),
                     onPageChanged: (idx) => setState(() => _currentPage = idx),
                     children: [
-                      if (!_isEditing) _buildPage("setup", _buildSetup(context)),
+                      if (!_isEditing)
+                        _buildPage("setup", _buildSetup(context)),
                       _buildPage("autonomous", _buildAuto(context)),
                       _buildPage("teleop", _buildTeleop(context)),
                       _buildPage("endgame", _buildEndgame(context)),
@@ -268,43 +275,6 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm>
           ),
         ),
         bottomNavigationBar: _buildBottomBar(context, colorScheme),
-      ),
-    );
-  }
-
-  /// Read-only strip shown only in edit mode, since the setup page (where
-  /// this info is normally entered/changed) is skipped — a scout correcting
-  /// game data shouldn't also be able to reassign the match to a different
-  /// team or alliance.
-  Widget _buildLockedMatchBanner(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppTheme.spacingMd,
-        vertical: AppTheme.spacingSm,
-      ),
-      color: colorScheme.surfaceContainerHighest,
-      child: Row(
-        children: [
-          Icon(
-            Icons.lock_outline,
-            size: 16,
-            color: colorScheme.onSurfaceVariant,
-          ),
-          const SizedBox(width: AppTheme.spacingSm),
-          Expanded(
-            child: Text(
-              "Team ${_teamNumberCtrl.text} • Q${_matchNumberCtrl.text} • "
-              "$_alliance Alliance",
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -852,7 +822,11 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm>
             teamNumber: int.tryParse(_teamNumberCtrl.text) ?? 0,
             alliance: _alliance,
             scouterName: _scouterNameCtrl.text,
-            gameData: gameData,
+            // Merge onto the existing map rather than replacing it outright,
+            // so any key this form version doesn't know about (a legacy
+            // field from an older schema) survives an edit instead of being
+            // silently dropped.
+            gameData: {...existing.gameData, ...gameData},
             comments: _commentsCtrl.text,
           )
         : MatchReport(
@@ -881,7 +855,9 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm>
             content: Text(existing != null ? "Match Updated!" : "Match Saved!"),
           ),
         );
-        Navigator.pop(context, existing != null);
+        // `true` means "a save happened" — not "this was an edit". Both
+        // branches above only reach this point after a successful write.
+        Navigator.pop(context, true);
       }
     } on AppError catch (e) {
       if (mounted) {
@@ -896,7 +872,7 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text("Error saving: $e"),
+            content: Text(ErrorMapper.toUserMessage(e)),
             backgroundColor: Theme.of(context).colorScheme.error,
           ),
         );

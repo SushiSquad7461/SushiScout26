@@ -1,7 +1,7 @@
 import 'app_error.dart';
 
 /// Maps technical errors to user-friendly messages
-/// 
+///
 /// This class centralizes all error messages to ensure consistency
 /// across the app and make localization easier in the future.
 class ErrorMapper {
@@ -16,7 +16,11 @@ class ErrorMapper {
 
     if (errorString.contains('network') ||
         errorString.contains('connection') ||
-        errorString.contains('socket')) {
+        errorString.contains('socket') ||
+        errorString.contains('offline') ||
+        errorString.contains('unavailable') ||
+        errorString.contains('deadline-exceeded') ||
+        errorString.contains('deadline_exceeded')) {
       return 'Network connection error. Please check your internet and try again.';
     }
 
@@ -38,8 +42,7 @@ class ErrorMapper {
       return 'This item already exists.';
     }
 
-    if (errorString.contains('validation') ||
-        errorString.contains('invalid')) {
+    if (errorString.contains('validation') || errorString.contains('invalid')) {
       return 'Please check your input and try again.';
     }
 
@@ -72,7 +75,7 @@ class ErrorMapper {
   static bool isDestructiveAction(dynamic error) {
     if (error is AppError) {
       return error.code?.contains('DELETE') == true ||
-             error.code?.contains('REMOVE') == true;
+          error.code?.contains('REMOVE') == true;
     }
     return false;
   }
