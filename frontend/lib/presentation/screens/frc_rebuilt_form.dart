@@ -777,12 +777,16 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm>
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.warning, color: colorScheme.error, size: 20),
+                        Icon(
+                          Icons.warning,
+                          color: colorScheme.onErrorContainer,
+                          size: 20,
+                        ),
                         const SizedBox(width: AppTheme.spacingSm),
                         Text(
                           "Robot Died",
                           style: TextStyle(
-                            color: colorScheme.error,
+                            color: colorScheme.onErrorContainer,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
