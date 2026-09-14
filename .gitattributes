@@ -1,0 +1,6 @@
+# Flutter regenerates these files with LF line endings. Windows checkouts
+# with core.autocrlf=true otherwise convert them to CRLF, which then shows
+# as a permanent modification against the LF version stored in the repo.
+frontend/*/flutter/generated_plugin_registrant.cc text eol=lf
+frontend/*/flutter/generated_plugins.cmake text eol=lf
+frontend/macos/Flutter/GeneratedPluginRegistrant.swift text eol=lf
