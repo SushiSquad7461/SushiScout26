@@ -40,14 +40,20 @@ class MatchTimer extends StatefulWidget implements PreferredSizeWidget {
 
 class _MatchTimerState extends State<MatchTimer> {
   Timer? _timer;
-  int _secondsRemaining = 135; // 2:15 total duration
+  // 15s auto + 3s field-disabled transition + 2:15 teleop (incl. 30s endgame).
+  int _secondsRemaining = 153;
   bool _isRunning = false;
-  static const int _totalDuration = 135;
+  static const int _totalDuration = 153;
+  static const int _autoDuration = 15;
+  static const int _transitionDuration = 3;
 
   String get _currentPhase {
     if (!_isRunning && _secondsRemaining == _totalDuration) return "PRE-MATCH";
-    if (_secondsRemaining > 120) return "AUTO"; // First 15s
+    if (_secondsRemaining > _totalDuration - _autoDuration) return "AUTO";
     if (_secondsRemaining <= 0) return "FINISHED";
+    if (_secondsRemaining > _totalDuration - _autoDuration - _transitionDuration) {
+      return "TRANSITION"; // 3s field-disabled pause before teleop
+    }
     if (_secondsRemaining <= 30) return "ENDGAME"; // Last 30s
     return "TELEOP";
   }
@@ -62,6 +68,8 @@ class _MatchTimerState extends State<MatchTimer> {
     switch (_currentPhase) {
       case "AUTO":
         return brand.accentHighlight; // french
+      case "TRANSITION":
+        return colorScheme.outline;
       case "TELEOP":
         return AppTheme.onChrome(brand); // paper, in both brightnesses
       case "ENDGAME":
@@ -207,7 +215,7 @@ class _MatchTimerState extends State<MatchTimer> {
                   // Reset button — visible when timer has been used
                   if (_hasStarted)
                     Semantics(
-                      label: 'Reset match timer to 2 minutes 15 seconds',
+                      label: 'Reset match timer to 2 minutes 33 seconds',
                       button: true,
                       child: IconButton(
                         onPressed: _resetTimer,

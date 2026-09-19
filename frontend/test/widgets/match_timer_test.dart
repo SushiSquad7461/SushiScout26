@@ -27,10 +27,10 @@ void main() {
       );
     }
 
-    testWidgets('displays initial timer at 2:15', (tester) async {
+    testWidgets('displays initial timer at 2:33', (tester) async {
       await tester.pumpWidget(buildTestWidget());
 
-      expect(find.text('2:15'), findsOneWidget);
+      expect(find.text('2:33'), findsOneWidget);
     });
 
     testWidgets('displays PRE-MATCH phase initially', (tester) async {
@@ -60,7 +60,7 @@ void main() {
       await tester.tap(find.byIcon(Icons.play_arrow_rounded));
       await tester.pump(const Duration(seconds: 2));
 
-      expect(find.text('2:13'), findsOneWidget);
+      expect(find.text('2:31'), findsOneWidget);
     });
 
     testWidgets('controller can start timer', (tester) async {
@@ -68,7 +68,7 @@ void main() {
 
       await tester.pumpWidget(buildTestWidget(controller: controller));
 
-      expect(find.text('2:15'), findsOneWidget);
+      expect(find.text('2:33'), findsOneWidget);
 
       controller.start();
       await tester.pump();
