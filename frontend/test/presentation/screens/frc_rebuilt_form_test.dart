@@ -105,19 +105,18 @@ void main() {
       },
     );
 
-    testWidgets(
-      'the hardware back button exits the form from the first page',
-      (tester) async {
-        await tester.pumpWidget(await buildApp());
-        await tester.tap(find.text('open'));
-        await tester.pumpAndSettle();
-        expect(find.byType(FrcRebuiltForm), findsOneWidget);
+    testWidgets('the hardware back button exits the form from the first page', (
+      tester,
+    ) async {
+      await tester.pumpWidget(await buildApp());
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      expect(find.byType(FrcRebuiltForm), findsOneWidget);
 
-        await _pressHardwareBackButton(tester);
-        await tester.pumpAndSettle();
+      await _pressHardwareBackButton(tester);
+      await tester.pumpAndSettle();
 
-        expect(find.byType(FrcRebuiltForm), findsNothing);
-      },
-    );
+      expect(find.byType(FrcRebuiltForm), findsNothing);
+    });
   });
 }
