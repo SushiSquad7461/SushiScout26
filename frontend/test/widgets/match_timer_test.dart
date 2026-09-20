@@ -127,7 +127,11 @@ void main() {
         );
 
         await tester.tap(find.byIcon(Icons.play_arrow_rounded));
-        await tester.pump();
+        // Advance a real tick so the timer's periodic callback actually
+        // fires and reaches _syncControllerAndNotifyPhase — a durationless
+        // pump() never advances the fake clock, so Timer.periodic would
+        // never fire and this test would pass vacuously.
+        await tester.pump(const Duration(seconds: 1));
 
         expect(flashed, isNull);
       },
@@ -158,7 +162,10 @@ void main() {
 
       await tester.tap(find.byIcon(Icons.play_arrow_rounded));
       await tester.pump(const Duration(seconds: 1));
-      flashed = null;
+      // flashed is already null here — the first tick's PRE-MATCH -> AUTO
+      // transition is correctly suppressed. No reassignment needed; this
+      // comment just makes that assumption explicit for the reset assertion
+      // below.
 
       await tester.tap(find.byIcon(Icons.replay_rounded));
       await tester.pump();
