@@ -100,5 +100,19 @@ void main() {
         expect(find.byType(FtcDecodeForm), findsOneWidget);
       },
     );
+
+    testWidgets('the hardware back button exits the form from the first page', (
+      tester,
+    ) async {
+      await tester.pumpWidget(await buildApp());
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      expect(find.byType(FtcDecodeForm), findsOneWidget);
+
+      await _pressHardwareBackButton(tester);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(FtcDecodeForm), findsNothing);
+    });
   });
 }

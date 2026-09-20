@@ -102,14 +102,19 @@ class _PhaseFlashOverlayState extends State<PhaseFlashOverlay>
       children: [
         widget.child,
         if (_flashColor != null)
-          IgnorePointer(
-            child: AnimatedBuilder(
-              animation: _animation,
-              builder: (context, _) => Opacity(
-                opacity: 1.0 - _animation.value,
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    border: Border.all(color: _flashColor!, width: 6),
+          // Positioned.fill, because a Stack's non-positioned children get
+          // loose constraints — without this, the childless DecoratedBox
+          // below sizes to Size.zero and its border paints nothing.
+          Positioned.fill(
+            child: IgnorePointer(
+              child: AnimatedBuilder(
+                animation: _animation,
+                builder: (context, _) => Opacity(
+                  opacity: 1.0 - _animation.value,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      border: Border.all(color: _flashColor!, width: 6),
+                    ),
                   ),
                 ),
               ),

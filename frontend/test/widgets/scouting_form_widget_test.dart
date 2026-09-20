@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:frontend/presentation/widgets/match_timer.dart';
 import 'package:frontend/presentation/widgets/scouting_form_widget.dart';
 
 void main() {
@@ -75,6 +76,14 @@ void main() {
         }),
         isTrue,
       );
+
+      // The glow must actually cover the screen, not just exist somewhere
+      // in the tree — a DecoratedBox with no child sizes to Size.zero
+      // inside a Stack's loose constraints unless explicitly positioned to
+      // fill, in which case its border paints nothing.
+      final glowSize = tester.getSize(find.byType(DecoratedBox));
+      final screenSize = tester.getSize(find.byType(MaterialApp));
+      expect(glowSize, screenSize);
     });
 
     testWidgets('the glow ignores pointer events', (tester) async {
@@ -104,5 +113,43 @@ void main() {
       await tester.tap(find.byType(GestureDetector));
       expect(tapped, isTrue);
     });
+  });
+
+  group('ScoutingFormBrandBand onPhaseChanged', () {
+    testWidgets(
+      'invokes onPhaseChanged when the inner MatchTimer crosses a phase boundary',
+      (tester) async {
+        Color? flashed;
+        final timerController = MatchTimerController();
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              appBar: AppBar(
+                title: const Text('Test'),
+                bottom: ScoutingFormBrandBand(
+                  timerController: timerController,
+                  onPhaseChanged: (c) => flashed = c,
+                ),
+              ),
+              body: const SizedBox(),
+            ),
+          ),
+        );
+
+        expect(flashed, isNull);
+
+        // Same technique as match_timer_test.dart's phase-change tests:
+        // start the timer, then advance a real duration far enough to
+        // cross the AUTO -> TRANSITION boundary (durationless pump() never
+        // advances the fake clock, so Timer.periodic would never fire).
+        await tester.tap(find.byIcon(Icons.play_arrow_rounded));
+        await tester.pump(const Duration(seconds: 15));
+
+        expect(find.text('transition'), findsOneWidget);
+        expect(flashed, isNotNull);
+
+        timerController.dispose();
+      },
+    );
   });
 }
