@@ -293,15 +293,15 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm>
       ),
       child: Row(
         children: [
-          // Back button
-          if (_currentPage > 0)
-            TextButton.icon(
-              onPressed: _prevPage,
-              icon: const Icon(Icons.arrow_back_rounded),
-              label: const Text("back"),
-            )
-          else
-            const SizedBox(width: 100),
+          ScoutingWizardBottomSlot(
+            child: _currentPage > 0
+                ? TextButton.icon(
+                    onPressed: _prevPage,
+                    icon: const Icon(Icons.arrow_back_rounded),
+                    label: const Text("back"),
+                  )
+                : const SizedBox.shrink(),
+          ),
 
           const Spacer(),
 
@@ -310,12 +310,13 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm>
 
           const Spacer(),
 
-          // Next/Submit button
-          ScoutingWizardNextButton(
-            isLastPage: _currentPage == _pageCount - 1,
-            submitting: _submitting,
-            onPressed: _nextPage,
-            finishLabel: _isEditing ? "save" : "submit",
+          ScoutingWizardBottomSlot(
+            child: ScoutingWizardNextButton(
+              isLastPage: _currentPage == _pageCount - 1,
+              submitting: _submitting,
+              onPressed: _nextPage,
+              finishLabel: _isEditing ? "save" : "submit",
+            ),
           ),
         ],
       ),

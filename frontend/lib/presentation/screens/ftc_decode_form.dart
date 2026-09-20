@@ -286,14 +286,15 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm>
       ),
       child: Row(
         children: [
-          if (_currentPage > 0)
-            TextButton.icon(
-              onPressed: _prevPage,
-              icon: const Icon(Icons.arrow_back_rounded),
-              label: const Text("back"),
-            )
-          else
-            const SizedBox(width: 100),
+          ScoutingWizardBottomSlot(
+            child: _currentPage > 0
+                ? TextButton.icon(
+                    onPressed: _prevPage,
+                    icon: const Icon(Icons.arrow_back_rounded),
+                    label: const Text("back"),
+                  )
+                : const SizedBox.shrink(),
+          ),
 
           const Spacer(),
 
@@ -303,11 +304,13 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm>
 
           // Label then chevron, per the design's "next ›" — FilledButton.icon
           // puts the icon first, which read as "← next".
-          ScoutingWizardNextButton(
-            isLastPage: _currentPage == _pageCount - 1,
-            submitting: _submitting,
-            onPressed: _nextPage,
-            finishLabel: _isEditing ? "save" : "submit",
+          ScoutingWizardBottomSlot(
+            child: ScoutingWizardNextButton(
+              isLastPage: _currentPage == _pageCount - 1,
+              submitting: _submitting,
+              onPressed: _nextPage,
+              finishLabel: _isEditing ? "save" : "submit",
+            ),
           ),
         ],
       ),

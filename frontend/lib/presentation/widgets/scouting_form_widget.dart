@@ -7,6 +7,33 @@ import '../theme/team_brand.dart';
 import 'color_bar.dart';
 import 'match_timer.dart';
 
+/// Fixed width for both sides of a wizard's bottom bar. Both
+/// [FrcRebuiltForm] and [FtcDecodeForm] wrap their back-button slot and
+/// their [ScoutingWizardNextButton] in a [ScoutingWizardBottomSlot] of this
+/// width, so [ScoutingWizardPageIndicator] sits at the true center of the
+/// bar. Before this constant existed, the back slot was a bare
+/// `SizedBox(width: 100)` while the next/submit button sized itself to its
+/// label ("next" vs. "submit"/"save") plus an optional spinner — unequal
+/// widths pushed the indicator off center.
+const double kWizardBottomBarSlotWidth = 112;
+
+/// Wraps [child] in a fixed-width slot, scaling it down rather than letting
+/// it overflow if it's ever wider than the slot. See
+/// [kWizardBottomBarSlotWidth].
+class ScoutingWizardBottomSlot extends StatelessWidget {
+  final Widget child;
+
+  const ScoutingWizardBottomSlot({super.key, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: kWizardBottomBarSlotWidth,
+      child: FittedBox(fit: BoxFit.scaleDown, child: child),
+    );
+  }
+}
+
 abstract class ScoutingFormWidget extends ConsumerStatefulWidget {
   final String eventId;
   final Event event;
