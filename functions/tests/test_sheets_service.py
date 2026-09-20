@@ -52,22 +52,35 @@ class TestSheetsService(unittest.TestCase):
         mock_build.assert_called_once_with('sheets', 'v4', credentials=mock_creds)
 
     def test_frc_headers(self):
-        """Test that FRC headers match the 19-column schema."""
-        self.assertEqual(len(FRC_HEADERS), 19)
+        """Test that FRC headers match the 25-column schema."""
+        self.assertEqual(len(FRC_HEADERS), 25)
         self.assertEqual(FRC_HEADERS[0], "Timestamp")
         self.assertEqual(FRC_HEADERS[1], "Match ID")
         self.assertEqual(FRC_HEADERS[6], "Auto Fuel")
         self.assertEqual(FRC_HEADERS[13], "Trench Traverse")
-        self.assertEqual(FRC_HEADERS[18], "Comments")
+        self.assertEqual(FRC_HEADERS[18], "Drivetrain Speed")
+        self.assertEqual(FRC_HEADERS[19], "Intake Speed")
+        self.assertEqual(FRC_HEADERS[20], "Shooter Speed")
+        self.assertEqual(FRC_HEADERS[21], "Defense Cause")
+        self.assertEqual(FRC_HEADERS[22], "Died At")
+        self.assertEqual(FRC_HEADERS[23], "Died Reason")
+        self.assertEqual(FRC_HEADERS[24], "Comments")
 
     def test_ftc_headers(self):
-        """Test that FTC headers match the 15-column schema."""
-        self.assertEqual(len(FTC_HEADERS), 15)
+        """Test that FTC headers match the 22-column schema."""
+        self.assertEqual(len(FTC_HEADERS), 22)
         self.assertEqual(FTC_HEADERS[0], "Timestamp")
         self.assertEqual(FTC_HEADERS[6], "Leave")
         self.assertEqual(FTC_HEADERS[7], "Auto Artifacts")
         self.assertEqual(FTC_HEADERS[11], "Base Expansion")
-        self.assertEqual(FTC_HEADERS[14], "Comments")
+        self.assertEqual(FTC_HEADERS[14], "Defense Rating")
+        self.assertEqual(FTC_HEADERS[15], "Drivetrain Speed")
+        self.assertEqual(FTC_HEADERS[16], "Intake Speed")
+        self.assertEqual(FTC_HEADERS[17], "Shooter Speed")
+        self.assertEqual(FTC_HEADERS[18], "Defense Cause")
+        self.assertEqual(FTC_HEADERS[19], "Died At")
+        self.assertEqual(FTC_HEADERS[20], "Died Reason")
+        self.assertEqual(FTC_HEADERS[21], "Comments")
 
     def test_transform_frc_report(self):
         """Test transforming FRC match report to row format."""
@@ -88,12 +101,18 @@ class TestSheetsService(unittest.TestCase):
                 'teleop_tower_level': 3,
                 'defense_rating': 3,
                 'driver_skill': 4,
-                'robot_died': False,
+                'robot_died': True,
                 'trench_traverse': True,
                 'bump_traverse': False,
                 'shooting_range_close': True,
                 'shooting_range_mid': False,
                 'shooting_range_far': False,
+                'drivetrain_speed': 4,
+                'intake_speed': 2,
+                'shooter_speed': 5,
+                'defense_cause': 'broke',
+                'died_at_seconds': 65,
+                'died_reason': 'tipped on the ramp',
             },
             'comments': 'Great performance',
             'createdAt': datetime(2026, 2, 17, 10, 30, 0)
@@ -101,7 +120,7 @@ class TestSheetsService(unittest.TestCase):
 
         result = service.transform_match_report(report_data)
 
-        self.assertEqual(len(result), len(FRC_HEADERS))  # 19 columns
+        self.assertEqual(len(result), len(FRC_HEADERS))  # 25 columns
         self.assertEqual(result[1], 'qm1_254')       # Match ID
         self.assertEqual(result[2], 1)                 # Match #
         self.assertEqual(result[3], 254)               # Team #
@@ -113,13 +132,46 @@ class TestSheetsService(unittest.TestCase):
         self.assertEqual(result[9], 'Level 3')         # Climb Level
         self.assertEqual(result[10], '3/5')            # Defense Rating
         self.assertEqual(result[11], '4/5')            # Driver Skill
-        self.assertEqual(result[12], 'No')             # Robot Died
+        self.assertEqual(result[12], 'Yes')            # Robot Died
         self.assertEqual(result[13], 'Yes')            # Trench Traverse
         self.assertEqual(result[14], 'No')             # Bump Traverse
         self.assertEqual(result[15], 'Yes')            # Shooting Close
         self.assertEqual(result[16], 'No')             # Shooting Mid
         self.assertEqual(result[17], 'No')             # Shooting Far
-        self.assertEqual(result[18], 'Great performance')  # Comments
+        self.assertEqual(result[18], '4/5')            # Drivetrain Speed
+        self.assertEqual(result[19], '2/5')            # Intake Speed
+        self.assertEqual(result[20], '5/5')            # Shooter Speed
+        self.assertEqual(result[21], 'Robot Broke')    # Defense Cause
+        self.assertEqual(result[22], '1:05')           # Died At
+        self.assertEqual(result[23], 'tipped on the ramp')  # Died Reason
+        self.assertEqual(result[24], 'Great performance')  # Comments
+
+    def test_transform_frc_report_without_a_defense_cause_or_death(self):
+        """Cause/died columns stay blank when the robot never died and no
+        cause was recorded — the common case, most matches have neither."""
+        with patch('services.sheets_service.build'), \
+             patch('services.sheets_service.service_account.Credentials'):
+            service = SheetsService(self.mock_credentials)
+
+        report_data = {
+            'matchId': 'qm2_254',
+            'matchNumber': 2,
+            'teamNumber': 254,
+            'alliance': 'Red',
+            'scouterName': 'Test Scouter',
+            'gameData': {
+                'defense_rating': 0,
+                'robot_died': False,
+            },
+            'comments': '',
+            'createdAt': datetime(2026, 2, 17, 10, 30, 0)
+        }
+
+        result = service.transform_match_report(report_data)
+
+        self.assertEqual(result[21], '')  # Defense Cause
+        self.assertEqual(result[22], '')  # Died At
+        self.assertEqual(result[23], '')  # Died Reason
 
     def test_transform_ftc_report(self):
         """Test transforming FTC match report to row format."""
@@ -143,6 +195,11 @@ class TestSheetsService(unittest.TestCase):
                 'base_expansion': 'Full',
                 'driver_quality': 4.0,
                 'robot_died': False,
+                'defense_rating': 2,
+                'drivetrain_speed': 3,
+                'intake_speed': 3,
+                'shooter_speed': 3,
+                'defense_cause': 'strategic',
             },
             'comments': 'Solid match',
             'createdAt': datetime(2026, 3, 1, 14, 0, 0)
@@ -150,7 +207,7 @@ class TestSheetsService(unittest.TestCase):
 
         result = service.transform_match_report(report_data)
 
-        self.assertEqual(len(result), len(FTC_HEADERS))  # 15 columns
+        self.assertEqual(len(result), len(FTC_HEADERS))  # 22 columns
         self.assertEqual(result[1], 'ftc_qm1_12345')  # Match ID
         self.assertEqual(result[4], 'Blue')             # Alliance
         self.assertEqual(result[6], 'Yes')              # Leave
@@ -161,7 +218,13 @@ class TestSheetsService(unittest.TestCase):
         self.assertEqual(result[11], 'Full')            # Base Expansion
         self.assertEqual(result[12], '4/5')             # Driver Quality
         self.assertEqual(result[13], 'No')              # Robot Died
-        self.assertEqual(result[14], 'Solid match')     # Comments
+        self.assertEqual(result[14], '2/5')             # Defense Rating
+        self.assertEqual(result[15], '3/5')             # Drivetrain Speed
+        self.assertEqual(result[16], '3/5')             # Intake Speed
+        self.assertEqual(result[17], '3/5')             # Shooter Speed
+        self.assertEqual(result[18], 'Strategic')       # Defense Cause
+        self.assertEqual(result[19], '')                # Died At (not set)
+        self.assertEqual(result[20], '')                # Died Reason (not set)
 
     def test_transform_frc_robot_died_true(self):
         """Test robot died field reads from gameData.robot_died."""

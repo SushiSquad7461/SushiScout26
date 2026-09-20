@@ -40,6 +40,12 @@ FRC_HEADERS = [
     "Shooting Close",
     "Shooting Mid",
     "Shooting Far",
+    "Drivetrain Speed",
+    "Intake Speed",
+    "Shooter Speed",
+    "Defense Cause",
+    "Died At",
+    "Died Reason",
     "Comments"
 ]
 
@@ -59,6 +65,13 @@ FTC_HEADERS = [
     "Base Expansion",
     "Driver Quality",
     "Robot Died",
+    "Defense Rating",
+    "Drivetrain Speed",
+    "Intake Speed",
+    "Shooter Speed",
+    "Defense Cause",
+    "Died At",
+    "Died Reason",
     "Comments"
 ]
 
@@ -70,6 +83,17 @@ def _col_letter(n: int) -> str:
         n, remainder = divmod(n - 1, 26)
         result = chr(65 + remainder) + result
     return result
+
+
+def _format_died_at(seconds_remaining: Optional[int]) -> str:
+    """Format a stored died_at_seconds value (seconds remaining on the
+    match clock, matching MatchTimer's own countdown convention) as mm:ss
+    for the sheet — the same format the app itself displays. Returns an
+    empty string when the robot never died."""
+    if seconds_remaining is None:
+        return ''
+    minutes, seconds = divmod(int(seconds_remaining), 60)
+    return f'{minutes}:{seconds:02d}'
 
 
 class SheetsService:
@@ -289,9 +313,9 @@ class SheetsService:
         try:
             sheet_id = self._get_sheet_id(spreadsheet_id, sheet_name)
             
-            # FRC has 19 columns, FTC has 13 columns
-            frc_widths = [160, 140, 60, 70, 70, 100, 80, 90, 90, 90, 100, 100, 85, 90, 90, 90, 90, 90, 250]
-            ftc_widths = [160, 140, 60, 70, 70, 100, 70, 100, 90, 110, 100, 110, 100, 85, 250]
+            # FRC has 25 columns, FTC has 22 columns
+            frc_widths = [160, 140, 60, 70, 70, 100, 80, 90, 90, 90, 100, 100, 85, 90, 90, 90, 90, 90, 90, 90, 90, 110, 90, 160, 250]
+            ftc_widths = [160, 140, 60, 70, 70, 100, 70, 100, 90, 110, 100, 110, 100, 85, 85, 90, 90, 90, 110, 90, 160, 250]
             widths = ftc_widths if program_type == 'FTC' else frc_widths
             
             requests = []
@@ -468,7 +492,8 @@ class SheetsService:
         climb_level = game_data.get('teleop_tower_level', 0)
         climb_map = {0: 'No Climb', 1: 'Level 1', 2: 'Level 2', 3: 'Level 3'}
         climb_str = climb_map.get(climb_level, f'Level {climb_level}')
-        
+        defense_cause_map = {'broke': 'Robot Broke', 'strategic': 'Strategic'}
+
         return [
             timestamp_str,
             report_data.get('matchId', ''),
@@ -488,11 +513,19 @@ class SheetsService:
             'Yes' if game_data.get('shooting_range_close', False) else 'No',
             'Yes' if game_data.get('shooting_range_mid', False) else 'No',
             'Yes' if game_data.get('shooting_range_far', False) else 'No',
+            f"{game_data.get('drivetrain_speed', 0)}/5",
+            f"{game_data.get('intake_speed', 0)}/5",
+            f"{game_data.get('shooter_speed', 0)}/5",
+            defense_cause_map.get(game_data.get('defense_cause'), ''),
+            _format_died_at(game_data.get('died_at_seconds')),
+            game_data.get('died_reason', ''),
             report_data.get('comments', '')
         ]
-    
+
     def _transform_ftc_report(self, report_data: Dict[str, Any], game_data: Dict[str, Any], timestamp_str: str) -> List[Any]:
         """Transform FTC match report to row format."""
+        defense_cause_map = {'broke': 'Robot Broke', 'strategic': 'Strategic'}
+
         return [
             timestamp_str,
             report_data.get('matchId', ''),
@@ -508,6 +541,13 @@ class SheetsService:
             game_data.get('base_expansion', 'None'),
             f"{int(game_data.get('driver_quality', 0))}/5",
             'Yes' if game_data.get('robot_died', False) else 'No',
+            f"{game_data.get('defense_rating', 0)}/5",
+            f"{game_data.get('drivetrain_speed', 0)}/5",
+            f"{game_data.get('intake_speed', 0)}/5",
+            f"{game_data.get('shooter_speed', 0)}/5",
+            defense_cause_map.get(game_data.get('defense_cause'), ''),
+            _format_died_at(game_data.get('died_at_seconds')),
+            game_data.get('died_reason', ''),
             report_data.get('comments', '')
         ]
 
