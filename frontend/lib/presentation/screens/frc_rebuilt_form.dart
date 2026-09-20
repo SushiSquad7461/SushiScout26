@@ -566,7 +566,13 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm>
                 ),
                 subtitle: const Text("Robot was inactive during match"),
                 value: _died,
-                onChanged: (v) => setState(() => _died = v!),
+                onChanged: (v) => setState(() {
+                  _died = v!;
+                  if (!_died) {
+                    _diedAtSeconds = null;
+                    _diedReasonCtrl.clear();
+                  }
+                }),
                 controlAffinity: ListTileControlAffinity.leading,
               ),
               if (_died)

@@ -253,5 +253,86 @@ void main() {
         expect(find.text('tipped over on the ramp'), findsOneWidget);
       },
     );
+
+    testWidgets(
+      'saving with the died time and reason set writes both into gameData',
+      (tester) async {
+        await repo.createMatch(_eventId, _ftcMatch());
+
+        await tester.pumpWidget(await buildForm(existingMatch: _ftcMatch()));
+        await tester.pumpAndSettle();
+
+        // One tap reaches teleop, where the Robot Died toggle lives.
+        await tester.tap(find.text('next'));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Robot Died / Disabled'));
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(find.text('mark now'));
+        await tester.tap(find.text('mark now'));
+        await tester.pumpAndSettle();
+        final reasonField = find.widgetWithText(TextField, 'Reason (optional)');
+        await tester.ensureVisible(reasonField);
+        await tester.enterText(reasonField, 'wheel fell off');
+        await tester.pumpAndSettle();
+
+        // Two more taps of "next" reach review, where "save" lives.
+        for (var i = 0; i < 2; i++) {
+          await tester.tap(find.text('next'));
+          await tester.pumpAndSettle();
+        }
+        await tester.tap(find.text('save'));
+        await tester.pumpAndSettle();
+
+        final matches = await repo.getMatches(_eventId);
+        expect(matches, hasLength(1));
+        // The timer was never started, so it's still at the full duration.
+        expect(matches.single.gameData['died_at_seconds'], 153);
+        expect(matches.single.gameData['died_reason'], 'wheel fell off');
+      },
+    );
+
+    testWidgets(
+      'unchecking robot died clears a previously set died time and reason before save',
+      (tester) async {
+        await repo.createMatch(_eventId, _ftcMatch());
+
+        final match = _ftcMatch();
+        final diedMatch = match.copyWith(
+          gameData: {
+            ...match.gameData,
+            'robot_died': true,
+            'died_at_seconds': 65,
+            'died_reason': 'tipped over on the ramp',
+          },
+        );
+
+        await tester.pumpWidget(await buildForm(existingMatch: diedMatch));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('next'));
+        await tester.pumpAndSettle();
+
+        // Uncheck the toggle: the control (and its stale values) should
+        // no longer be part of what gets submitted.
+        await tester.tap(find.text('Robot Died / Disabled'));
+        await tester.pumpAndSettle();
+
+        expect(find.textContaining('1:05'), findsNothing);
+        expect(find.text('tipped over on the ramp'), findsNothing);
+
+        for (var i = 0; i < 2; i++) {
+          await tester.tap(find.text('next'));
+          await tester.pumpAndSettle();
+        }
+        await tester.tap(find.text('save'));
+        await tester.pumpAndSettle();
+
+        final matches = await repo.getMatches(_eventId);
+        expect(matches, hasLength(1));
+        expect(matches.single.gameData['died_at_seconds'], isNull);
+        expect(matches.single.gameData['died_reason'], '');
+      },
+    );
   });
 }

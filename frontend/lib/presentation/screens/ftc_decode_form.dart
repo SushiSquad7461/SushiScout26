@@ -569,7 +569,13 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm>
                 ),
                 subtitle: const Text("Robot was inactive during match"),
                 value: _robotDied,
-                onChanged: (v) => setState(() => _robotDied = v!),
+                onChanged: (v) => setState(() {
+                  _robotDied = v!;
+                  if (!_robotDied) {
+                    _diedAtSeconds = null;
+                    _diedReasonCtrl.clear();
+                  }
+                }),
                 controlAffinity: ListTileControlAffinity.leading,
               ),
               if (_robotDied)
