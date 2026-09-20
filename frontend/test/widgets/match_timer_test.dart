@@ -8,6 +8,7 @@ void main() {
     Widget buildTestWidget({
       MatchTimerController? controller,
       VoidCallback? onMatchFinished,
+      ValueChanged<Color>? onPhaseChanged,
     }) {
       return MaterialApp(
         theme: ThemeData(
@@ -20,6 +21,7 @@ void main() {
             bottom: MatchTimer(
               controller: controller,
               onMatchFinished: onMatchFinished,
+              onPhaseChanged: onPhaseChanged,
             ),
           ),
           body: const SizedBox(),
@@ -109,9 +111,84 @@ void main() {
       await tester.pump();
       expect(find.byIcon(Icons.play_arrow_rounded), findsOneWidget);
     });
+
+    testWidgets('exposes the total duration as a public constant', (
+      tester,
+    ) async {
+      expect(MatchTimer.totalDurationSeconds, 153);
+    });
+
+    testWidgets(
+      'does not call onPhaseChanged for the initial PRE-MATCH -> AUTO transition',
+      (tester) async {
+        Color? flashed;
+        await tester.pumpWidget(
+          buildTestWidget(onPhaseChanged: (c) => flashed = c),
+        );
+
+        await tester.tap(find.byIcon(Icons.play_arrow_rounded));
+        await tester.pump();
+
+        expect(flashed, isNull);
+      },
+    );
+
+    testWidgets('calls onPhaseChanged when AUTO changes to TRANSITION', (
+      tester,
+    ) async {
+      Color? flashed;
+      await tester.pumpWidget(
+        buildTestWidget(onPhaseChanged: (c) => flashed = c),
+      );
+
+      await tester.tap(find.byIcon(Icons.play_arrow_rounded));
+      await tester.pump(const Duration(seconds: 15));
+
+      expect(find.text('transition'), findsOneWidget);
+      expect(flashed, isNotNull);
+    });
+
+    testWidgets('calls onPhaseChanged when reset returns the phase to PRE-MATCH', (
+      tester,
+    ) async {
+      Color? flashed;
+      await tester.pumpWidget(
+        buildTestWidget(onPhaseChanged: (c) => flashed = c),
+      );
+
+      await tester.tap(find.byIcon(Icons.play_arrow_rounded));
+      await tester.pump(const Duration(seconds: 1));
+      flashed = null;
+
+      await tester.tap(find.byIcon(Icons.replay_rounded));
+      await tester.pump();
+
+      expect(find.text('pre-match'), findsOneWidget);
+      expect(flashed, isNotNull);
+    });
+
+    testWidgets("controller's secondsRemaining updates as the timer ticks", (
+      tester,
+    ) async {
+      final controller = MatchTimerController();
+      await tester.pumpWidget(buildTestWidget(controller: controller));
+
+      await tester.tap(find.byIcon(Icons.play_arrow_rounded));
+      await tester.pump(const Duration(seconds: 3));
+
+      expect(
+        controller.secondsRemaining.value,
+        MatchTimer.totalDurationSeconds - 3,
+      );
+    });
   });
 
   group('MatchTimerController', () {
+    test('secondsRemaining starts at the total match duration', () {
+      final controller = MatchTimerController();
+      expect(controller.secondsRemaining.value, MatchTimer.totalDurationSeconds);
+    });
+
     test('notifies listeners when start is called', () {
       final controller = MatchTimerController();
       bool wasNotified = false;

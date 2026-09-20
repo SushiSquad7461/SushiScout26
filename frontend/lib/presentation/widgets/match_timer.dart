@@ -20,8 +20,21 @@ import '../theme/team_brand.dart';
 /// All timer behaviour below — durations, phase thresholds, haptics, the
 /// controller, `onMatchFinished` — is unchanged.
 class MatchTimerController extends ChangeNotifier {
+  /// The timer's live countdown, updated every tick. Lets an owning form
+  /// read "how much time is left" on demand — for example to timestamp the
+  /// moment a robot died — without polling MatchTimer's private state.
+  final ValueNotifier<int> secondsRemaining = ValueNotifier<int>(
+    MatchTimer.totalDurationSeconds,
+  );
+
   void start() {
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    secondsRemaining.dispose();
+    super.dispose();
   }
 }
 
@@ -29,7 +42,24 @@ class MatchTimer extends StatefulWidget implements PreferredSizeWidget {
   final VoidCallback? onMatchFinished;
   final MatchTimerController? controller;
 
-  const MatchTimer({super.key, this.onMatchFinished, this.controller});
+  /// Fires once per phase change, after the match has started, with the
+  /// color the new phase's chip renders in — the owning form uses this to
+  /// drive a brief screen-edge flash. Does not fire for the initial
+  /// PRE-MATCH -> AUTO transition (starting the match already has its own
+  /// UI cue); does fire for every other transition, including a reset back
+  /// to PRE-MATCH.
+  final ValueChanged<Color>? onPhaseChanged;
+
+  const MatchTimer({
+    super.key,
+    this.onMatchFinished,
+    this.controller,
+    this.onPhaseChanged,
+  });
+
+  /// Total match length: 15s auto + 3s field-disabled transition + 2:15
+  /// teleop (including the 30s endgame window).
+  static const int totalDurationSeconds = 153;
 
   @override
   State<MatchTimer> createState() => _MatchTimerState();
@@ -40,12 +70,12 @@ class MatchTimer extends StatefulWidget implements PreferredSizeWidget {
 
 class _MatchTimerState extends State<MatchTimer> {
   Timer? _timer;
-  // 15s auto + 3s field-disabled transition + 2:15 teleop (incl. 30s endgame).
-  int _secondsRemaining = 153;
+  int _secondsRemaining = MatchTimer.totalDurationSeconds;
   bool _isRunning = false;
-  static const int _totalDuration = 153;
+  static const int _totalDuration = MatchTimer.totalDurationSeconds;
   static const int _autoDuration = 15;
   static const int _transitionDuration = 3;
+  String? _lastNotifiedPhase;
 
   String get _currentPhase {
     if (!_isRunning && _secondsRemaining == _totalDuration) return "PRE-MATCH";
@@ -85,6 +115,29 @@ class _MatchTimerState extends State<MatchTimer> {
   void initState() {
     super.initState();
     widget.controller?.addListener(_handleControllerStart);
+    _lastNotifiedPhase = _currentPhase;
+    widget.controller?.secondsRemaining.value = _secondsRemaining;
+  }
+
+  /// Keeps [MatchTimerController.secondsRemaining] in sync and fires
+  /// [MatchTimer.onPhaseChanged] when the phase actually changed since the
+  /// last tick. Suppresses the notification when the *previous* phase was
+  /// PRE-MATCH: that covers both the very first AUTO transition (no real
+  /// change to announce yet) and every subsequent "start" after a reset,
+  /// which get their own UI cue from pressing play. A reset landing back on
+  /// PRE-MATCH from any other phase still notifies, matching every other
+  /// phase change.
+  void _syncControllerAndNotifyPhase() {
+    widget.controller?.secondsRemaining.value = _secondsRemaining;
+    final newPhase = _currentPhase;
+    if (_lastNotifiedPhase != null &&
+        _lastNotifiedPhase != newPhase &&
+        _lastNotifiedPhase != "PRE-MATCH") {
+      final brand = BrandScope.of(context);
+      final colorScheme = Theme.of(context).colorScheme;
+      widget.onPhaseChanged?.call(_phaseFill(brand, colorScheme));
+    }
+    _lastNotifiedPhase = newPhase;
   }
 
   @override
@@ -122,6 +175,7 @@ class _MatchTimerState extends State<MatchTimer> {
         AppHaptics.heavy();
         widget.onMatchFinished?.call();
       }
+      _syncControllerAndNotifyPhase();
     });
   }
 
@@ -133,7 +187,10 @@ class _MatchTimerState extends State<MatchTimer> {
   void _resetTimer() {
     _stopTimer();
     AppHaptics.error();
-    if (mounted) setState(() => _secondsRemaining = _totalDuration);
+    if (mounted) {
+      setState(() => _secondsRemaining = _totalDuration);
+      _syncControllerAndNotifyPhase();
+    }
   }
 
   @override
