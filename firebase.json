@@ -19,7 +19,7 @@
     "hosting": {
         "public": "frontend/build/web",
         "predeploy": [
-            "cd frontend && flutter build web --release --dart-define=SENTRY_DSN=$SENTRY_DSN --dart-define=SENTRY_ENVIRONMENT=production"
+            "bash frontend/scripts/build_web.sh"
         ],
         "ignore": [
             "firebase.json",
