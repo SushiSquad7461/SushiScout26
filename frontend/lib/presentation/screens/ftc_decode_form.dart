@@ -36,6 +36,7 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm>
     with KeyboardDismissMixin {
   final PageController _pageController = PageController();
   final MatchTimerController _timerController = MatchTimerController();
+  final PhaseFlashController _phaseFlashController = PhaseFlashController();
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
 
   int _currentPage = 0;
@@ -93,6 +94,7 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm>
   void dispose() {
     _pageController.dispose();
     _timerController.dispose();
+    _phaseFlashController.dispose();
     _matchNumberCtrl.dispose();
     _teamNumberCtrl.dispose();
     _scouterNameCtrl.dispose();
@@ -227,47 +229,60 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm>
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
-    return dismissKeyboardOnTap(
-      child: Scaffold(
-        appBar: AppBar(
-          title: Text(
-            _isEditing ? "edit • ${widget.event.name}" : widget.event.name,
-          ),
-          // Brand band sits between the app bar and the timer, as in the
-          // design — the scout screen was the one screen missing it.
-          bottom: ScoutingFormBrandBand(timerController: _timerController),
-        ),
-        body: SafeArea(
-          child: Column(
-            children: [
-              if (_isEditing)
-                ScoutingLockedMatchBanner(
-                  teamNumber: _teamNumberCtrl.text,
-                  matchNumber: _matchNumberCtrl.text,
-                  alliance: _alliance,
-                ),
-              Expanded(
-                child: Form(
-                  key: _formKey,
-                  child: PageView(
-                    controller: _pageController,
-                    physics: const NeverScrollableScrollPhysics(),
-                    onPageChanged: (idx) => setState(() => _currentPage = idx),
-                    children: [
-                      if (!_isEditing)
-                        _buildPage("setup", _buildSetup(context)),
-                      _buildPage("autonomous", _buildAuto(context)),
-                      _buildPage("teleop", _buildTeleop(context)),
-                      _buildPage("endgame", _buildEndgame(context)),
-                      _buildPage("review & submit", _buildReview(context)),
-                    ],
-                  ),
-                ),
+    return PopScope(
+      canPop: _currentPage == 0,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) _prevPage();
+      },
+      child: dismissKeyboardOnTap(
+        child: PhaseFlashOverlay(
+          controller: _phaseFlashController,
+          child: Scaffold(
+            appBar: AppBar(
+              title: Text(
+                _isEditing ? "edit • ${widget.event.name}" : widget.event.name,
               ),
-            ],
+              // Brand band sits between the app bar and the timer, as in the
+              // design — the scout screen was the one screen missing it.
+              bottom: ScoutingFormBrandBand(
+                timerController: _timerController,
+                onPhaseChanged: _phaseFlashController.flash,
+              ),
+            ),
+            body: SafeArea(
+              child: Column(
+                children: [
+                  if (_isEditing)
+                    ScoutingLockedMatchBanner(
+                      teamNumber: _teamNumberCtrl.text,
+                      matchNumber: _matchNumberCtrl.text,
+                      alliance: _alliance,
+                    ),
+                  Expanded(
+                    child: Form(
+                      key: _formKey,
+                      child: PageView(
+                        controller: _pageController,
+                        physics: const NeverScrollableScrollPhysics(),
+                        onPageChanged: (idx) =>
+                            setState(() => _currentPage = idx),
+                        children: [
+                          if (!_isEditing)
+                            _buildPage("setup", _buildSetup(context)),
+                          _buildPage("autonomous", _buildAuto(context)),
+                          _buildPage("teleop", _buildTeleop(context)),
+                          _buildPage("endgame", _buildEndgame(context)),
+                          _buildPage("review & submit", _buildReview(context)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            bottomNavigationBar: _buildBottomBar(context, colorScheme),
           ),
         ),
-        bottomNavigationBar: _buildBottomBar(context, colorScheme),
       ),
     );
   }

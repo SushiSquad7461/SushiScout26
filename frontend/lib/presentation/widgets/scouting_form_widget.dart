@@ -34,6 +34,92 @@ class ScoutingWizardBottomSlot extends StatelessWidget {
   }
 }
 
+/// Drives [PhaseFlashOverlay]: call [flash] with a phase's color to trigger
+/// a brief edge glow. Owned by the form screen, with the same lifecycle as
+/// [MatchTimerController].
+class PhaseFlashController extends ChangeNotifier {
+  Color? _color;
+  Color? get color => _color;
+
+  void flash(Color color) {
+    _color = color;
+    notifyListeners();
+  }
+}
+
+/// Wraps [child] with a brief colored edge glow whenever
+/// [controller.flash] fires — the visual cue for a match-phase change. The
+/// glow ignores pointer events, so it never blocks the form underneath.
+class PhaseFlashOverlay extends StatefulWidget {
+  final PhaseFlashController controller;
+  final Widget child;
+
+  const PhaseFlashOverlay({
+    super.key,
+    required this.controller,
+    required this.child,
+  });
+
+  @override
+  State<PhaseFlashOverlay> createState() => _PhaseFlashOverlayState();
+}
+
+class _PhaseFlashOverlayState extends State<PhaseFlashOverlay>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _animation;
+  Color? _flashColor;
+
+  @override
+  void initState() {
+    super.initState();
+    // Created eagerly here, rather than as a `late final` field initializer,
+    // so vsync's ancestor lookup runs while the element tree is still
+    // active. A lazy initializer would defer creation to whichever access
+    // comes first — which, if `flash` is never called, is `dispose()`,
+    // after the element has already deactivated.
+    _animation = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 400),
+    );
+    widget.controller.addListener(_handleFlash);
+  }
+
+  void _handleFlash() {
+    setState(() => _flashColor = widget.controller.color);
+    _animation.forward(from: 0);
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_handleFlash);
+    _animation.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        widget.child,
+        if (_flashColor != null)
+          IgnorePointer(
+            child: AnimatedBuilder(
+              animation: _animation,
+              builder: (context, _) => Opacity(
+                opacity: 1.0 - _animation.value,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    border: Border.all(color: _flashColor!, width: 6),
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
 abstract class ScoutingFormWidget extends ConsumerStatefulWidget {
   final String eventId;
   final Event event;
@@ -79,8 +165,13 @@ mixin KeyboardDismissMixin<T extends ScoutingFormWidget> on ConsumerState<T> {
 class ScoutingFormBrandBand extends StatelessWidget
     implements PreferredSizeWidget {
   final MatchTimerController timerController;
+  final ValueChanged<Color>? onPhaseChanged;
 
-  const ScoutingFormBrandBand({super.key, required this.timerController});
+  const ScoutingFormBrandBand({
+    super.key,
+    required this.timerController,
+    this.onPhaseChanged,
+  });
 
   @override
   Size get preferredSize => Size.fromHeight(
@@ -94,7 +185,7 @@ class ScoutingFormBrandBand extends StatelessWidget
       mainAxisSize: MainAxisSize.min,
       children: [
         ColorBar(brand: BrandScope.of(context)),
-        MatchTimer(controller: timerController),
+        MatchTimer(controller: timerController, onPhaseChanged: onPhaseChanged),
       ],
     );
   }
