@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/auth/auth_state.dart';
 import '../../../core/validation/form_validators.dart';
@@ -139,6 +140,10 @@ class _TeamSelectScreenState extends ConsumerState<TeamSelectScreen>
           TextField(
             controller: _teamNameController,
             keyboardType: TextInputType.number,
+            inputFormatters: [
+              FilteringTextInputFormatter.digitsOnly,
+              LengthLimitingTextInputFormatter(5),
+            ],
             decoration: const InputDecoration(
               labelText: 'Team Number',
               hintText: 'e.g., 254',

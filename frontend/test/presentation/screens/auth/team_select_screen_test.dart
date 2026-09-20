@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:frontend/core/auth/auth_service.dart';
 import 'package:frontend/core/auth/auth_state.dart';
+import 'package:frontend/data/models/team.dart';
 import 'package:frontend/data/repositories/auth_repository.dart';
 import 'package:frontend/data/repositories/team_repository.dart';
 import 'package:frontend/presentation/providers/auth_provider.dart';
@@ -56,7 +57,7 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('rejects a non-numeric team name inline; does not call createTeam',
+  testWidgets('filters non-digit characters as they are typed',
       (tester) async {
     final c = container();
     await tester.pumpWidget(wrap(c));
@@ -64,7 +65,21 @@ void main() {
     await openCreateTab(tester);
 
     await tester.enterText(
-        find.widgetWithText(TextField, 'Team Number'), 'Sushi Robotics');
+        find.widgetWithText(TextField, 'Team Number'), 'Sushi254Robotics');
+    await tester.pumpAndSettle();
+
+    expect(find.text('254'), findsOneWidget);
+  });
+
+  testWidgets('rejects a leading-zero team number inline; does not call createTeam',
+      (tester) async {
+    final c = container();
+    await tester.pumpWidget(wrap(c));
+    await tester.pumpAndSettle();
+    await openCreateTab(tester);
+
+    await tester.enterText(
+        find.widgetWithText(TextField, 'Team Number'), '0');
     await tester.tap(find.widgetWithText(FilledButton, 'Create Team'));
     await tester.pumpAndSettle();
 
@@ -74,5 +89,43 @@ void main() {
       createdBy: anyNamed('createdBy'),
       isMasterTeam: anyNamed('isMasterTeam'),
     ));
+  });
+
+  testWidgets('rejects a 6-digit team number inline; does not call createTeam',
+      (tester) async {
+    when(mockTeamRepository.createTeam(
+      name: anyNamed('name'),
+      createdBy: anyNamed('createdBy'),
+      isMasterTeam: anyNamed('isMasterTeam'),
+    )).thenAnswer((_) async => Team(
+          id: 'newTeam',
+          name: '99999',
+          inviteCode: 'CODE1',
+          createdBy: 'alice',
+          createdAt: DateTime(2026, 1, 1),
+          memberCount: 1,
+        ));
+    when(mockAuthService.forceRefreshClaims())
+        .thenAnswer((_) async => {
+              'teams': {'newTeam': 'admin'}
+            });
+
+    final c = container();
+    await tester.pumpWidget(wrap(c));
+    await tester.pumpAndSettle();
+    await openCreateTab(tester);
+
+    await tester.enterText(
+        find.widgetWithText(TextField, 'Team Number'), '999999');
+    await tester.tap(find.widgetWithText(FilledButton, 'Create Team'));
+    await tester.pumpAndSettle();
+
+    // The 6th digit is blocked at entry, so the field holds '99999' — the
+    // max valid value — and creation proceeds rather than failing.
+    verify(mockTeamRepository.createTeam(
+      name: '99999',
+      createdBy: anyNamed('createdBy'),
+      isMasterTeam: anyNamed('isMasterTeam'),
+    )).called(1);
   });
 }

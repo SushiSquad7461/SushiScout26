@@ -386,7 +386,10 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm>
                   border: OutlineInputBorder(),
                 ),
                 textInputAction: TextInputAction.next,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(3),
+                ],
                 validator: FormValidators.matchNumber,
                 autovalidateMode: AutovalidateMode.onUserInteraction,
               ),
@@ -402,7 +405,10 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm>
                   border: OutlineInputBorder(),
                 ),
                 textInputAction: TextInputAction.done,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(5),
+                ],
                 validator: FormValidators.teamNumber,
                 autovalidateMode: AutovalidateMode.onUserInteraction,
               ),
