@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -15,20 +16,36 @@ void main() {
       int minValue = 0,
       int maxValue = 999,
     }) {
+      // Mirrors `value` into local state via StatefulBuilder, so a
+      // CounterCard held down across multiple ticks sees its own prior
+      // writes on the next tick — matching how a real (Riverpod-backed)
+      // caller rebuilds this widget after every onChanged call. Without
+      // this, `value` stays frozen at its initial argument, onPressed's
+      // closure never sees a fresh base value, and a hold that fires
+      // onChanged three times would compute the same `value + 1` each
+      // time instead of accumulating.
+      int displayValue = value;
       return MaterialApp(
         theme: ThemeData(
           useMaterial3: true,
           colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
         ),
         home: Scaffold(
-          body: CounterCard(
-            label: label,
-            value: value,
-            onChanged: onChanged,
-            helperText: helperText,
-            accentColor: accentColor,
-            minValue: minValue,
-            maxValue: maxValue,
+          body: StatefulBuilder(
+            builder: (context, setState) {
+              return CounterCard(
+                label: label,
+                value: displayValue,
+                onChanged: (v) {
+                  setState(() => displayValue = v);
+                  onChanged(v);
+                },
+                helperText: helperText,
+                accentColor: accentColor,
+                minValue: minValue,
+                maxValue: maxValue,
+              );
+            },
           ),
         ),
       );
@@ -211,6 +228,72 @@ void main() {
         lessThanOrEqualTo(80.0),
         reason: '3-digit value must fit the fixed slot on screen, not overflow',
       );
+    });
+
+    testWidgets('holding the increment button repeats once per second', (
+      tester,
+    ) async {
+      int currentValue = 0;
+
+      await tester.pumpWidget(
+        buildTestWidget(
+          value: currentValue,
+          onChanged: (v) => currentValue = v,
+          maxValue: 999,
+        ),
+      );
+
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byIcon(Icons.add)),
+      );
+      await tester.pump(kLongPressTimeout);
+      // Pump each second separately, not one 3-second pump. A single
+      // multi-second pump elapses the whole fake clock — and fires every
+      // due Timer.periodic tick — before the one frame at its end, so all
+      // ticks would read the same pre-hold `onPressed` closure. Pumping a
+      // frame after each second lets CounterCard rebuild in between, so
+      // each tick's onPressed closes over the value the previous tick
+      // just wrote.
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(seconds: 1));
+      await gesture.up();
+      await tester.pump();
+
+      expect(currentValue, 3);
+    });
+
+    testWidgets('releasing the button stops the repeat', (tester) async {
+      int currentValue = 0;
+
+      await tester.pumpWidget(
+        buildTestWidget(value: currentValue, onChanged: (v) => currentValue = v),
+      );
+
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byIcon(Icons.add)),
+      );
+      await tester.pump(kLongPressTimeout);
+      await tester.pump(const Duration(seconds: 1));
+      await gesture.up();
+      await tester.pump(const Duration(seconds: 2));
+
+      expect(currentValue, 1);
+    });
+
+    testWidgets('a plain tap still increments by one, not by the repeat timer', (
+      tester,
+    ) async {
+      int currentValue = 5;
+
+      await tester.pumpWidget(
+        buildTestWidget(value: currentValue, onChanged: (v) => currentValue = v),
+      );
+
+      await tester.tap(find.byIcon(Icons.add));
+      await tester.pump();
+
+      expect(currentValue, 6);
     });
 
     testWidgets('works with custom min/max values', (tester) async {
