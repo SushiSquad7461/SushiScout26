@@ -24,6 +24,12 @@ MatchReport _frcMatch({
       'defense_rating': 4,
       'driver_skill': 5,
       'robot_died': false,
+      'drivetrain_speed': 3,
+      'intake_speed': 2,
+      'shooter_speed': 4,
+      'defense_cause': 'broke',
+      'died_at_seconds': 95,
+      'died_reason': 'battery died',
     },
     comments: comments,
     createdAt: DateTime(2026, 1, 1),
@@ -51,6 +57,13 @@ MatchReport _ftcMatch({
       'base_expansion': false,
       'driver_quality': 4,
       'robot_died': false,
+      'defense_rating': 3,
+      'drivetrain_speed': 1,
+      'intake_speed': 5,
+      'shooter_speed': 2,
+      'defense_cause': 'strategic',
+      'died_at_seconds': 42,
+      'died_reason': 'tipped over',
     },
     comments: comments,
     createdAt: DateTime(2026, 1, 1),
@@ -95,6 +108,26 @@ void main() {
         final headers = ExportService.headers(ftc: ftc);
         expect(headers.last, 'Comments');
       }
+    });
+
+    test('both headers include the new subsystem-speed and defense-cause '
+        'columns', () {
+      for (final ftc in [true, false]) {
+        final headers = ExportService.headers(ftc: ftc);
+        expect(headers, containsAll([
+          'Drivetrain Speed',
+          'Intake Speed',
+          'Shooter Speed',
+          'Defense Cause',
+          'Died At',
+          'Died Reason',
+        ]));
+      }
+    });
+
+    test('FTC headers additionally include Defense Rating', () {
+      final headers = ExportService.headers(ftc: true);
+      expect(headers, contains('Defense Rating'));
     });
   });
 
@@ -228,6 +261,44 @@ void main() {
     test('leaves an empty comment empty', () {
       final csv = ExportService.buildCsvString([_frcMatch(comments: '')]);
       expect(csv, isNot(contains("'")));
+    });
+
+    // --- New fields (subsystem speeds, defense cause, died-at time) ---
+
+    test('embeds FRC subsystem speeds and formatted died-at time', () {
+      final csv = ExportService.buildCsvString([_frcMatch()]);
+      final dataLine = csv.split('\n')[1];
+      expect(dataLine, contains('Robot Broke'));
+      expect(dataLine, contains('1:35')); // 95s -> 1:35
+      expect(dataLine, contains('battery died'));
+    });
+
+    test('embeds FTC subsystem speeds, defense rating, and died-at time', () {
+      final csv = ExportService.buildCsvString([_ftcMatch()]);
+      final dataLine = csv.split('\n')[1];
+      expect(dataLine, contains('Strategic'));
+      expect(dataLine, contains('0:42')); // 42s -> 0:42
+      expect(dataLine, contains('tipped over'));
+    });
+
+    test('renders an empty defense cause and died-at time when unset', () {
+      final csv = ExportService.buildCsvString([
+        _frcMatch().copyWith(
+          gameData: const {
+            'auto_fuel': 3,
+            'auto_tower_l1': 1,
+            'teleop_fuel': 12,
+            'teleop_tower_level': 2,
+            'defense_rating': 4,
+            'driver_skill': 5,
+            'robot_died': false,
+          },
+        ),
+      ]);
+      final dataLine = csv.split('\n')[1];
+      // No 'Robot Broke'/'Strategic' label and no mm:ss stamp present.
+      expect(dataLine, isNot(contains('Robot Broke')));
+      expect(dataLine, isNot(contains('Strategic')));
     });
   });
 }
