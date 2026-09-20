@@ -153,50 +153,55 @@ class RobotDiedTimeAndReason extends StatelessWidget {
     final current = diedAtSeconds ?? liveSecondsRemaining.value;
     final minutesCtrl = TextEditingController(text: '${current ~/ 60}');
     final secondsCtrl = TextEditingController(text: '${current % 60}');
-    final result = await showDialog<int>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('set died/disabled time'),
-        content: Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: minutesCtrl,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'min'),
+    try {
+      final result = await showDialog<int>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('set died/disabled time'),
+          content: Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: minutesCtrl,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'min'),
+                ),
               ),
+              const SizedBox(width: AppTheme.spacingMd),
+              Expanded(
+                child: TextField(
+                  controller: secondsCtrl,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'sec'),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('cancel'),
             ),
-            const SizedBox(width: AppTheme.spacingMd),
-            Expanded(
-              child: TextField(
-                controller: secondsCtrl,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'sec'),
-              ),
+            FilledButton(
+              onPressed: () {
+                final minutes = int.tryParse(minutesCtrl.text) ?? 0;
+                final seconds = int.tryParse(secondsCtrl.text) ?? 0;
+                final total = (minutes * 60 + seconds).clamp(
+                  0,
+                  MatchTimer.totalDurationSeconds,
+                );
+                Navigator.pop(ctx, total);
+              },
+              child: const Text('set'),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              final minutes = int.tryParse(minutesCtrl.text) ?? 0;
-              final seconds = int.tryParse(secondsCtrl.text) ?? 0;
-              final total = (minutes * 60 + seconds).clamp(
-                0,
-                MatchTimer.totalDurationSeconds,
-              );
-              Navigator.pop(ctx, total);
-            },
-            child: const Text('set'),
-          ),
-        ],
-      ),
-    );
-    if (result != null) onDiedAtSecondsChanged(result);
+      );
+      if (result != null) onDiedAtSecondsChanged(result);
+    } finally {
+      minutesCtrl.dispose();
+      secondsCtrl.dispose();
+    }
   }
 
   @override
