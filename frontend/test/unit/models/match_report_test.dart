@@ -81,6 +81,23 @@ void main() {
     );
 
     test(
+      'diedAtSeconds reads back correctly when Firestore returns a double',
+      () {
+        final fromDouble = MatchReport(
+          id: 'm5',
+          matchId: 'qm5',
+          matchNumber: 5,
+          teamNumber: 5,
+          alliance: 'Red',
+          scouterName: 'Scouter',
+          gameData: const {'died_at_seconds': 65.0},
+          createdAt: DateTime.now(),
+        );
+        expect(fromDouble.diedAtSeconds, 65);
+      },
+    );
+
+    test(
       'subsystem speed and defense-cause getters default when absent, read back when present',
       () {
         final defaults = MatchReport(

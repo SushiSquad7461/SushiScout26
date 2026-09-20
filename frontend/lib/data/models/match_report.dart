@@ -21,7 +21,7 @@ class MatchReport {
   bool get robotDied => gameData['robot_died'] ?? false;
   bool get isFtc =>
       programType == 'FTC' || gameData.containsKey('artifacts_auto');
-  int? get diedAtSeconds => gameData['died_at_seconds'] as int?;
+  int? get diedAtSeconds => (gameData['died_at_seconds'] as num?)?.toInt();
   String get diedReason => gameData['died_reason'] ?? '';
 
   // FRC getters

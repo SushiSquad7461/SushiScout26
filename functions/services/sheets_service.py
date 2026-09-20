@@ -75,6 +75,8 @@ FTC_HEADERS = [
     "Comments"
 ]
 
+DEFENSE_CAUSE_LABELS = {'broke': 'Robot Broke', 'strategic': 'Strategic'}
+
 
 def _col_letter(n: int) -> str:
     """Convert 1-based column number to letter (1='A', 26='Z', 27='AA')."""
@@ -492,7 +494,6 @@ class SheetsService:
         climb_level = game_data.get('teleop_tower_level', 0)
         climb_map = {0: 'No Climb', 1: 'Level 1', 2: 'Level 2', 3: 'Level 3'}
         climb_str = climb_map.get(climb_level, f'Level {climb_level}')
-        defense_cause_map = {'broke': 'Robot Broke', 'strategic': 'Strategic'}
 
         return [
             timestamp_str,
@@ -516,7 +517,7 @@ class SheetsService:
             f"{game_data.get('drivetrain_speed', 0)}/5",
             f"{game_data.get('intake_speed', 0)}/5",
             f"{game_data.get('shooter_speed', 0)}/5",
-            defense_cause_map.get(game_data.get('defense_cause'), ''),
+            DEFENSE_CAUSE_LABELS.get(game_data.get('defense_cause'), ''),
             _format_died_at(game_data.get('died_at_seconds')),
             game_data.get('died_reason', ''),
             report_data.get('comments', '')
@@ -524,7 +525,6 @@ class SheetsService:
 
     def _transform_ftc_report(self, report_data: Dict[str, Any], game_data: Dict[str, Any], timestamp_str: str) -> List[Any]:
         """Transform FTC match report to row format."""
-        defense_cause_map = {'broke': 'Robot Broke', 'strategic': 'Strategic'}
 
         return [
             timestamp_str,
@@ -545,7 +545,7 @@ class SheetsService:
             f"{game_data.get('drivetrain_speed', 0)}/5",
             f"{game_data.get('intake_speed', 0)}/5",
             f"{game_data.get('shooter_speed', 0)}/5",
-            defense_cause_map.get(game_data.get('defense_cause'), ''),
+            DEFENSE_CAUSE_LABELS.get(game_data.get('defense_cause'), ''),
             _format_died_at(game_data.get('died_at_seconds')),
             game_data.get('died_reason', ''),
             report_data.get('comments', '')
