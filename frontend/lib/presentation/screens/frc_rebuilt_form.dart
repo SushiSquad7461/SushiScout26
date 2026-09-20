@@ -718,9 +718,8 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm>
             ],
             selected: _defenseCause == null ? const {} : {_defenseCause!},
             emptySelectionAllowed: true,
-            onSelectionChanged: (val) => setState(
-              () => _defenseCause = val.isEmpty ? null : val.first,
-            ),
+            onSelectionChanged: (val) =>
+                setState(() => _defenseCause = val.isEmpty ? null : val.first),
           ),
           const SizedBox(height: AppTheme.spacingMd),
         ],
@@ -875,10 +874,15 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm>
                 if (_defenseCause != null)
                   _ReviewRow(
                     label: "Defense Cause",
-                    value: _defenseCause == 'broke' ? "Robot Broke" : "Strategic",
+                    value: _defenseCause == 'broke'
+                        ? "Robot Broke"
+                        : "Strategic",
                   ),
                 _ReviewRow(label: "Driver Skill", value: "$_skill/5"),
-                _ReviewRow(label: "Drivetrain Speed", value: "$_drivetrainSpeed/5"),
+                _ReviewRow(
+                  label: "Drivetrain Speed",
+                  value: "$_drivetrainSpeed/5",
+                ),
                 _ReviewRow(label: "Intake Speed", value: "$_intakeSpeed/5"),
                 _ReviewRow(label: "Shooter Speed", value: "$_shooterSpeed/5"),
                 if (_died) ...[

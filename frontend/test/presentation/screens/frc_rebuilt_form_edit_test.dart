@@ -136,9 +136,7 @@ void main() {
       },
     );
 
-    testWidgets('the final page button reads save, not submit', (
-      tester,
-    ) async {
+    testWidgets('the final page button reads save, not submit', (tester) async {
       await tester.pumpWidget(await buildForm(existingMatch: _frcMatch()));
       await tester.pumpAndSettle();
 
@@ -194,10 +192,7 @@ void main() {
 
         expect(find.textContaining('cloud_firestore'), findsNothing);
         expect(find.textContaining('client is offline'), findsNothing);
-        expect(
-          find.textContaining('check your internet'),
-          findsOneWidget,
-        );
+        expect(find.textContaining('check your internet'), findsOneWidget);
       },
     );
 
@@ -222,9 +217,7 @@ void main() {
 
         final textWidget = tester.widget<Text>(textFinder);
         final container = tester.widget<Container>(
-          find
-              .ancestor(of: textFinder, matching: find.byType(Container))
-              .first,
+          find.ancestor(of: textFinder, matching: find.byType(Container)).first,
         );
         final background = (container.decoration as BoxDecoration).color!;
         final foreground = textWidget.style!.color!;
@@ -356,8 +349,10 @@ void main() {
     );
 
     testWidgets(
-      'restores subsystem speeds and defense cause, and lets the scout change them',
+      'restores subsystem speeds and defense cause, and saves the restored values unchanged',
       (tester) async {
+        await repo.createMatch(_eventId, _frcMatch());
+
         final match = _frcMatch();
         final tunedMatch = match.copyWith(
           gameData: {
@@ -383,6 +378,74 @@ void main() {
         expect(find.text('Drivetrain Speed'), findsOneWidget);
         expect(find.text('Intake Speed'), findsOneWidget);
         expect(find.text('Shooter Speed'), findsOneWidget);
+
+        // Saving without touching any control proves the sliders actually
+        // restored to the values above, not just that the labels render.
+        // A restore bug that swapped, say, drivetrainSpeed <-> intakeSpeed
+        // would still pass the label checks above but fail these.
+        await tester.tap(find.text('next'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('save'));
+        await tester.pumpAndSettle();
+
+        final matches = await repo.getMatches(_eventId);
+        expect(matches, hasLength(1));
+        expect(matches.single.gameData['defense_rating'], 3);
+        expect(matches.single.gameData['defense_cause'], 'strategic');
+        expect(matches.single.gameData['drivetrain_speed'], 2);
+        expect(matches.single.gameData['intake_speed'], 4);
+        expect(matches.single.gameData['shooter_speed'], 5);
+      },
+    );
+
+    testWidgets(
+      'dragging Defense Rating back to zero clears a previously set defense cause before save',
+      (tester) async {
+        await repo.createMatch(_eventId, _frcMatch());
+
+        final match = _frcMatch();
+        final causedMatch = match.copyWith(
+          gameData: {
+            ...match.gameData,
+            'defense_rating': 3,
+            'defense_cause': 'strategic',
+          },
+        );
+
+        await tester.pumpWidget(await buildForm(existingMatch: causedMatch));
+        await tester.pumpAndSettle();
+
+        for (var i = 0; i < 2; i++) {
+          await tester.tap(find.text('next'));
+          await tester.pumpAndSettle();
+        }
+
+        expect(find.text('strategic'), findsOneWidget);
+
+        final defenseCard = find.ancestor(
+          of: find.text('Defense Rating'),
+          matching: find.byType(Card),
+        );
+        await tester.drag(
+          find.descendant(of: defenseCard, matching: find.byType(Slider)),
+          const Offset(-1000, 0),
+        );
+        await tester.pumpAndSettle();
+
+        // The segmented button (and its stale value) should no longer be
+        // part of what gets submitted once the rating is back to zero.
+        expect(find.text('cause of defense'), findsNothing);
+        expect(find.text('strategic'), findsNothing);
+
+        await tester.tap(find.text('next'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('save'));
+        await tester.pumpAndSettle();
+
+        final matches = await repo.getMatches(_eventId);
+        expect(matches, hasLength(1));
+        expect(matches.single.gameData['defense_rating'], 0);
+        expect(matches.single.gameData['defense_cause'], isNull);
       },
     );
   });
