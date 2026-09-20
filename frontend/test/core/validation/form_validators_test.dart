@@ -69,6 +69,25 @@ void main() {
         'Score must be at least 1',
       );
     });
+
+    test('uses the generic max message when maxMessage is not provided', () {
+      expect(
+        FormValidators.number('15', max: 10, fieldName: 'Score'),
+        'Score must be at most 10',
+      );
+    });
+
+    test('uses maxMessage when provided, overriding the generic wording', () {
+      expect(
+        FormValidators.number(
+          '15',
+          max: 10,
+          fieldName: 'Score',
+          maxMessage: 'Score can be at most 2 digits',
+        ),
+        'Score can be at most 2 digits',
+      );
+    });
   });
 
   group('FormValidators.matchNumber', () {
@@ -91,7 +110,7 @@ void main() {
     test('returns error for value above 200', () {
       expect(
         FormValidators.matchNumber('201'),
-        'Match number must be at most 200',
+        'Match number can be at most 3 digits',
       );
     });
 
@@ -119,7 +138,7 @@ void main() {
     test('returns error for value above 99999', () {
       expect(
         FormValidators.teamNumber('100000'),
-        'Team number must be at most 99999',
+        'Team number can be at most 5 digits',
       );
     });
 

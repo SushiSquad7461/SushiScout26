@@ -8,25 +8,34 @@ class FormValidators {
     return null;
   }
 
-  /// Validates number fields
-  static String? number(String? value, {int? min, int? max, String? fieldName}) {
+  /// Validates number fields. [maxMessage], when provided, replaces the
+  /// generic "must be at most N" wording on a max-value violation — used by
+  /// [teamNumber]/[matchNumber] to name the real mistake (too many digits)
+  /// instead of just restating the numeric range.
+  static String? number(
+    String? value, {
+    int? min,
+    int? max,
+    String? fieldName,
+    String? maxMessage,
+  }) {
     if (value == null || value.trim().isEmpty) {
       return null; // Allow empty if not required
     }
-    
+
     final number = int.tryParse(value);
     if (number == null) {
       return '${fieldName ?? 'Value'} must be a number';
     }
-    
+
     if (min != null && number < min) {
       return '${fieldName ?? 'Value'} must be at least $min';
     }
-    
+
     if (max != null && number > max) {
-      return '${fieldName ?? 'Value'} must be at most $max';
+      return maxMessage ?? '${fieldName ?? 'Value'} must be at most $max';
     }
-    
+
     return null;
   }
 
@@ -34,8 +43,14 @@ class FormValidators {
   static String? matchNumber(String? value) {
     final requiredError = required(value, 'Match number');
     if (requiredError != null) return requiredError;
-    
-    return number(value, min: 1, max: 200, fieldName: 'Match number');
+
+    return number(
+      value,
+      min: 1,
+      max: 200,
+      fieldName: 'Match number',
+      maxMessage: 'Match number can be at most 3 digits',
+    );
   }
 
   /// Validates team number format (e.g. 1-99999, supports FRC and FTC)
@@ -43,7 +58,13 @@ class FormValidators {
     final requiredError = required(value, 'Team number');
     if (requiredError != null) return requiredError;
 
-    return number(value, min: 1, max: 99999, fieldName: 'Team number');
+    return number(
+      value,
+      min: 1,
+      max: 99999,
+      fieldName: 'Team number',
+      maxMessage: 'Team number can be at most 5 digits',
+    );
   }
 
   /// Validates a team name for team CREATION: must be a team number,
