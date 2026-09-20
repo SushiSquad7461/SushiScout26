@@ -19,6 +19,8 @@ class MatchReport {
   // Common
   bool get robotDied => gameData['robot_died'] ?? false;
   bool get isFtc => programType == 'FTC' || gameData.containsKey('artifacts_auto');
+  int? get diedAtSeconds => gameData['died_at_seconds'] as int?;
+  String get diedReason => gameData['died_reason'] ?? '';
 
   // FRC getters
   int get autoFuel => gameData['auto_fuel'] ?? 0;

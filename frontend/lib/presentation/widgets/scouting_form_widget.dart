@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/models/event.dart';
@@ -120,6 +121,112 @@ class _PhaseFlashOverlayState extends State<PhaseFlashOverlay>
               ),
             ),
           ),
+      ],
+    );
+  }
+}
+
+/// The "mark now"/edit control and reason field shown under the Robot
+/// Died toggle on both forms' teleop page. Shared so the two copies can't
+/// drift.
+class RobotDiedTimeAndReason extends StatelessWidget {
+  final int? diedAtSeconds;
+  final ValueListenable<int> liveSecondsRemaining;
+  final ValueChanged<int> onDiedAtSecondsChanged;
+  final TextEditingController reasonController;
+
+  const RobotDiedTimeAndReason({
+    super.key,
+    required this.diedAtSeconds,
+    required this.liveSecondsRemaining,
+    required this.onDiedAtSecondsChanged,
+    required this.reasonController,
+  });
+
+  static String formatMmSs(int seconds) {
+    final minutes = seconds ~/ 60;
+    final secs = (seconds % 60).toString().padLeft(2, '0');
+    return '$minutes:$secs';
+  }
+
+  Future<void> _editTime(BuildContext context) async {
+    final current = diedAtSeconds ?? liveSecondsRemaining.value;
+    final minutesCtrl = TextEditingController(text: '${current ~/ 60}');
+    final secondsCtrl = TextEditingController(text: '${current % 60}');
+    final result = await showDialog<int>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('set died/disabled time'),
+        content: Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: minutesCtrl,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'min'),
+              ),
+            ),
+            const SizedBox(width: AppTheme.spacingMd),
+            Expanded(
+              child: TextField(
+                controller: secondsCtrl,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'sec'),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final minutes = int.tryParse(minutesCtrl.text) ?? 0;
+              final seconds = int.tryParse(secondsCtrl.text) ?? 0;
+              final total = (minutes * 60 + seconds).clamp(
+                0,
+                MatchTimer.totalDurationSeconds,
+              );
+              Navigator.pop(ctx, total);
+            },
+            child: const Text('set'),
+          ),
+        ],
+      ),
+    );
+    if (result != null) onDiedAtSecondsChanged(result);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (diedAtSeconds == null)
+          OutlinedButton.icon(
+            icon: const Icon(Icons.timer_outlined),
+            label: const Text('mark now'),
+            onPressed: () => onDiedAtSecondsChanged(liveSecondsRemaining.value),
+          )
+        else
+          InkWell(
+            onTap: () => _editTime(context),
+            child: Chip(
+              avatar: const Icon(Icons.timer_outlined, size: 18),
+              label: Text('died at ${formatMmSs(diedAtSeconds!)}'),
+            ),
+          ),
+        const SizedBox(height: AppTheme.spacingSm),
+        TextField(
+          controller: reasonController,
+          maxLines: 2,
+          decoration: const InputDecoration(
+            labelText: 'Reason (optional)',
+            border: OutlineInputBorder(),
+          ),
+        ),
       ],
     );
   }

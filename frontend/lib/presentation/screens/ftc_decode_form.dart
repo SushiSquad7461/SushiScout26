@@ -58,6 +58,8 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm>
   int _teleArtifacts = 0;
   bool _teleIndexing = false;
   bool _robotDied = false;
+  int? _diedAtSeconds;
+  final _diedReasonCtrl = TextEditingController();
 
   // Endgame
   String _baseExpansion = 'None';
@@ -81,6 +83,8 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm>
       _teleArtifacts = existing.artifactsTeleop;
       _teleIndexing = existing.indexingTeleop;
       _robotDied = existing.robotDied;
+      _diedAtSeconds = existing.diedAtSeconds;
+      _diedReasonCtrl.text = existing.diedReason;
       _baseExpansion = existing.baseExpansion;
       _driverQuality = existing.driverQuality;
       _commentsCtrl.text = existing.comments;
@@ -98,6 +102,7 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm>
     _matchNumberCtrl.dispose();
     _teamNumberCtrl.dispose();
     _scouterNameCtrl.dispose();
+    _diedReasonCtrl.dispose();
     _commentsCtrl.dispose();
     super.dispose();
   }
@@ -553,15 +558,37 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm>
           color: _robotDied
               ? colorScheme.errorContainer.withValues(alpha: 0.5)
               : null,
-          child: CheckboxListTile(
-            title: Text(
-              "Robot Died / Disabled",
-              style: TextStyle(color: _robotDied ? colorScheme.error : null),
-            ),
-            subtitle: const Text("Robot was inactive during match"),
-            value: _robotDied,
-            onChanged: (v) => setState(() => _robotDied = v!),
-            controlAffinity: ListTileControlAffinity.leading,
+          child: Column(
+            children: [
+              CheckboxListTile(
+                title: Text(
+                  "Robot Died / Disabled",
+                  style: TextStyle(
+                    color: _robotDied ? colorScheme.error : null,
+                  ),
+                ),
+                subtitle: const Text("Robot was inactive during match"),
+                value: _robotDied,
+                onChanged: (v) => setState(() => _robotDied = v!),
+                controlAffinity: ListTileControlAffinity.leading,
+              ),
+              if (_robotDied)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppTheme.spacingMd,
+                    0,
+                    AppTheme.spacingMd,
+                    AppTheme.spacingMd,
+                  ),
+                  child: RobotDiedTimeAndReason(
+                    diedAtSeconds: _diedAtSeconds,
+                    liveSecondsRemaining: _timerController.secondsRemaining,
+                    onDiedAtSecondsChanged: (s) =>
+                        setState(() => _diedAtSeconds = s),
+                    reasonController: _diedReasonCtrl,
+                  ),
+                ),
+            ],
           ),
         ),
       ],
@@ -755,6 +782,11 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm>
                       ],
                     ),
                   ),
+                  if (_diedAtSeconds != null)
+                    _ReviewRow(
+                      label: "Died At",
+                      value: RobotDiedTimeAndReason.formatMmSs(_diedAtSeconds!),
+                    ),
                 ],
               ],
             ),
@@ -775,6 +807,8 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm>
       'base_expansion': _baseExpansion,
       'driver_quality': _driverQuality,
       'robot_died': _robotDied,
+      'died_at_seconds': _diedAtSeconds,
+      'died_reason': _diedReasonCtrl.text,
     };
 
     final existing = widget.existingMatch;

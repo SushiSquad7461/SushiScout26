@@ -244,5 +244,34 @@ void main() {
         );
       },
     );
+
+    testWidgets(
+      'restores a saved died-at time and reason, and lets the scout edit the reason',
+      (tester) async {
+        final match = _frcMatch();
+        final diedMatch = match.copyWith(
+          gameData: {
+            ...match.gameData,
+            'robot_died': true,
+            'died_at_seconds': 65,
+            'died_reason': 'tipped over on the ramp',
+          },
+        );
+
+        await tester.pumpWidget(await buildForm(existingMatch: diedMatch));
+        await tester.pumpAndSettle();
+
+        // Edit mode's 4 pages are autonomous(0) -> teleop(1) -> endgame(2)
+        // -> review(3) — one tap of "next" from the initial page reaches
+        // teleop, where the Robot Died toggle and this control live. (Task
+        // 9's sibling tests tap twice because their assertions target the
+        // endgame page instead.)
+        await tester.tap(find.text('next'));
+        await tester.pumpAndSettle();
+
+        expect(find.textContaining('1:05'), findsOneWidget);
+        expect(find.text('tipped over on the ramp'), findsOneWidget);
+      },
+    );
   });
 }

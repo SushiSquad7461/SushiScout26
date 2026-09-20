@@ -152,4 +152,74 @@ void main() {
       },
     );
   });
+
+  group('RobotDiedTimeAndReason', () {
+    testWidgets('shows a "mark now" button when no time is set yet', (
+      tester,
+    ) async {
+      final liveSeconds = ValueNotifier<int>(120);
+      int? captured;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: RobotDiedTimeAndReason(
+              diedAtSeconds: null,
+              liveSecondsRemaining: liveSeconds,
+              onDiedAtSecondsChanged: (s) => captured = s,
+              reasonController: TextEditingController(),
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('mark now'), findsOneWidget);
+
+      await tester.tap(find.text('mark now'));
+      await tester.pump();
+
+      expect(captured, 120);
+    });
+
+    testWidgets('shows the formatted mm:ss once a time is set', (
+      tester,
+    ) async {
+      final liveSeconds = ValueNotifier<int>(90);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: RobotDiedTimeAndReason(
+              diedAtSeconds: 65,
+              liveSecondsRemaining: liveSeconds,
+              onDiedAtSecondsChanged: (_) {},
+              reasonController: TextEditingController(),
+            ),
+          ),
+        ),
+      );
+
+      expect(find.textContaining('1:05'), findsOneWidget);
+    });
+
+    testWidgets('reason text field forwards input to its controller', (
+      tester,
+    ) async {
+      final liveSeconds = ValueNotifier<int>(120);
+      final reasonController = TextEditingController();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: RobotDiedTimeAndReason(
+              diedAtSeconds: 100,
+              liveSecondsRemaining: liveSeconds,
+              onDiedAtSecondsChanged: (_) {},
+              reasonController: reasonController,
+            ),
+          ),
+        ),
+      );
+
+      await tester.enterText(find.byType(TextField), 'defense collision');
+      expect(reasonController.text, 'defense collision');
+    });
+  });
 }

@@ -65,6 +65,8 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm>
   int _defense = 0;
   int _skill = 0;
   bool _died = false;
+  int? _diedAtSeconds;
+  final _diedReasonCtrl = TextEditingController();
   final _commentsCtrl = TextEditingController();
 
   bool get _isEditing => widget.existingMatch != null;
@@ -90,6 +92,8 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm>
       _defense = existing.defenseRating;
       _skill = existing.driverSkill;
       _died = existing.robotDied;
+      _diedAtSeconds = existing.diedAtSeconds;
+      _diedReasonCtrl.text = existing.diedReason;
       _commentsCtrl.text = existing.comments;
     } else {
       final settings = ref.read(settingsProvider);
@@ -105,6 +109,7 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm>
     _matchNumberCtrl.dispose();
     _teamNumberCtrl.dispose();
     _scouterNameCtrl.dispose();
+    _diedReasonCtrl.dispose();
     _commentsCtrl.dispose();
     super.dispose();
   }
@@ -552,15 +557,35 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm>
           color: _died
               ? colorScheme.errorContainer.withValues(alpha: 0.5)
               : null,
-          child: CheckboxListTile(
-            title: Text(
-              "Robot Died / Disabled",
-              style: TextStyle(color: _died ? colorScheme.error : null),
-            ),
-            subtitle: const Text("Robot was inactive during match"),
-            value: _died,
-            onChanged: (v) => setState(() => _died = v!),
-            controlAffinity: ListTileControlAffinity.leading,
+          child: Column(
+            children: [
+              CheckboxListTile(
+                title: Text(
+                  "Robot Died / Disabled",
+                  style: TextStyle(color: _died ? colorScheme.error : null),
+                ),
+                subtitle: const Text("Robot was inactive during match"),
+                value: _died,
+                onChanged: (v) => setState(() => _died = v!),
+                controlAffinity: ListTileControlAffinity.leading,
+              ),
+              if (_died)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppTheme.spacingMd,
+                    0,
+                    AppTheme.spacingMd,
+                    AppTheme.spacingMd,
+                  ),
+                  child: RobotDiedTimeAndReason(
+                    diedAtSeconds: _diedAtSeconds,
+                    liveSecondsRemaining: _timerController.secondsRemaining,
+                    onDiedAtSecondsChanged: (s) =>
+                        setState(() => _diedAtSeconds = s),
+                    reasonController: _diedReasonCtrl,
+                  ),
+                ),
+            ],
           ),
         ),
 
@@ -815,6 +840,11 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm>
                       ],
                     ),
                   ),
+                  if (_diedAtSeconds != null)
+                    _ReviewRow(
+                      label: "Died At",
+                      value: RobotDiedTimeAndReason.formatMmSs(_diedAtSeconds!),
+                    ),
                 ],
               ],
             ),
@@ -834,6 +864,8 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm>
       'defense_rating': _defense,
       'driver_skill': _skill,
       'robot_died': _died,
+      'died_at_seconds': _diedAtSeconds,
+      'died_reason': _diedReasonCtrl.text,
       'trench_traverse': _trenchTraverse,
       'bump_traverse': _bumpTraverse,
       'shooting_range_close': _shootingRangeClose,

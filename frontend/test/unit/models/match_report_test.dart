@@ -49,6 +49,34 @@ void main() {
       expect(report.isDeleted, true);
     });
 
+    test('diedAtSeconds and diedReason default when absent, read back when present', () {
+      final withoutDeath = MatchReport(
+        id: 'm1',
+        matchId: 'qm1',
+        matchNumber: 1,
+        teamNumber: 1,
+        alliance: 'Red',
+        scouterName: 'Scouter',
+        gameData: const {},
+        createdAt: DateTime.now(),
+      );
+      expect(withoutDeath.diedAtSeconds, isNull);
+      expect(withoutDeath.diedReason, '');
+
+      final withDeath = MatchReport(
+        id: 'm2',
+        matchId: 'qm2',
+        matchNumber: 2,
+        teamNumber: 2,
+        alliance: 'Blue',
+        scouterName: 'Scouter',
+        gameData: const {'died_at_seconds': 42, 'died_reason': 'tipped over'},
+        createdAt: DateTime.now(),
+      );
+      expect(withDeath.diedAtSeconds, 42);
+      expect(withDeath.diedReason, 'tipped over');
+    });
+
     test('should support different alliances', () {
       final redAlliance = MatchReport(
         id: 'red123',
