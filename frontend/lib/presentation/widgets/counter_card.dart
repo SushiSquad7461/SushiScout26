@@ -268,28 +268,35 @@ class _CounterButtonState extends State<_CounterButton> {
       button: true,
       enabled: isEnabled,
       label: widget.semanticLabel,
-      child: Material(
-        color: Colors.transparent,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppTheme.buttonRadius),
-          side: BorderSide(color: edge, width: AppTheme.ruleWidth),
-        ),
-        child: InkWell(
-          onTap: widget.onPressed,
-          onLongPress: isEnabled ? _startRepeating : null,
-          // Unconditional, unlike onLongPress: a hold can push value to
-          // maxValue/minValue mid-repeat, which disables the button on the
-          // next rebuild and would null this out too if it were gated the
-          // same way — leaving the finger's eventual release with no
-          // onLongPressUp to call, and _repeatTimer ticking (harmlessly,
-          // but pointlessly) until the widget disposes. Always wiring
-          // _stopRepeating here means a release stops any in-flight timer
-          // regardless of the button's enabled state at that moment.
-          onLongPressUp: _stopRepeating,
-          child: SizedBox(
-            width: 56,
-            height: 56,
-            child: Icon(widget.icon, size: 28, color: edge),
+      child: Listener(
+        // Backstop for a cancelled long press: the app is backgrounded
+        // mid-hold, or the gesture arena reassigns the pointer. In either
+        // case onLongPressUp never fires — InkWell has no onLongPressCancel
+        // — but the platform-level pointer-cancel event always does.
+        onPointerCancel: (_) => _stopRepeating(),
+        child: Material(
+          color: Colors.transparent,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppTheme.buttonRadius),
+            side: BorderSide(color: edge, width: AppTheme.ruleWidth),
+          ),
+          child: InkWell(
+            onTap: widget.onPressed,
+            onLongPress: isEnabled ? _startRepeating : null,
+            // Unconditional, unlike onLongPress: a hold can push value to
+            // maxValue/minValue mid-repeat, which disables the button on the
+            // next rebuild and would null this out too if it were gated the
+            // same way — leaving the finger's eventual release with no
+            // onLongPressUp to call, and _repeatTimer ticking (harmlessly,
+            // but pointlessly) until the widget disposes. Always wiring
+            // _stopRepeating here means a release stops any in-flight timer
+            // regardless of the button's enabled state at that moment.
+            onLongPressUp: _stopRepeating,
+            child: SizedBox(
+              width: 56,
+              height: 56,
+              child: Icon(widget.icon, size: 28, color: edge),
+            ),
           ),
         ),
       ),

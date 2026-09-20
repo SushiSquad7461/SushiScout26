@@ -281,6 +281,29 @@ void main() {
       expect(currentValue, 1);
     });
 
+    testWidgets('cancelling the long press (pointer cancel) stops the repeat', (
+      tester,
+    ) async {
+      int currentValue = 0;
+
+      await tester.pumpWidget(
+        buildTestWidget(value: currentValue, onChanged: (v) => currentValue = v),
+      );
+
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byIcon(Icons.add)),
+      );
+      await tester.pump(kLongPressTimeout);
+      await tester.pump(const Duration(seconds: 1));
+      // Simulate a platform-level pointer cancel (app backgrounded mid-hold,
+      // or the gesture arena reassigns the pointer) instead of a clean
+      // release. onLongPressUp never fires in this case.
+      await gesture.cancel();
+      await tester.pump(const Duration(seconds: 2));
+
+      expect(currentValue, 1);
+    });
+
     testWidgets('a plain tap still increments by one, not by the repeat timer', (
       tester,
     ) async {
