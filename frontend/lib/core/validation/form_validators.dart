@@ -49,7 +49,7 @@ class FormValidators {
       min: 1,
       max: 200,
       fieldName: 'Match number',
-      maxMessage: 'Match number can be at most 3 digits',
+      maxMessage: 'Match number can be at most 200',
     );
   }
 

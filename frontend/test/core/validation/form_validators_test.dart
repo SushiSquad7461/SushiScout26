@@ -110,7 +110,7 @@ void main() {
     test('returns error for value above 200', () {
       expect(
         FormValidators.matchNumber('201'),
-        'Match number can be at most 3 digits',
+        'Match number can be at most 200',
       );
     });
 
