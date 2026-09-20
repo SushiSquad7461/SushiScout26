@@ -64,6 +64,10 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm>
   // Qualitative
   int _defense = 0;
   int _skill = 0;
+  String? _defenseCause;
+  int _drivetrainSpeed = 0;
+  int _intakeSpeed = 0;
+  int _shooterSpeed = 0;
   bool _died = false;
   int? _diedAtSeconds;
   final _diedReasonCtrl = TextEditingController();
@@ -91,6 +95,10 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm>
       _shootingRangeFar = existing.shootingRangeFar;
       _defense = existing.defenseRating;
       _skill = existing.driverSkill;
+      _defenseCause = existing.defenseCause;
+      _drivetrainSpeed = existing.drivetrainSpeed;
+      _intakeSpeed = existing.intakeSpeed;
+      _shooterSpeed = existing.shooterSpeed;
       _died = existing.robotDied;
       _diedAtSeconds = existing.diedAtSeconds;
       _diedReasonCtrl.text = existing.diedReason;
@@ -689,14 +697,60 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm>
           context,
           label: "Defense Rating",
           value: _defense,
-          onChanged: (v) => setState(() => _defense = v),
+          onChanged: (v) => setState(() {
+            _defense = v;
+            if (v == 0) _defenseCause = null;
+          }),
         ),
+
+        if (_defense > 0) ...[
+          Text(
+            "cause of defense",
+            style: theme.textTheme.labelLarge?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: AppTheme.spacingSm),
+          SegmentedButton<String>(
+            segments: const [
+              ButtonSegment(value: 'broke', label: Text('robot broke')),
+              ButtonSegment(value: 'strategic', label: Text('strategic')),
+            ],
+            selected: _defenseCause == null ? const {} : {_defenseCause!},
+            emptySelectionAllowed: true,
+            onSelectionChanged: (val) => setState(
+              () => _defenseCause = val.isEmpty ? null : val.first,
+            ),
+          ),
+          const SizedBox(height: AppTheme.spacingMd),
+        ],
 
         _buildSlider(
           context,
           label: "Driver Skill",
           value: _skill,
           onChanged: (v) => setState(() => _skill = v),
+        ),
+
+        _buildSlider(
+          context,
+          label: "Drivetrain Speed",
+          value: _drivetrainSpeed,
+          onChanged: (v) => setState(() => _drivetrainSpeed = v),
+        ),
+
+        _buildSlider(
+          context,
+          label: "Intake Speed",
+          value: _intakeSpeed,
+          onChanged: (v) => setState(() => _intakeSpeed = v),
+        ),
+
+        _buildSlider(
+          context,
+          label: "Shooter Speed",
+          value: _shooterSpeed,
+          onChanged: (v) => setState(() => _shooterSpeed = v),
         ),
 
         const SizedBox(height: AppTheme.spacingMd),
@@ -818,7 +872,15 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm>
                 _ReviewRow(label: "Climb Level", value: "Level $_teleopTower"),
                 const Divider(height: AppTheme.spacingLg),
                 _ReviewRow(label: "Defense", value: "$_defense/5"),
+                if (_defenseCause != null)
+                  _ReviewRow(
+                    label: "Defense Cause",
+                    value: _defenseCause == 'broke' ? "Robot Broke" : "Strategic",
+                  ),
                 _ReviewRow(label: "Driver Skill", value: "$_skill/5"),
+                _ReviewRow(label: "Drivetrain Speed", value: "$_drivetrainSpeed/5"),
+                _ReviewRow(label: "Intake Speed", value: "$_intakeSpeed/5"),
+                _ReviewRow(label: "Shooter Speed", value: "$_shooterSpeed/5"),
                 if (_died) ...[
                   const SizedBox(height: AppTheme.spacingSm),
                   Container(
@@ -868,7 +930,11 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm>
       'teleop_fuel': _teleopFuel,
       'teleop_tower_level': _teleopTower,
       'defense_rating': _defense,
+      'defense_cause': _defenseCause,
       'driver_skill': _skill,
+      'drivetrain_speed': _drivetrainSpeed,
+      'intake_speed': _intakeSpeed,
+      'shooter_speed': _shooterSpeed,
       'robot_died': _died,
       'died_at_seconds': _diedAtSeconds,
       'died_reason': _diedReasonCtrl.text,

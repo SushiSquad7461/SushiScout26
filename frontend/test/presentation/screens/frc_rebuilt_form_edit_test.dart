@@ -354,5 +354,36 @@ void main() {
         expect(matches.single.gameData['died_reason'], '');
       },
     );
+
+    testWidgets(
+      'restores subsystem speeds and defense cause, and lets the scout change them',
+      (tester) async {
+        final match = _frcMatch();
+        final tunedMatch = match.copyWith(
+          gameData: {
+            ...match.gameData,
+            'defense_rating': 3,
+            'defense_cause': 'strategic',
+            'drivetrain_speed': 2,
+            'intake_speed': 4,
+            'shooter_speed': 5,
+          },
+        );
+
+        await tester.pumpWidget(await buildForm(existingMatch: tunedMatch));
+        await tester.pumpAndSettle();
+
+        for (var i = 0; i < 2; i++) {
+          await tester.tap(find.text('next'));
+          await tester.pumpAndSettle();
+        }
+
+        expect(find.text('robot broke'), findsOneWidget);
+        expect(find.text('strategic'), findsOneWidget);
+        expect(find.text('Drivetrain Speed'), findsOneWidget);
+        expect(find.text('Intake Speed'), findsOneWidget);
+        expect(find.text('Shooter Speed'), findsOneWidget);
+      },
+    );
   });
 }

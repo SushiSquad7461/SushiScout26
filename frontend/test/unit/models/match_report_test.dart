@@ -77,6 +77,43 @@ void main() {
       expect(withDeath.diedReason, 'tipped over');
     });
 
+    test('subsystem speed and defense-cause getters default when absent, read back when present', () {
+      final defaults = MatchReport(
+        id: 'm3',
+        matchId: 'qm3',
+        matchNumber: 3,
+        teamNumber: 3,
+        alliance: 'Red',
+        scouterName: 'Scouter',
+        gameData: const {},
+        createdAt: DateTime.now(),
+      );
+      expect(defaults.drivetrainSpeed, 0);
+      expect(defaults.intakeSpeed, 0);
+      expect(defaults.shooterSpeed, 0);
+      expect(defaults.defenseCause, isNull);
+
+      final populated = MatchReport(
+        id: 'm4',
+        matchId: 'qm4',
+        matchNumber: 4,
+        teamNumber: 4,
+        alliance: 'Blue',
+        scouterName: 'Scouter',
+        gameData: const {
+          'drivetrain_speed': 4,
+          'intake_speed': 3,
+          'shooter_speed': 5,
+          'defense_cause': 'strategic',
+        },
+        createdAt: DateTime.now(),
+      );
+      expect(populated.drivetrainSpeed, 4);
+      expect(populated.intakeSpeed, 3);
+      expect(populated.shooterSpeed, 5);
+      expect(populated.defenseCause, 'strategic');
+    });
+
     test('should support different alliances', () {
       final redAlliance = MatchReport(
         id: 'red123',

@@ -29,6 +29,10 @@ class MatchReport {
   int get teleopTowerLevel => gameData['teleop_tower_level'] ?? 0;
   int get defenseRating => gameData['defense_rating'] ?? 0;
   int get driverSkill => gameData['driver_skill'] ?? 0;
+  int get drivetrainSpeed => gameData['drivetrain_speed'] ?? 0;
+  int get intakeSpeed => gameData['intake_speed'] ?? 0;
+  int get shooterSpeed => gameData['shooter_speed'] ?? 0;
+  String? get defenseCause => gameData['defense_cause'] as String?;
   bool get trenchTraverse => gameData['trench_traverse'] ?? false;
   bool get bumpTraverse => gameData['bump_traverse'] ?? false;
   bool get shootingRangeClose => gameData['shooting_range_close'] ?? false;

@@ -64,6 +64,11 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm>
   // Endgame
   String _baseExpansion = 'None';
   double _driverQuality = 0;
+  int _defenseRating = 0;
+  String? _defenseCause;
+  int _drivetrainSpeed = 0;
+  int _intakeSpeed = 0;
+  int _shooterSpeed = 0;
   final _commentsCtrl = TextEditingController();
 
   bool get _isEditing => widget.existingMatch != null;
@@ -87,6 +92,11 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm>
       _diedReasonCtrl.text = existing.diedReason;
       _baseExpansion = existing.baseExpansion;
       _driverQuality = existing.driverQuality;
+      _defenseRating = existing.defenseRating;
+      _defenseCause = existing.defenseCause;
+      _drivetrainSpeed = existing.drivetrainSpeed;
+      _intakeSpeed = existing.intakeSpeed;
+      _shooterSpeed = existing.shooterSpeed;
       _commentsCtrl.text = existing.comments;
     } else {
       final settings = ref.read(settingsProvider);
@@ -634,6 +644,59 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm>
           onChanged: (v) => setState(() => _driverQuality = v.toDouble()),
         ),
 
+        _buildSlider(
+          context,
+          label: "Defense Rating",
+          value: _defenseRating,
+          onChanged: (v) => setState(() {
+            _defenseRating = v;
+            if (v == 0) _defenseCause = null;
+          }),
+        ),
+
+        if (_defenseRating > 0) ...[
+          Text(
+            "cause of defense",
+            style: theme.textTheme.labelLarge?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: AppTheme.spacingSm),
+          SegmentedButton<String>(
+            segments: const [
+              ButtonSegment(value: 'broke', label: Text('robot broke')),
+              ButtonSegment(value: 'strategic', label: Text('strategic')),
+            ],
+            selected: _defenseCause == null ? const {} : {_defenseCause!},
+            emptySelectionAllowed: true,
+            onSelectionChanged: (val) => setState(
+              () => _defenseCause = val.isEmpty ? null : val.first,
+            ),
+          ),
+          const SizedBox(height: AppTheme.spacingMd),
+        ],
+
+        _buildSlider(
+          context,
+          label: "Drivetrain Speed",
+          value: _drivetrainSpeed,
+          onChanged: (v) => setState(() => _drivetrainSpeed = v),
+        ),
+
+        _buildSlider(
+          context,
+          label: "Intake Speed",
+          value: _intakeSpeed,
+          onChanged: (v) => setState(() => _intakeSpeed = v),
+        ),
+
+        _buildSlider(
+          context,
+          label: "Shooter Speed",
+          value: _shooterSpeed,
+          onChanged: (v) => setState(() => _shooterSpeed = v),
+        ),
+
         const SizedBox(height: AppTheme.spacingMd),
 
         TextFormField(
@@ -761,6 +824,15 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm>
                   label: "Driver Quality",
                   value: "${_driverQuality.toInt()}/5",
                 ),
+                _ReviewRow(label: "Defense Rating", value: "$_defenseRating/5"),
+                if (_defenseCause != null)
+                  _ReviewRow(
+                    label: "Defense Cause",
+                    value: _defenseCause == 'broke' ? "Robot Broke" : "Strategic",
+                  ),
+                _ReviewRow(label: "Drivetrain Speed", value: "$_drivetrainSpeed/5"),
+                _ReviewRow(label: "Intake Speed", value: "$_intakeSpeed/5"),
+                _ReviewRow(label: "Shooter Speed", value: "$_shooterSpeed/5"),
                 if (_robotDied) ...[
                   const SizedBox(height: AppTheme.spacingSm),
                   Container(
@@ -812,6 +884,11 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm>
       'indexing_teleop': _teleIndexing,
       'base_expansion': _baseExpansion,
       'driver_quality': _driverQuality,
+      'defense_rating': _defenseRating,
+      'defense_cause': _defenseCause,
+      'drivetrain_speed': _drivetrainSpeed,
+      'intake_speed': _intakeSpeed,
+      'shooter_speed': _shooterSpeed,
       'robot_died': _robotDied,
       'died_at_seconds': _diedAtSeconds,
       'died_reason': _diedReasonCtrl.text,
