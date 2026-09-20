@@ -277,7 +277,15 @@ class _CounterButtonState extends State<_CounterButton> {
         child: InkWell(
           onTap: widget.onPressed,
           onLongPress: isEnabled ? _startRepeating : null,
-          onLongPressUp: isEnabled ? _stopRepeating : null,
+          // Unconditional, unlike onLongPress: a hold can push value to
+          // maxValue/minValue mid-repeat, which disables the button on the
+          // next rebuild and would null this out too if it were gated the
+          // same way — leaving the finger's eventual release with no
+          // onLongPressUp to call, and _repeatTimer ticking (harmlessly,
+          // but pointlessly) until the widget disposes. Always wiring
+          // _stopRepeating here means a release stops any in-flight timer
+          // regardless of the button's enabled state at that moment.
+          onLongPressUp: _stopRepeating,
           child: SizedBox(
             width: 56,
             height: 56,

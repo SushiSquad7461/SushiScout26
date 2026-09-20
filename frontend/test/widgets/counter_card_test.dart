@@ -296,6 +296,62 @@ void main() {
       expect(currentValue, 6);
     });
 
+    testWidgets(
+      'a repeat timer left running from before the button disabled does '
+      'not fire again after release',
+      (tester) async {
+        int currentValue = 0;
+
+        await tester.pumpWidget(
+          buildTestWidget(
+            value: currentValue,
+            onChanged: (v) => currentValue = v,
+            maxValue: 2,
+          ),
+        );
+
+        final gesture = await tester.startGesture(
+          tester.getCenter(find.byIcon(Icons.add)),
+        );
+        await tester.pump(kLongPressTimeout);
+        // Tick 1: 0 -> 1.
+        await tester.pump(const Duration(seconds: 1));
+        // Tick 2: 1 -> 2, hits maxValue. The "+" button disables
+        // (onPressed becomes null) on the rebuild this tick triggers.
+        await tester.pump(const Duration(seconds: 1));
+        // Tick 3: onPressed is now null, so this tick is a no-op, but the
+        // repeat timer is still running underneath while the finger is
+        // still down.
+        await tester.pump(const Duration(seconds: 1));
+        expect(currentValue, 2);
+
+        // Release while the button is disabled. A correct implementation
+        // must still cancel the repeat timer here. In the buggy version,
+        // onLongPressUp itself was gated on `isEnabled`, so a release
+        // while disabled never reached `_stopRepeating`, leaving the
+        // timer running.
+        await gesture.up();
+        await tester.pump();
+
+        // Re-enable the "+" button by decrementing once, with a plain
+        // tap on "-", so no hold gesture is on the "+" button at all.
+        await tester.tap(find.byIcon(Icons.remove));
+        await tester.pump();
+        expect(currentValue, 1);
+
+        // If the earlier repeat timer leaked past release, its next tick
+        // reads `widget.onPressed` fresh — which is now enabled again —
+        // and would increment with no user interaction at all. Pumping
+        // through several more seconds with nothing held must show no
+        // further change.
+        await tester.pump(const Duration(seconds: 1));
+        await tester.pump(const Duration(seconds: 1));
+        await tester.pump(const Duration(seconds: 1));
+
+        expect(currentValue, 1);
+      },
+    );
+
     testWidgets('works with custom min/max values', (tester) async {
       int currentValue = 5;
 
