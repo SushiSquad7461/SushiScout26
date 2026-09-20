@@ -222,4 +222,83 @@ void main() {
       expect(reasonController.text, 'defense collision');
     });
   });
+
+  group('DefenseCauseSelector', () {
+    testWidgets('shows the label and both segments', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: DefenseCauseSelector(cause: null, onChanged: (_) {}),
+          ),
+        ),
+      );
+
+      expect(find.text('cause of defense'), findsOneWidget);
+      expect(find.text('robot broke'), findsOneWidget);
+      expect(find.text('strategic'), findsOneWidget);
+    });
+
+    testWidgets('tapping "robot broke" calls onChanged with broke', (
+      tester,
+    ) async {
+      String? selected;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: DefenseCauseSelector(
+              cause: null,
+              onChanged: (v) => selected = v,
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('robot broke'));
+      await tester.pump();
+
+      expect(selected, 'broke');
+    });
+
+    testWidgets('tapping "strategic" calls onChanged with strategic', (
+      tester,
+    ) async {
+      String? selected;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: DefenseCauseSelector(
+              cause: null,
+              onChanged: (v) => selected = v,
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('strategic'));
+      await tester.pump();
+
+      expect(selected, 'strategic');
+    });
+
+    testWidgets('tapping the already-selected segment deselects it', (
+      tester,
+    ) async {
+      String? selected = 'sentinel-unset';
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: DefenseCauseSelector(
+              cause: 'broke',
+              onChanged: (v) => selected = v,
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('robot broke'));
+      await tester.pump();
+
+      expect(selected, isNull);
+    });
+  });
 }

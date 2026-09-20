@@ -237,6 +237,48 @@ class RobotDiedTimeAndReason extends StatelessWidget {
   }
 }
 
+/// The "cause of defense" label plus segmented control shown under a
+/// Defense Rating slider on both forms, once the rating is above 0 — a
+/// cause is meaningless at 0. Shared so the two copies can't drift.
+class DefenseCauseSelector extends StatelessWidget {
+  final String? cause;
+  final ValueChanged<String?> onChanged;
+
+  const DefenseCauseSelector({
+    super.key,
+    required this.cause,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          "cause of defense",
+          style: theme.textTheme.labelLarge?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: AppTheme.spacingSm),
+        SegmentedButton<String>(
+          segments: const [
+            ButtonSegment(value: 'broke', label: Text('robot broke')),
+            ButtonSegment(value: 'strategic', label: Text('strategic')),
+          ],
+          selected: cause == null ? const {} : {cause!},
+          emptySelectionAllowed: true,
+          onSelectionChanged: (val) =>
+              onChanged(val.isEmpty ? null : val.first),
+        ),
+        const SizedBox(height: AppTheme.spacingMd),
+      ],
+    );
+  }
+}
+
 abstract class ScoutingFormWidget extends ConsumerStatefulWidget {
   final String eventId;
   final Event event;

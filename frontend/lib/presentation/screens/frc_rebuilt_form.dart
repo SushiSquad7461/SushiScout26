@@ -703,26 +703,11 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm>
           }),
         ),
 
-        if (_defense > 0) ...[
-          Text(
-            "cause of defense",
-            style: theme.textTheme.labelLarge?.copyWith(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
+        if (_defense > 0)
+          DefenseCauseSelector(
+            cause: _defenseCause,
+            onChanged: (v) => setState(() => _defenseCause = v),
           ),
-          const SizedBox(height: AppTheme.spacingSm),
-          SegmentedButton<String>(
-            segments: const [
-              ButtonSegment(value: 'broke', label: Text('robot broke')),
-              ButtonSegment(value: 'strategic', label: Text('strategic')),
-            ],
-            selected: _defenseCause == null ? const {} : {_defenseCause!},
-            emptySelectionAllowed: true,
-            onSelectionChanged: (val) =>
-                setState(() => _defenseCause = val.isEmpty ? null : val.first),
-          ),
-          const SizedBox(height: AppTheme.spacingMd),
-        ],
 
         _buildSlider(
           context,
