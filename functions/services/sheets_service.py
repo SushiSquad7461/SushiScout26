@@ -312,16 +312,15 @@ class SheetsService:
     
     def _set_column_widths(self, spreadsheet_id: str, sheet_name: str, program_type: str = 'FRC'):
         """Set appropriate column widths."""
+        frc_widths = [160, 140, 60, 70, 70, 100, 80, 90, 90, 90, 100, 100, 85, 90, 90, 90, 90, 90, 90, 90, 90, 110, 90, 160, 250]
+        ftc_widths = [160, 140, 60, 70, 70, 100, 70, 100, 90, 110, 100, 110, 100, 85, 85, 90, 90, 90, 110, 90, 160, 250]
+        assert len(frc_widths) == len(FRC_HEADERS), f"frc_widths has {len(frc_widths)} entries, FRC_HEADERS has {len(FRC_HEADERS)}"
+        assert len(ftc_widths) == len(FTC_HEADERS), f"ftc_widths has {len(ftc_widths)} entries, FTC_HEADERS has {len(FTC_HEADERS)}"
+
         try:
             sheet_id = self._get_sheet_id(spreadsheet_id, sheet_name)
-            
-            # FRC has 25 columns, FTC has 22 columns
-            frc_widths = [160, 140, 60, 70, 70, 100, 80, 90, 90, 90, 100, 100, 85, 90, 90, 90, 90, 90, 90, 90, 90, 110, 90, 160, 250]
-            ftc_widths = [160, 140, 60, 70, 70, 100, 70, 100, 90, 110, 100, 110, 100, 85, 85, 90, 90, 90, 110, 90, 160, 250]
-            assert len(frc_widths) == len(FRC_HEADERS), f"frc_widths has {len(frc_widths)} entries, FRC_HEADERS has {len(FRC_HEADERS)}"
-            assert len(ftc_widths) == len(FTC_HEADERS), f"ftc_widths has {len(ftc_widths)} entries, FTC_HEADERS has {len(FTC_HEADERS)}"
             widths = ftc_widths if program_type == 'FTC' else frc_widths
-            
+
             requests = []
             for col_idx, width in enumerate(widths):
                 requests.append({
