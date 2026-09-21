@@ -25,8 +25,8 @@ class ExportService {
   /// backend export's _format_died_at. Returns '' when the robot never
   /// died.
   static String _formatDiedAt(dynamic secondsRemaining) {
-    if (secondsRemaining == null) return '';
-    final total = (secondsRemaining as num).toInt();
+    if (secondsRemaining is! num) return '';
+    final total = secondsRemaining.toInt();
     final minutes = total ~/ 60;
     final secs = (total % 60).toString().padLeft(2, '0');
     return '$minutes:$secs';
@@ -273,7 +273,7 @@ class ExportService {
 
       pdf.addPage(
         pw.MultiPage(
-          pageFormat: PdfPageFormat.a4,
+          pageFormat: PdfPageFormat.a4.landscape,
           build: (pw.Context context) {
             return [
               pw.Header(

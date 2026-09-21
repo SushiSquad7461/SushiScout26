@@ -299,6 +299,27 @@ void main() {
       // No 'Robot Broke'/'Strategic' label and no mm:ss stamp present.
       expect(dataLine, isNot(contains('Robot Broke')));
       expect(dataLine, isNot(contains('Strategic')));
+      expect(dataLine, isNot(matches(RegExp(r'\d+:\d{2}'))));
+    });
+
+    test('renders an empty died-at time for a non-numeric died_at_seconds '
+        'value instead of throwing', () {
+      final csv = ExportService.buildCsvString([
+        _frcMatch().copyWith(
+          gameData: const {
+            'auto_fuel': 3,
+            'auto_tower_l1': 1,
+            'teleop_fuel': 12,
+            'teleop_tower_level': 2,
+            'defense_rating': 4,
+            'driver_skill': 5,
+            'robot_died': false,
+            'died_at_seconds': 'not-a-number',
+          },
+        ),
+      ]);
+      final dataLine = csv.split('\n')[1];
+      expect(dataLine, isNot(matches(RegExp(r'\d+:\d{2}'))));
     });
   });
 }
