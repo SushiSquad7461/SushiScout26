@@ -371,7 +371,14 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm>
           const SizedBox(height: AppTheme.spacingSm),
           const Divider(height: 1),
           const SizedBox(height: AppTheme.spacingMd),
-          Expanded(child: SingleChildScrollView(child: content)),
+          Expanded(
+            child: SingleChildScrollView(
+              // Room for an outlined field's floating label, which sits
+              // half above the field and clips at the scroll area's edge.
+              padding: const EdgeInsets.only(top: AppTheme.spacingSm),
+              child: content,
+            ),
+          ),
         ],
       ),
     );
