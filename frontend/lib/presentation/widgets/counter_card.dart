@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../theme/app_theme.dart';
@@ -210,7 +212,7 @@ class CounterCard extends StatelessWidget {
 }
 
 /// 56dp square, outlined in the accent. Same size and position as before.
-class _CounterButton extends StatelessWidget {
+class _CounterButton extends StatefulWidget {
   final IconData icon;
   final VoidCallback? onPressed;
   final ColorScheme colorScheme;
@@ -226,27 +228,75 @@ class _CounterButton extends StatelessWidget {
   });
 
   @override
+  State<_CounterButton> createState() => _CounterButtonState();
+}
+
+class _CounterButtonState extends State<_CounterButton> {
+  Timer? _repeatTimer;
+
+  // Reads `widget.onPressed` fresh on every tick rather than capturing it
+  // once — the enclosing CounterCard rebuilds this widget with a new
+  // onPressed closure (bound to the latest value) every time a step fires,
+  // and Flutter updates `widget` on the existing State across that rebuild.
+  // Capturing the callback in a local at press-start would keep calling the
+  // stale, first-press value forever instead of incrementing.
+  void _startRepeating() {
+    _repeatTimer?.cancel();
+    _repeatTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      widget.onPressed?.call();
+    });
+  }
+
+  void _stopRepeating() {
+    _repeatTimer?.cancel();
+    _repeatTimer = null;
+  }
+
+  @override
+  void dispose() {
+    _stopRepeating();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final isEnabled = onPressed != null;
-    final buttonColor = accentColor ?? colorScheme.onSurface;
-    final edge = isEnabled ? buttonColor : colorScheme.onSurfaceVariant;
+    final isEnabled = widget.onPressed != null;
+    final buttonColor = widget.accentColor ?? widget.colorScheme.onSurface;
+    final edge = isEnabled ? buttonColor : widget.colorScheme.onSurfaceVariant;
 
     return Semantics(
       button: true,
       enabled: isEnabled,
-      label: semanticLabel,
-      child: Material(
-        color: Colors.transparent,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppTheme.buttonRadius),
-          side: BorderSide(color: edge, width: AppTheme.ruleWidth),
-        ),
-        child: InkWell(
-          onTap: onPressed,
-          child: SizedBox(
-            width: 56,
-            height: 56,
-            child: Icon(icon, size: 28, color: edge),
+      label: widget.semanticLabel,
+      child: Listener(
+        // Backstop for a cancelled long press: the app is backgrounded
+        // mid-hold, or the gesture arena reassigns the pointer. In either
+        // case onLongPressUp never fires — InkWell has no onLongPressCancel
+        // — but the platform-level pointer-cancel event always does.
+        onPointerCancel: (_) => _stopRepeating(),
+        child: Material(
+          color: Colors.transparent,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppTheme.buttonRadius),
+            side: BorderSide(color: edge, width: AppTheme.ruleWidth),
+          ),
+          child: InkWell(
+            onTap: widget.onPressed,
+            onLongPress: isEnabled ? _startRepeating : null,
+            // Unconditional, unlike onLongPress: a hold can push value to
+            // maxValue/minValue mid-repeat, which disables the button on the
+            // next rebuild and would null this out too if it were gated the
+            // same way — leaving the finger's eventual release with no
+            // onLongPressUp to call, and _repeatTimer ticking (harmlessly,
+            // but pointlessly) until the widget disposes. Always wiring
+            // _stopRepeating here means a release stops any in-flight timer
+            // regardless of the button's enabled state at that moment.
+            onLongPressUp: _stopRepeating,
+            child: SizedBox(
+              width: 56,
+              height: 56,
+              child: Icon(widget.icon, size: 28, color: edge),
+            ),
           ),
         ),
       ),

@@ -16,7 +16,7 @@ class MatchDetailsScreen extends ConsumerWidget {
   const MatchDetailsScreen({super.key, required this.match});
 
   /// Fetches the owning event (falling back to a dummy built from the match
-  /// itself, mirroring dashboard.dart's "scout match" fallback) and pushes
+  /// itself, mirroring dashboard.dart's "start scouting" fallback) and pushes
   /// the scouting wizard pre-loaded with this match. On a successful save,
   /// pops this screen too — it holds a frozen snapshot of `match`, so
   /// leaving it up would show stale data until the matches list catches up.

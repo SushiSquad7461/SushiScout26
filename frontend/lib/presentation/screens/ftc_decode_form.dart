@@ -36,6 +36,7 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm>
     with KeyboardDismissMixin {
   final PageController _pageController = PageController();
   final MatchTimerController _timerController = MatchTimerController();
+  final PhaseFlashController _phaseFlashController = PhaseFlashController();
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
 
   int _currentPage = 0;
@@ -57,10 +58,17 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm>
   int _teleArtifacts = 0;
   bool _teleIndexing = false;
   bool _robotDied = false;
+  int? _diedAtSeconds;
+  final _diedReasonCtrl = TextEditingController();
 
   // Endgame
   String _baseExpansion = 'None';
   double _driverQuality = 0;
+  int _defenseRating = 0;
+  String? _defenseCause;
+  int _drivetrainSpeed = 0;
+  int _intakeSpeed = 0;
+  int _shooterSpeed = 0;
   final _commentsCtrl = TextEditingController();
 
   bool get _isEditing => widget.existingMatch != null;
@@ -80,8 +88,15 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm>
       _teleArtifacts = existing.artifactsTeleop;
       _teleIndexing = existing.indexingTeleop;
       _robotDied = existing.robotDied;
+      _diedAtSeconds = existing.diedAtSeconds;
+      _diedReasonCtrl.text = existing.diedReason;
       _baseExpansion = existing.baseExpansion;
       _driverQuality = existing.driverQuality;
+      _defenseRating = existing.defenseRating;
+      _defenseCause = existing.defenseCause;
+      _drivetrainSpeed = existing.drivetrainSpeed;
+      _intakeSpeed = existing.intakeSpeed;
+      _shooterSpeed = existing.shooterSpeed;
       _commentsCtrl.text = existing.comments;
     } else {
       final settings = ref.read(settingsProvider);
@@ -93,9 +108,11 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm>
   void dispose() {
     _pageController.dispose();
     _timerController.dispose();
+    _phaseFlashController.dispose();
     _matchNumberCtrl.dispose();
     _teamNumberCtrl.dispose();
     _scouterNameCtrl.dispose();
+    _diedReasonCtrl.dispose();
     _commentsCtrl.dispose();
     super.dispose();
   }
@@ -227,47 +244,60 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm>
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
-    return dismissKeyboardOnTap(
-      child: Scaffold(
-        appBar: AppBar(
-          title: Text(
-            _isEditing ? "edit • ${widget.event.name}" : widget.event.name,
-          ),
-          // Brand band sits between the app bar and the timer, as in the
-          // design — the scout screen was the one screen missing it.
-          bottom: ScoutingFormBrandBand(timerController: _timerController),
-        ),
-        body: SafeArea(
-          child: Column(
-            children: [
-              if (_isEditing)
-                ScoutingLockedMatchBanner(
-                  teamNumber: _teamNumberCtrl.text,
-                  matchNumber: _matchNumberCtrl.text,
-                  alliance: _alliance,
-                ),
-              Expanded(
-                child: Form(
-                  key: _formKey,
-                  child: PageView(
-                    controller: _pageController,
-                    physics: const NeverScrollableScrollPhysics(),
-                    onPageChanged: (idx) => setState(() => _currentPage = idx),
-                    children: [
-                      if (!_isEditing)
-                        _buildPage("setup", _buildSetup(context)),
-                      _buildPage("autonomous", _buildAuto(context)),
-                      _buildPage("teleop", _buildTeleop(context)),
-                      _buildPage("endgame", _buildEndgame(context)),
-                      _buildPage("review & submit", _buildReview(context)),
-                    ],
-                  ),
-                ),
+    return PopScope(
+      canPop: _currentPage == 0,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) _prevPage();
+      },
+      child: dismissKeyboardOnTap(
+        child: PhaseFlashOverlay(
+          controller: _phaseFlashController,
+          child: Scaffold(
+            appBar: AppBar(
+              title: Text(
+                _isEditing ? "edit • ${widget.event.name}" : widget.event.name,
               ),
-            ],
+              // Brand band sits between the app bar and the timer, as in the
+              // design — the scout screen was the one screen missing it.
+              bottom: ScoutingFormBrandBand(
+                timerController: _timerController,
+                onPhaseChanged: _phaseFlashController.flash,
+              ),
+            ),
+            body: SafeArea(
+              child: Column(
+                children: [
+                  if (_isEditing)
+                    ScoutingLockedMatchBanner(
+                      teamNumber: _teamNumberCtrl.text,
+                      matchNumber: _matchNumberCtrl.text,
+                      alliance: _alliance,
+                    ),
+                  Expanded(
+                    child: Form(
+                      key: _formKey,
+                      child: PageView(
+                        controller: _pageController,
+                        physics: const NeverScrollableScrollPhysics(),
+                        onPageChanged: (idx) =>
+                            setState(() => _currentPage = idx),
+                        children: [
+                          if (!_isEditing)
+                            _buildPage("setup", _buildSetup(context)),
+                          _buildPage("autonomous", _buildAuto(context)),
+                          _buildPage("teleop", _buildTeleop(context)),
+                          _buildPage("endgame", _buildEndgame(context)),
+                          _buildPage("review & submit", _buildReview(context)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            bottomNavigationBar: _buildBottomBar(context, colorScheme),
           ),
         ),
-        bottomNavigationBar: _buildBottomBar(context, colorScheme),
       ),
     );
   }
@@ -286,14 +316,15 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm>
       ),
       child: Row(
         children: [
-          if (_currentPage > 0)
-            TextButton.icon(
-              onPressed: _prevPage,
-              icon: const Icon(Icons.arrow_back_rounded),
-              label: const Text("back"),
-            )
-          else
-            const SizedBox(width: 100),
+          ScoutingWizardBottomSlot(
+            child: _currentPage > 0
+                ? TextButton.icon(
+                    onPressed: _prevPage,
+                    icon: const Icon(Icons.arrow_back_rounded),
+                    label: const Text("back"),
+                  )
+                : const SizedBox.shrink(),
+          ),
 
           const Spacer(),
 
@@ -303,11 +334,13 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm>
 
           // Label then chevron, per the design's "next ›" — FilledButton.icon
           // puts the icon first, which read as "← next".
-          ScoutingWizardNextButton(
-            isLastPage: _currentPage == _pageCount - 1,
-            submitting: _submitting,
-            onPressed: _nextPage,
-            finishLabel: _isEditing ? "save" : "submit",
+          ScoutingWizardBottomSlot(
+            child: ScoutingWizardNextButton(
+              isLastPage: _currentPage == _pageCount - 1,
+              submitting: _submitting,
+              onPressed: _nextPage,
+              finishLabel: _isEditing ? "save" : "submit",
+            ),
           ),
         ],
       ),
@@ -334,7 +367,14 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm>
           const SizedBox(height: AppTheme.spacingSm),
           const Divider(height: 1),
           const SizedBox(height: AppTheme.spacingMd),
-          Expanded(child: SingleChildScrollView(child: content)),
+          Expanded(
+            child: SingleChildScrollView(
+              // Room for an outlined field's floating label, which sits
+              // half above the field and clips at the scroll area's edge.
+              padding: const EdgeInsets.only(top: AppTheme.spacingSm),
+              child: content,
+            ),
+          ),
         ],
       ),
     );
@@ -375,9 +415,13 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm>
                   labelText: "match #",
                   prefixIcon: Icon(Icons.tag),
                   border: OutlineInputBorder(),
+                  errorMaxLines: 3,
                 ),
                 textInputAction: TextInputAction.next,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(3),
+                ],
                 validator: FormValidators.matchNumber,
                 autovalidateMode: AutovalidateMode.onUserInteraction,
               ),
@@ -391,9 +435,13 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm>
                   labelText: "team #",
                   prefixIcon: Icon(Icons.groups_outlined),
                   border: OutlineInputBorder(),
+                  errorMaxLines: 3,
                 ),
                 textInputAction: TextInputAction.done,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(5),
+                ],
                 validator: FormValidators.teamNumber,
                 autovalidateMode: AutovalidateMode.onUserInteraction,
               ),
@@ -529,15 +577,43 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm>
           color: _robotDied
               ? colorScheme.errorContainer.withValues(alpha: 0.5)
               : null,
-          child: CheckboxListTile(
-            title: Text(
-              "Robot Died / Disabled",
-              style: TextStyle(color: _robotDied ? colorScheme.error : null),
-            ),
-            subtitle: const Text("Robot was inactive during match"),
-            value: _robotDied,
-            onChanged: (v) => setState(() => _robotDied = v!),
-            controlAffinity: ListTileControlAffinity.leading,
+          child: Column(
+            children: [
+              CheckboxListTile(
+                title: Text(
+                  "Robot Died / Disabled",
+                  style: TextStyle(
+                    color: _robotDied ? colorScheme.error : null,
+                  ),
+                ),
+                subtitle: const Text("Robot was inactive during match"),
+                value: _robotDied,
+                onChanged: (v) => setState(() {
+                  _robotDied = v!;
+                  if (!_robotDied) {
+                    _diedAtSeconds = null;
+                    _diedReasonCtrl.clear();
+                  }
+                }),
+                controlAffinity: ListTileControlAffinity.leading,
+              ),
+              if (_robotDied)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppTheme.spacingMd,
+                    0,
+                    AppTheme.spacingMd,
+                    AppTheme.spacingMd,
+                  ),
+                  child: RobotDiedTimeAndReason(
+                    diedAtSeconds: _diedAtSeconds,
+                    liveSecondsRemaining: _timerController.secondsRemaining,
+                    onDiedAtSecondsChanged: (s) =>
+                        setState(() => _diedAtSeconds = s),
+                    reasonController: _diedReasonCtrl,
+                  ),
+                ),
+            ],
           ),
         ),
       ],
@@ -575,6 +651,43 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm>
           label: "Driver Quality",
           value: _driverQuality.toInt(),
           onChanged: (v) => setState(() => _driverQuality = v.toDouble()),
+        ),
+
+        _buildSlider(
+          context,
+          label: "Defense Rating",
+          value: _defenseRating,
+          onChanged: (v) => setState(() {
+            _defenseRating = v;
+            if (v == 0) _defenseCause = null;
+          }),
+        ),
+
+        if (_defenseRating > 0)
+          DefenseCauseSelector(
+            cause: _defenseCause,
+            onChanged: (v) => setState(() => _defenseCause = v),
+          ),
+
+        _buildSlider(
+          context,
+          label: "Drivetrain Speed",
+          value: _drivetrainSpeed,
+          onChanged: (v) => setState(() => _drivetrainSpeed = v),
+        ),
+
+        _buildSlider(
+          context,
+          label: "Intake Speed",
+          value: _intakeSpeed,
+          onChanged: (v) => setState(() => _intakeSpeed = v),
+        ),
+
+        _buildSlider(
+          context,
+          label: "Shooter Speed",
+          value: _shooterSpeed,
+          onChanged: (v) => setState(() => _shooterSpeed = v),
         ),
 
         const SizedBox(height: AppTheme.spacingMd),
@@ -704,6 +817,20 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm>
                   label: "Driver Quality",
                   value: "${_driverQuality.toInt()}/5",
                 ),
+                _ReviewRow(label: "Defense Rating", value: "$_defenseRating/5"),
+                if (_defenseCause != null)
+                  _ReviewRow(
+                    label: "Defense Cause",
+                    value: _defenseCause == 'broke'
+                        ? "Robot Broke"
+                        : "Strategic",
+                  ),
+                _ReviewRow(
+                  label: "Drivetrain Speed",
+                  value: "$_drivetrainSpeed/5",
+                ),
+                _ReviewRow(label: "Intake Speed", value: "$_intakeSpeed/5"),
+                _ReviewRow(label: "Shooter Speed", value: "$_shooterSpeed/5"),
                 if (_robotDied) ...[
                   const SizedBox(height: AppTheme.spacingSm),
                   Container(
@@ -731,6 +858,11 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm>
                       ],
                     ),
                   ),
+                  if (_diedAtSeconds != null)
+                    _ReviewRow(
+                      label: "Died At",
+                      value: RobotDiedTimeAndReason.formatMmSs(_diedAtSeconds!),
+                    ),
                 ],
               ],
             ),
@@ -750,7 +882,14 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm>
       'indexing_teleop': _teleIndexing,
       'base_expansion': _baseExpansion,
       'driver_quality': _driverQuality,
+      'defense_rating': _defenseRating,
+      'defense_cause': _defenseCause,
+      'drivetrain_speed': _drivetrainSpeed,
+      'intake_speed': _intakeSpeed,
+      'shooter_speed': _shooterSpeed,
       'robot_died': _robotDied,
+      'died_at_seconds': _diedAtSeconds,
+      'died_reason': _diedReasonCtrl.text,
     };
 
     final existing = widget.existingMatch;

@@ -7,7 +7,8 @@ class MatchReport {
   final int teamNumber;
   final String alliance; // 'Red' or 'Blue'
   final String scouterName;
-  final Map<String, dynamic> gameData; // Includes robot_died, auto_fuel, teleop_fuel, etc.
+  final Map<String, dynamic>
+  gameData; // Includes robot_died, auto_fuel, teleop_fuel, etc.
   final String comments;
   final DateTime createdAt;
   final bool isSynced;
@@ -18,7 +19,10 @@ class MatchReport {
 
   // Common
   bool get robotDied => gameData['robot_died'] ?? false;
-  bool get isFtc => programType == 'FTC' || gameData.containsKey('artifacts_auto');
+  bool get isFtc =>
+      programType == 'FTC' || gameData.containsKey('artifacts_auto');
+  int? get diedAtSeconds => (gameData['died_at_seconds'] as num?)?.toInt();
+  String get diedReason => gameData['died_reason'] ?? '';
 
   // FRC getters
   int get autoFuel => gameData['auto_fuel'] ?? 0;
@@ -27,6 +31,10 @@ class MatchReport {
   int get teleopTowerLevel => gameData['teleop_tower_level'] ?? 0;
   int get defenseRating => gameData['defense_rating'] ?? 0;
   int get driverSkill => gameData['driver_skill'] ?? 0;
+  int get drivetrainSpeed => gameData['drivetrain_speed'] ?? 0;
+  int get intakeSpeed => gameData['intake_speed'] ?? 0;
+  int get shooterSpeed => gameData['shooter_speed'] ?? 0;
+  String? get defenseCause => gameData['defense_cause'] as String?;
   bool get trenchTraverse => gameData['trench_traverse'] ?? false;
   bool get bumpTraverse => gameData['bump_traverse'] ?? false;
   bool get shootingRangeClose => gameData['shooting_range_close'] ?? false;
@@ -91,7 +99,9 @@ class MatchReport {
       scouterName: json['scouterName'] ?? '',
       gameData: gameData,
       comments: json['comments'] ?? '',
-      createdAt: DateTime.parse(json['createdAt'] ?? DateTime.now().toIso8601String()),
+      createdAt: DateTime.parse(
+        json['createdAt'] ?? DateTime.now().toIso8601String(),
+      ),
       isSynced: json['isSynced'] ?? false,
       isDeleted: json['isDeleted'] ?? false,
       eventId: json['eventId'] ?? '',
