@@ -1,5 +1,6 @@
 import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:frontend/data/local/preferences.dart';
@@ -113,6 +114,47 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(FtcDecodeForm), findsNothing);
+    });
+  });
+
+  group('FtcDecodeForm setup validation messages', () {
+    testWidgets('the whole match number error renders without truncation', (
+      tester,
+    ) async {
+      await tester.pumpWidget(await buildApp());
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'match #'),
+        '300',
+      );
+      await tester.pumpAndSettle();
+
+      final error = find.text('Match number can be at most 200');
+      expect(error, findsOneWidget);
+      expect(
+        tester.renderObject<RenderParagraph>(error).didExceedMaxLines,
+        isFalse,
+      );
+    });
+
+    testWidgets('the whole team number error renders without truncation', (
+      tester,
+    ) async {
+      await tester.pumpWidget(await buildApp());
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.widgetWithText(TextFormField, 'team #'), '0');
+      await tester.pumpAndSettle();
+
+      final error = find.text('Team number must be at least 1');
+      expect(error, findsOneWidget);
+      expect(
+        tester.renderObject<RenderParagraph>(error).didExceedMaxLines,
+        isFalse,
+      );
     });
   });
 }

@@ -412,6 +412,7 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm>
                   labelText: "match #",
                   prefixIcon: Icon(Icons.tag),
                   border: OutlineInputBorder(),
+                  errorMaxLines: 3,
                 ),
                 textInputAction: TextInputAction.next,
                 inputFormatters: [
@@ -431,6 +432,7 @@ class _FrcRebuiltFormState extends ConsumerState<FrcRebuiltForm>
                   labelText: "team #",
                   prefixIcon: Icon(Icons.groups_outlined),
                   border: OutlineInputBorder(),
+                  errorMaxLines: 3,
                 ),
                 textInputAction: TextInputAction.done,
                 inputFormatters: [

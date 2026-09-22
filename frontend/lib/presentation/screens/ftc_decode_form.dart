@@ -408,6 +408,7 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm>
                   labelText: "match #",
                   prefixIcon: Icon(Icons.tag),
                   border: OutlineInputBorder(),
+                  errorMaxLines: 3,
                 ),
                 textInputAction: TextInputAction.next,
                 inputFormatters: [
@@ -427,6 +428,7 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm>
                   labelText: "team #",
                   prefixIcon: Icon(Icons.groups_outlined),
                   border: OutlineInputBorder(),
+                  errorMaxLines: 3,
                 ),
                 textInputAction: TextInputAction.done,
                 inputFormatters: [
