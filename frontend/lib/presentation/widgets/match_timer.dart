@@ -43,8 +43,10 @@ class MatchTimer extends StatefulWidget implements PreferredSizeWidget {
   final MatchTimerController? controller;
 
   /// Fires once per phase change, after the match has started, with the
-  /// color the new phase's chip renders in — the owning form uses this to
-  /// drive a brief screen-edge flash. Does not fire for the initial
+  /// saturated flash color for the new phase (see `_phaseFlashColor`, which
+  /// is deliberately not the chip's fill — some chips are grey or white and
+  /// would flash invisibly). The owning form uses this to drive a brief
+  /// screen-edge flash. Does not fire for the initial
   /// PRE-MATCH -> AUTO transition (starting the match already has its own
   /// UI cue); does fire for every other transition, including a reset back
   /// to PRE-MATCH.
@@ -111,6 +113,27 @@ class _MatchTimerState extends State<MatchTimer> {
     }
   }
 
+  /// The screen-edge flash color for [phase]. Kept apart from [_phaseFill]
+  /// on purpose: chip fills sit on ink chrome and include grey (TRANSITION)
+  /// and paper (TELEOP), which barely show as a border flash. These are
+  /// saturated, mutually distinct, and identical in light and dark themes.
+  static Color _phaseFlashColor(String phase) {
+    switch (phase) {
+      case "AUTO":
+        return const Color(0xFF00B8D4); // teal (never flashes today)
+      case "TRANSITION":
+        return const Color(0xFFFFC107); // amber: field disabled, pause
+      case "TELEOP":
+        return const Color(0xFF00C853); // green: go
+      case "ENDGAME":
+        return const Color(0xFFFF6D00); // orange: hurry
+      case "FINISHED":
+        return const Color(0xFFD50000); // red: match over
+      default:
+        return const Color(0xFF448AFF); // blue: PRE-MATCH (reset)
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -133,9 +156,7 @@ class _MatchTimerState extends State<MatchTimer> {
     if (_lastNotifiedPhase != null &&
         _lastNotifiedPhase != newPhase &&
         _lastNotifiedPhase != "PRE-MATCH") {
-      final brand = BrandScope.of(context);
-      final colorScheme = Theme.of(context).colorScheme;
-      widget.onPhaseChanged?.call(_phaseFill(brand, colorScheme));
+      widget.onPhaseChanged?.call(_phaseFlashColor(newPhase));
     }
     _lastNotifiedPhase = newPhase;
   }

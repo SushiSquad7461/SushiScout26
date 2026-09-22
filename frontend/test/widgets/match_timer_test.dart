@@ -174,6 +174,64 @@ void main() {
       expect(flashed, isNotNull);
     });
 
+    testWidgets('delivers a distinct saturated flash color per phase', (
+      tester,
+    ) async {
+      final flashes = <Color>[];
+      await tester.pumpWidget(
+        buildTestWidget(onPhaseChanged: (c) => flashes.add(c)),
+      );
+      await tester.tap(find.byIcon(Icons.play_arrow_rounded));
+
+      // AUTO -> TRANSITION at 15 s elapsed.
+      await tester.pump(const Duration(seconds: 15));
+      expect(flashes.last, const Color(0xFFFFC107)); // amber
+      final transition = flashes.last;
+
+      // TRANSITION -> TELEOP at 18 s elapsed.
+      await tester.pump(const Duration(seconds: 3));
+      expect(flashes.last, const Color(0xFF00C853)); // green
+      final teleop = flashes.last;
+
+      // TELEOP -> ENDGAME once 30 s or less remain (123 s elapsed).
+      await tester.pump(const Duration(seconds: 105));
+      expect(flashes.last, const Color(0xFFFF6D00)); // orange
+      final endgame = flashes.last;
+
+      // ENDGAME -> FINISHED at 153 s elapsed.
+      await tester.pump(const Duration(seconds: 30));
+      expect(flashes.last, const Color(0xFFD50000)); // red
+      final finished = flashes.last;
+
+      // Reset from FINISHED back to PRE-MATCH.
+      await tester.tap(find.byIcon(Icons.replay_rounded));
+      await tester.pump();
+      expect(flashes.last, const Color(0xFF448AFF)); // blue
+      final preMatch = flashes.last;
+
+      expect(flashes, hasLength(5));
+      expect(
+        {transition, teleop, endgame, finished, preMatch},
+        hasLength(5),
+        reason: 'every phase flash color must be distinct',
+      );
+    });
+
+    testWidgets('reset from a running phase delivers the blue flash', (
+      tester,
+    ) async {
+      Color? flashed;
+      await tester.pumpWidget(
+        buildTestWidget(onPhaseChanged: (c) => flashed = c),
+      );
+      await tester.tap(find.byIcon(Icons.play_arrow_rounded));
+      await tester.pump(const Duration(seconds: 20)); // into TELEOP
+      await tester.tap(find.byIcon(Icons.replay_rounded));
+      await tester.pump();
+
+      expect(flashed, const Color(0xFF448AFF));
+    });
+
     testWidgets("controller's secondsRemaining updates as the timer ticks", (
       tester,
     ) async {
