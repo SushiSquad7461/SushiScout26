@@ -256,6 +256,7 @@ class DefenseCauseSelector extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        const SizedBox(height: AppTheme.spacingSm),
         Text(
           "cause of defense",
           style: theme.textTheme.labelLarge?.copyWith(
