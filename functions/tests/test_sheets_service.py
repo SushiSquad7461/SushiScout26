@@ -5,7 +5,7 @@ from unittest.mock import Mock, patch, MagicMock
 import json
 from datetime import datetime
 
-from services.sheets_service import SheetsService, get_sheets_service, FRC_HEADERS, FTC_HEADERS, _col_letter
+from services.sheets_service import SheetsService, get_sheets_service, FRC_HEADERS, FTC_HEADERS, _col_letter, _rating
 
 
 class TestColLetter(unittest.TestCase):
@@ -58,9 +58,9 @@ class TestSheetsService(unittest.TestCase):
         self.assertEqual(FRC_HEADERS[1], "Match ID")
         self.assertEqual(FRC_HEADERS[6], "Auto Fuel")
         self.assertEqual(FRC_HEADERS[13], "Trench Traverse")
-        self.assertEqual(FRC_HEADERS[18], "Drivetrain Speed")
-        self.assertEqual(FRC_HEADERS[19], "Intake Speed")
-        self.assertEqual(FRC_HEADERS[20], "Shooter Speed")
+        self.assertEqual(FRC_HEADERS[18], "Drivetrain Speed (/5)")
+        self.assertEqual(FRC_HEADERS[19], "Intake Speed (/5)")
+        self.assertEqual(FRC_HEADERS[20], "Shooter Speed (/5)")
         self.assertEqual(FRC_HEADERS[21], "Defense Cause")
         self.assertEqual(FRC_HEADERS[22], "Died At")
         self.assertEqual(FRC_HEADERS[23], "Died Reason")
@@ -73,10 +73,10 @@ class TestSheetsService(unittest.TestCase):
         self.assertEqual(FTC_HEADERS[6], "Leave")
         self.assertEqual(FTC_HEADERS[7], "Auto Artifacts")
         self.assertEqual(FTC_HEADERS[11], "Base Expansion")
-        self.assertEqual(FTC_HEADERS[14], "Defense Rating")
-        self.assertEqual(FTC_HEADERS[15], "Drivetrain Speed")
-        self.assertEqual(FTC_HEADERS[16], "Intake Speed")
-        self.assertEqual(FTC_HEADERS[17], "Shooter Speed")
+        self.assertEqual(FTC_HEADERS[14], "Defense Rating (/5)")
+        self.assertEqual(FTC_HEADERS[15], "Drivetrain Speed (/5)")
+        self.assertEqual(FTC_HEADERS[16], "Intake Speed (/5)")
+        self.assertEqual(FTC_HEADERS[17], "Shooter Speed (/5)")
         self.assertEqual(FTC_HEADERS[18], "Defense Cause")
         self.assertEqual(FTC_HEADERS[19], "Died At")
         self.assertEqual(FTC_HEADERS[20], "Died Reason")
@@ -130,17 +130,17 @@ class TestSheetsService(unittest.TestCase):
         self.assertEqual(result[7], 'Yes')             # Auto L1 Hang
         self.assertEqual(result[8], 15)                # Teleop Fuel
         self.assertEqual(result[9], 'Level 3')         # Climb Level
-        self.assertEqual(result[10], '3/5')            # Defense Rating
-        self.assertEqual(result[11], '4/5')            # Driver Skill
+        self.assertEqual(result[10], 3)            # Defense Rating
+        self.assertEqual(result[11], 4)            # Driver Skill
         self.assertEqual(result[12], 'Yes')            # Robot Died
         self.assertEqual(result[13], 'Yes')            # Trench Traverse
         self.assertEqual(result[14], 'No')             # Bump Traverse
         self.assertEqual(result[15], 'Yes')            # Shooting Close
         self.assertEqual(result[16], 'No')             # Shooting Mid
         self.assertEqual(result[17], 'No')             # Shooting Far
-        self.assertEqual(result[18], '4/5')            # Drivetrain Speed
-        self.assertEqual(result[19], '2/5')            # Intake Speed
-        self.assertEqual(result[20], '5/5')            # Shooter Speed
+        self.assertEqual(result[18], 4)            # Drivetrain Speed
+        self.assertEqual(result[19], 2)            # Intake Speed
+        self.assertEqual(result[20], 5)            # Shooter Speed
         self.assertEqual(result[21], 'Robot Broke')    # Defense Cause
         self.assertEqual(result[22], '1:05')           # Died At
         self.assertEqual(result[23], 'tipped on the ramp')  # Died Reason
@@ -216,12 +216,12 @@ class TestSheetsService(unittest.TestCase):
         self.assertEqual(result[9], 8)                  # Teleop Artifacts
         self.assertEqual(result[10], 'No')              # Teleop Indexing
         self.assertEqual(result[11], 'Full')            # Base Expansion
-        self.assertEqual(result[12], '4/5')             # Driver Quality
+        self.assertEqual(result[12], 4)             # Driver Quality
         self.assertEqual(result[13], 'No')              # Robot Died
-        self.assertEqual(result[14], '2/5')             # Defense Rating
-        self.assertEqual(result[15], '3/5')             # Drivetrain Speed
-        self.assertEqual(result[16], '3/5')             # Intake Speed
-        self.assertEqual(result[17], '3/5')             # Shooter Speed
+        self.assertEqual(result[14], 2)             # Defense Rating
+        self.assertEqual(result[15], 3)             # Drivetrain Speed
+        self.assertEqual(result[16], 3)             # Intake Speed
+        self.assertEqual(result[17], 3)             # Shooter Speed
         self.assertEqual(result[18], 'Strategic')       # Defense Cause
         self.assertEqual(result[19], '')                # Died At (not set)
         self.assertEqual(result[20], '')                # Died Reason (not set)
@@ -503,3 +503,108 @@ class TestVerifyWriteAccessCredentialFailures(unittest.TestCase):
         )
 
         self.assertFalse(svc.verify_write_access('sheet-abc'))
+
+
+class TestRating(unittest.TestCase):
+    def test_numbers_not_strings(self):
+        self.assertEqual(_rating(4), 4)
+        self.assertIsInstance(_rating(4.0), int)
+        self.assertEqual(_rating(3.5), 3.5)
+
+    def test_missing_or_bad_is_blank_but_zero_is_zero(self):
+        for v in (None, '', 'x', float('nan'), float('inf')):
+            self.assertEqual(_rating(v), '')
+        self.assertEqual(_rating(0), 0)
+
+
+class TestSheetStyling(unittest.TestCase):
+    """_style_sheet is formatting only and must never break a sync."""
+
+    def _service(self):
+        svc = SheetsService.__new__(SheetsService)
+        svc.service = MagicMock()
+        return svc
+
+    def _requests(self, svc):
+        return svc.service.spreadsheets().batchUpdate.call_args.kwargs['body']['requests']
+
+    def test_freezes_header_filters_and_bands_in_one_batch(self):
+        svc = self._service()
+        svc._style_sheet('sid', 7, 'FRC')
+        self.assertEqual(svc.service.spreadsheets().batchUpdate.call_count, 1)
+        kinds = [next(iter(r)) for r in self._requests(svc)]
+        for kind in ('updateSheetProperties', 'setBasicFilter', 'addBanding'):
+            self.assertIn(kind, kinds)
+
+    def test_never_writes_cell_values(self):
+        svc = self._service()
+        svc._style_sheet('sid', 7, 'FTC')
+        self.assertFalse(svc.service.spreadsheets().values.called)
+        for r in self._requests(svc):
+            self.assertNotIn('updateCells', r)
+
+    def test_sets_a_width_for_every_column(self):
+        for program, headers in (('FRC', FRC_HEADERS), ('FTC', FTC_HEADERS)):
+            svc = self._service()
+            svc._style_sheet('sid', 7, program)
+            widths = [r for r in self._requests(svc)
+                      if r.get('updateDimensionProperties', {}).get('range', {}).get('dimension') == 'COLUMNS']
+            self.assertEqual(len(widths), len(headers))
+
+    def test_highlight_rules_point_at_the_right_columns(self):
+        svc = self._service()
+        svc._style_sheet('sid', 7, 'FRC')
+        rules = [r['addConditionalFormatRule']['rule'] for r in self._requests(svc)
+                 if 'addConditionalFormatRule' in r]
+        died_col = _col_letter(FRC_HEADERS.index('Robot Died') + 1)
+        alliance_col = _col_letter(FRC_HEADERS.index('Alliance') + 1)
+        formulas = [r['booleanRule']['condition']['values'][0]['userEnteredValue'] for r in rules]
+        self.assertIn(f'=${died_col}2="Yes"', formulas)
+        self.assertIn(f'=LOWER(${alliance_col}2)="red"', formulas)
+
+    def test_styling_failure_is_swallowed(self):
+        svc = self._service()
+        svc.service.spreadsheets().batchUpdate().execute.side_effect = Exception('boom')
+        svc._style_sheet('sid', 7, 'FRC')  # must not raise
+
+    def test_existing_unstyled_tab_gets_styled_once(self):
+        svc = self._service()
+        svc._style_existing_sheet = Mock()
+        svc._ensure_column_count = Mock()
+        get = svc.service.spreadsheets().get
+        get().execute.return_value = {'sheets': [{'properties': {
+            'title': 'evt', 'sheetId': 3, 'gridProperties': {'columnCount': 25}}}]}
+        svc.get_or_create_sheet('sid', 'evt', 'FRC')
+        svc._style_existing_sheet.assert_called_once_with('sid', 'evt', 3, 'FRC', [])
+
+        svc._style_existing_sheet.reset_mock()
+        get().execute.return_value = {'sheets': [{'properties': {
+            'title': 'evt', 'sheetId': 3,
+            'gridProperties': {'columnCount': 25, 'frozenRowCount': 1}}}]}
+        svc.get_or_create_sheet('sid', 'evt', 'FRC')
+        svc._style_existing_sheet.assert_not_called()
+
+    def _legacy(self, row1):
+        svc = self._service()
+        svc._style_sheet = Mock()
+        svc._write_headers = Mock()
+        svc.service.spreadsheets().values().get().execute.return_value = {'values': [row1]}
+        svc._style_existing_sheet('sid', 'evt', 3, 'FRC', [11])
+        return svc
+
+    def test_legacy_tab_same_layout_gets_new_headers_and_highlights(self):
+        svc = self._legacy([h.replace(' (/5)', '') for h in FRC_HEADERS])
+        svc._write_headers.assert_called_once()
+        svc._style_sheet.assert_called_once_with('sid', 3, 'FRC', [11], highlight=True)
+
+    def test_legacy_tab_other_layout_keeps_headers_and_skips_highlights(self):
+        svc = self._legacy(['Timestamp', 'Match ID', 'Match #'])
+        svc._write_headers.assert_not_called()
+        svc._style_sheet.assert_called_once_with('sid', 3, 'FRC', [11], highlight=False)
+
+    def test_existing_banding_is_deleted_before_adding(self):
+        svc = self._service()
+        svc._style_sheet('sid', 3, 'FRC', existing_banding_ids=[11])
+        kinds = [next(iter(r)) for r in self._requests(svc)]
+        self.assertLess(kinds.index('deleteBanding'), kinds.index('addBanding'))
+
