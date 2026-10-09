@@ -136,9 +136,7 @@ void main() {
       },
     );
 
-    testWidgets('the final page button reads save, not submit', (
-      tester,
-    ) async {
+    testWidgets('the final page button reads save, not submit', (tester) async {
       await tester.pumpWidget(await buildForm(existingMatch: _frcMatch()));
       await tester.pumpAndSettle();
 
@@ -194,10 +192,7 @@ void main() {
 
         expect(find.textContaining('cloud_firestore'), findsNothing);
         expect(find.textContaining('client is offline'), findsNothing);
-        expect(
-          find.textContaining('check your internet'),
-          findsOneWidget,
-        );
+        expect(find.textContaining('check your internet'), findsOneWidget);
       },
     );
 
@@ -222,9 +217,7 @@ void main() {
 
         final textWidget = tester.widget<Text>(textFinder);
         final container = tester.widget<Container>(
-          find
-              .ancestor(of: textFinder, matching: find.byType(Container))
-              .first,
+          find.ancestor(of: textFinder, matching: find.byType(Container)).first,
         );
         final background = (container.decoration as BoxDecoration).color!;
         final foreground = textWidget.style!.color!;
@@ -242,6 +235,217 @@ void main() {
               'Robot Died banner text must be legible against its own '
               'background, not just invisible-but-technically-present',
         );
+      },
+    );
+
+    testWidgets(
+      'restores a saved died-at time and reason, and lets the scout edit the reason',
+      (tester) async {
+        final match = _frcMatch();
+        final diedMatch = match.copyWith(
+          gameData: {
+            ...match.gameData,
+            'robot_died': true,
+            'died_at_seconds': 65,
+            'died_reason': 'tipped over on the ramp',
+          },
+        );
+
+        await tester.pumpWidget(await buildForm(existingMatch: diedMatch));
+        await tester.pumpAndSettle();
+
+        // Edit mode's 4 pages are autonomous(0) -> teleop(1) -> endgame(2)
+        // -> review(3) — one tap of "next" from the initial page reaches
+        // teleop, where the Robot Died toggle and this control live. (Task
+        // 9's sibling tests tap twice because their assertions target the
+        // endgame page instead.)
+        await tester.tap(find.text('next'));
+        await tester.pumpAndSettle();
+
+        expect(find.textContaining('1:05'), findsOneWidget);
+        expect(find.text('tipped over on the ramp'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'saving with the died time and reason set writes both into gameData',
+      (tester) async {
+        await repo.createMatch(_eventId, _frcMatch());
+
+        await tester.pumpWidget(await buildForm(existingMatch: _frcMatch()));
+        await tester.pumpAndSettle();
+
+        // One tap reaches teleop, where the Robot Died toggle lives.
+        await tester.tap(find.text('next'));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Robot Died / Disabled'));
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(find.text('mark now'));
+        await tester.tap(find.text('mark now'));
+        await tester.pumpAndSettle();
+        final reasonField = find.widgetWithText(TextField, 'Reason (optional)');
+        await tester.ensureVisible(reasonField);
+        await tester.enterText(reasonField, 'wheel fell off');
+        await tester.pumpAndSettle();
+
+        // Two more taps of "next" reach review, where "save" lives.
+        for (var i = 0; i < 2; i++) {
+          await tester.tap(find.text('next'));
+          await tester.pumpAndSettle();
+        }
+        await tester.tap(find.text('save'));
+        await tester.pumpAndSettle();
+
+        final matches = await repo.getMatches(_eventId);
+        expect(matches, hasLength(1));
+        // The timer was never started, so it's still at the full duration.
+        expect(matches.single.gameData['died_at_seconds'], 153);
+        expect(matches.single.gameData['died_reason'], 'wheel fell off');
+      },
+    );
+
+    testWidgets(
+      'unchecking robot died clears a previously set died time and reason before save',
+      (tester) async {
+        await repo.createMatch(_eventId, _frcMatch());
+
+        final match = _frcMatch();
+        final diedMatch = match.copyWith(
+          gameData: {
+            ...match.gameData,
+            'robot_died': true,
+            'died_at_seconds': 65,
+            'died_reason': 'tipped over on the ramp',
+          },
+        );
+
+        await tester.pumpWidget(await buildForm(existingMatch: diedMatch));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('next'));
+        await tester.pumpAndSettle();
+
+        // Uncheck the toggle: the control (and its stale values) should
+        // no longer be part of what gets submitted.
+        await tester.tap(find.text('Robot Died / Disabled'));
+        await tester.pumpAndSettle();
+
+        expect(find.textContaining('1:05'), findsNothing);
+        expect(find.text('tipped over on the ramp'), findsNothing);
+
+        for (var i = 0; i < 2; i++) {
+          await tester.tap(find.text('next'));
+          await tester.pumpAndSettle();
+        }
+        await tester.tap(find.text('save'));
+        await tester.pumpAndSettle();
+
+        final matches = await repo.getMatches(_eventId);
+        expect(matches, hasLength(1));
+        expect(matches.single.gameData['died_at_seconds'], isNull);
+        expect(matches.single.gameData['died_reason'], '');
+      },
+    );
+
+    testWidgets(
+      'restores subsystem speeds and defense cause, and saves the restored values unchanged',
+      (tester) async {
+        await repo.createMatch(_eventId, _frcMatch());
+
+        final match = _frcMatch();
+        final tunedMatch = match.copyWith(
+          gameData: {
+            ...match.gameData,
+            'defense_rating': 3,
+            'defense_cause': 'strategic',
+            'drivetrain_speed': 2,
+            'intake_speed': 4,
+            'shooter_speed': 5,
+          },
+        );
+
+        await tester.pumpWidget(await buildForm(existingMatch: tunedMatch));
+        await tester.pumpAndSettle();
+
+        for (var i = 0; i < 2; i++) {
+          await tester.tap(find.text('next'));
+          await tester.pumpAndSettle();
+        }
+
+        expect(find.text('robot broke'), findsOneWidget);
+        expect(find.text('strategic'), findsOneWidget);
+        expect(find.text('Drivetrain Speed'), findsOneWidget);
+        expect(find.text('Intake Speed'), findsOneWidget);
+        expect(find.text('Shooter Speed'), findsOneWidget);
+
+        // Saving without touching any control proves the sliders actually
+        // restored to the values above, not just that the labels render.
+        // A restore bug that swapped, say, drivetrainSpeed <-> intakeSpeed
+        // would still pass the label checks above but fail these.
+        await tester.tap(find.text('next'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('save'));
+        await tester.pumpAndSettle();
+
+        final matches = await repo.getMatches(_eventId);
+        expect(matches, hasLength(1));
+        expect(matches.single.gameData['defense_rating'], 3);
+        expect(matches.single.gameData['defense_cause'], 'strategic');
+        expect(matches.single.gameData['drivetrain_speed'], 2);
+        expect(matches.single.gameData['intake_speed'], 4);
+        expect(matches.single.gameData['shooter_speed'], 5);
+      },
+    );
+
+    testWidgets(
+      'dragging Defense Rating back to zero clears a previously set defense cause before save',
+      (tester) async {
+        await repo.createMatch(_eventId, _frcMatch());
+
+        final match = _frcMatch();
+        final causedMatch = match.copyWith(
+          gameData: {
+            ...match.gameData,
+            'defense_rating': 3,
+            'defense_cause': 'strategic',
+          },
+        );
+
+        await tester.pumpWidget(await buildForm(existingMatch: causedMatch));
+        await tester.pumpAndSettle();
+
+        for (var i = 0; i < 2; i++) {
+          await tester.tap(find.text('next'));
+          await tester.pumpAndSettle();
+        }
+
+        expect(find.text('strategic'), findsOneWidget);
+
+        final defenseCard = find.ancestor(
+          of: find.text('Defense Rating'),
+          matching: find.byType(Card),
+        );
+        await tester.drag(
+          find.descendant(of: defenseCard, matching: find.byType(Slider)),
+          const Offset(-1000, 0),
+        );
+        await tester.pumpAndSettle();
+
+        // The segmented button (and its stale value) should no longer be
+        // part of what gets submitted once the rating is back to zero.
+        expect(find.text('cause of defense'), findsNothing);
+        expect(find.text('strategic'), findsNothing);
+
+        await tester.tap(find.text('next'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('save'));
+        await tester.pumpAndSettle();
+
+        final matches = await repo.getMatches(_eventId);
+        expect(matches, hasLength(1));
+        expect(matches.single.gameData['defense_rating'], 0);
+        expect(matches.single.gameData['defense_cause'], isNull);
       },
     );
   });

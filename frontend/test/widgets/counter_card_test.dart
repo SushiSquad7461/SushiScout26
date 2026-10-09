@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -15,20 +16,36 @@ void main() {
       int minValue = 0,
       int maxValue = 999,
     }) {
+      // Mirrors `value` into local state via StatefulBuilder, so a
+      // CounterCard held down across multiple ticks sees its own prior
+      // writes on the next tick — matching how a real (Riverpod-backed)
+      // caller rebuilds this widget after every onChanged call. Without
+      // this, `value` stays frozen at its initial argument, onPressed's
+      // closure never sees a fresh base value, and a hold that fires
+      // onChanged three times would compute the same `value + 1` each
+      // time instead of accumulating.
+      int displayValue = value;
       return MaterialApp(
         theme: ThemeData(
           useMaterial3: true,
           colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
         ),
         home: Scaffold(
-          body: CounterCard(
-            label: label,
-            value: value,
-            onChanged: onChanged,
-            helperText: helperText,
-            accentColor: accentColor,
-            minValue: minValue,
-            maxValue: maxValue,
+          body: StatefulBuilder(
+            builder: (context, setState) {
+              return CounterCard(
+                label: label,
+                value: displayValue,
+                onChanged: (v) {
+                  setState(() => displayValue = v);
+                  onChanged(v);
+                },
+                helperText: helperText,
+                accentColor: accentColor,
+                minValue: minValue,
+                maxValue: maxValue,
+              );
+            },
           ),
         ),
       );
@@ -212,6 +229,151 @@ void main() {
         reason: '3-digit value must fit the fixed slot on screen, not overflow',
       );
     });
+
+    testWidgets('holding the increment button repeats once per second', (
+      tester,
+    ) async {
+      int currentValue = 0;
+
+      await tester.pumpWidget(
+        buildTestWidget(
+          value: currentValue,
+          onChanged: (v) => currentValue = v,
+          maxValue: 999,
+        ),
+      );
+
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byIcon(Icons.add)),
+      );
+      await tester.pump(kLongPressTimeout);
+      // Pump each second separately, not one 3-second pump. A single
+      // multi-second pump elapses the whole fake clock — and fires every
+      // due Timer.periodic tick — before the one frame at its end, so all
+      // ticks would read the same pre-hold `onPressed` closure. Pumping a
+      // frame after each second lets CounterCard rebuild in between, so
+      // each tick's onPressed closes over the value the previous tick
+      // just wrote.
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(seconds: 1));
+      await gesture.up();
+      await tester.pump();
+
+      expect(currentValue, 3);
+    });
+
+    testWidgets('releasing the button stops the repeat', (tester) async {
+      int currentValue = 0;
+
+      await tester.pumpWidget(
+        buildTestWidget(value: currentValue, onChanged: (v) => currentValue = v),
+      );
+
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byIcon(Icons.add)),
+      );
+      await tester.pump(kLongPressTimeout);
+      await tester.pump(const Duration(seconds: 1));
+      await gesture.up();
+      await tester.pump(const Duration(seconds: 2));
+
+      expect(currentValue, 1);
+    });
+
+    testWidgets('cancelling the long press (pointer cancel) stops the repeat', (
+      tester,
+    ) async {
+      int currentValue = 0;
+
+      await tester.pumpWidget(
+        buildTestWidget(value: currentValue, onChanged: (v) => currentValue = v),
+      );
+
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byIcon(Icons.add)),
+      );
+      await tester.pump(kLongPressTimeout);
+      await tester.pump(const Duration(seconds: 1));
+      // Simulate a platform-level pointer cancel (app backgrounded mid-hold,
+      // or the gesture arena reassigns the pointer) instead of a clean
+      // release. onLongPressUp never fires in this case.
+      await gesture.cancel();
+      await tester.pump(const Duration(seconds: 2));
+
+      expect(currentValue, 1);
+    });
+
+    testWidgets('a plain tap still increments by one, not by the repeat timer', (
+      tester,
+    ) async {
+      int currentValue = 5;
+
+      await tester.pumpWidget(
+        buildTestWidget(value: currentValue, onChanged: (v) => currentValue = v),
+      );
+
+      await tester.tap(find.byIcon(Icons.add));
+      await tester.pump();
+
+      expect(currentValue, 6);
+    });
+
+    testWidgets(
+      'a repeat timer left running from before the button disabled does '
+      'not fire again after release',
+      (tester) async {
+        int currentValue = 0;
+
+        await tester.pumpWidget(
+          buildTestWidget(
+            value: currentValue,
+            onChanged: (v) => currentValue = v,
+            maxValue: 2,
+          ),
+        );
+
+        final gesture = await tester.startGesture(
+          tester.getCenter(find.byIcon(Icons.add)),
+        );
+        await tester.pump(kLongPressTimeout);
+        // Tick 1: 0 -> 1.
+        await tester.pump(const Duration(seconds: 1));
+        // Tick 2: 1 -> 2, hits maxValue. The "+" button disables
+        // (onPressed becomes null) on the rebuild this tick triggers.
+        await tester.pump(const Duration(seconds: 1));
+        // Tick 3: onPressed is now null, so this tick is a no-op, but the
+        // repeat timer is still running underneath while the finger is
+        // still down.
+        await tester.pump(const Duration(seconds: 1));
+        expect(currentValue, 2);
+
+        // Release while the button is disabled. A correct implementation
+        // must still cancel the repeat timer here. In the buggy version,
+        // onLongPressUp itself was gated on `isEnabled`, so a release
+        // while disabled never reached `_stopRepeating`, leaving the
+        // timer running.
+        await gesture.up();
+        await tester.pump();
+
+        // Re-enable the "+" button by decrementing once, with a plain
+        // tap on "-", so no hold gesture is on the "+" button at all.
+        await tester.tap(find.byIcon(Icons.remove));
+        await tester.pump();
+        expect(currentValue, 1);
+
+        // If the earlier repeat timer leaked past release, its next tick
+        // reads `widget.onPressed` fresh — which is now enabled again —
+        // and would increment with no user interaction at all. Pumping
+        // through several more seconds with nothing held must show no
+        // further change.
+        await tester.pump(const Duration(seconds: 1));
+        await tester.pump(const Duration(seconds: 1));
+        await tester.pump(const Duration(seconds: 1));
+
+        expect(currentValue, 1);
+      },
+    );
 
     testWidgets('works with custom min/max values', (tester) async {
       int currentValue = 5;

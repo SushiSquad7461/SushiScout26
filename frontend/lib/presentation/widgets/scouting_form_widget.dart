@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/models/event.dart';
@@ -6,6 +7,278 @@ import '../theme/app_theme.dart';
 import '../theme/team_brand.dart';
 import 'color_bar.dart';
 import 'match_timer.dart';
+
+/// Fixed width for both sides of a wizard's bottom bar. Both
+/// [FrcRebuiltForm] and [FtcDecodeForm] wrap their back-button slot and
+/// their [ScoutingWizardNextButton] in a [ScoutingWizardBottomSlot] of this
+/// width, so [ScoutingWizardPageIndicator] sits at the true center of the
+/// bar. Before this constant existed, the back slot was a bare
+/// `SizedBox(width: 100)` while the next/submit button sized itself to its
+/// label ("next" vs. "submit"/"save") plus an optional spinner — unequal
+/// widths pushed the indicator off center.
+const double kWizardBottomBarSlotWidth = 112;
+
+/// Wraps [child] in a fixed-width slot, scaling it down rather than letting
+/// it overflow if it's ever wider than the slot. See
+/// [kWizardBottomBarSlotWidth].
+class ScoutingWizardBottomSlot extends StatelessWidget {
+  final Widget child;
+
+  const ScoutingWizardBottomSlot({super.key, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: kWizardBottomBarSlotWidth,
+      child: FittedBox(fit: BoxFit.scaleDown, child: child),
+    );
+  }
+}
+
+/// Drives [PhaseFlashOverlay]: call [flash] with a phase's color to trigger
+/// a brief edge glow. Owned by the form screen, with the same lifecycle as
+/// [MatchTimerController].
+class PhaseFlashController extends ChangeNotifier {
+  Color? _color;
+  Color? get color => _color;
+
+  void flash(Color color) {
+    _color = color;
+    notifyListeners();
+  }
+}
+
+/// Wraps [child] with a brief colored edge glow whenever
+/// [controller.flash] fires — the visual cue for a match-phase change. The
+/// glow ignores pointer events, so it never blocks the form underneath.
+class PhaseFlashOverlay extends StatefulWidget {
+  final PhaseFlashController controller;
+  final Widget child;
+
+  const PhaseFlashOverlay({
+    super.key,
+    required this.controller,
+    required this.child,
+  });
+
+  @override
+  State<PhaseFlashOverlay> createState() => _PhaseFlashOverlayState();
+}
+
+class _PhaseFlashOverlayState extends State<PhaseFlashOverlay>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _animation;
+  Color? _flashColor;
+
+  @override
+  void initState() {
+    super.initState();
+    // Created eagerly here, rather than as a `late final` field initializer,
+    // so vsync's ancestor lookup runs while the element tree is still
+    // active. A lazy initializer would defer creation to whichever access
+    // comes first — which, if `flash` is never called, is `dispose()`,
+    // after the element has already deactivated.
+    _animation = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 400),
+    );
+    widget.controller.addListener(_handleFlash);
+  }
+
+  void _handleFlash() {
+    setState(() => _flashColor = widget.controller.color);
+    _animation.forward(from: 0);
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_handleFlash);
+    _animation.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        widget.child,
+        if (_flashColor != null)
+          // Positioned.fill, because a Stack's non-positioned children get
+          // loose constraints — without this, the childless DecoratedBox
+          // below sizes to Size.zero and its border paints nothing.
+          Positioned.fill(
+            child: IgnorePointer(
+              child: AnimatedBuilder(
+                animation: _animation,
+                builder: (context, _) => Opacity(
+                  opacity: 1.0 - _animation.value,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      border: Border.all(color: _flashColor!, width: 6),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// The "mark now"/edit control and reason field shown under the Robot
+/// Died toggle on both forms' teleop page. Shared so the two copies can't
+/// drift.
+class RobotDiedTimeAndReason extends StatelessWidget {
+  final int? diedAtSeconds;
+  final ValueListenable<int> liveSecondsRemaining;
+  final ValueChanged<int> onDiedAtSecondsChanged;
+  final TextEditingController reasonController;
+
+  const RobotDiedTimeAndReason({
+    super.key,
+    required this.diedAtSeconds,
+    required this.liveSecondsRemaining,
+    required this.onDiedAtSecondsChanged,
+    required this.reasonController,
+  });
+
+  static String formatMmSs(int seconds) {
+    final minutes = seconds ~/ 60;
+    final secs = (seconds % 60).toString().padLeft(2, '0');
+    return '$minutes:$secs';
+  }
+
+  Future<void> _editTime(BuildContext context) async {
+    final current = diedAtSeconds ?? liveSecondsRemaining.value;
+    final minutesCtrl = TextEditingController(text: '${current ~/ 60}');
+    final secondsCtrl = TextEditingController(text: '${current % 60}');
+    try {
+      final result = await showDialog<int>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('set died/disabled time'),
+          content: Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: minutesCtrl,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'min'),
+                ),
+              ),
+              const SizedBox(width: AppTheme.spacingMd),
+              Expanded(
+                child: TextField(
+                  controller: secondsCtrl,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'sec'),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final minutes = int.tryParse(minutesCtrl.text) ?? 0;
+                final seconds = int.tryParse(secondsCtrl.text) ?? 0;
+                final total = (minutes * 60 + seconds).clamp(
+                  0,
+                  MatchTimer.totalDurationSeconds,
+                );
+                Navigator.pop(ctx, total);
+              },
+              child: const Text('set'),
+            ),
+          ],
+        ),
+      );
+      if (result != null) onDiedAtSecondsChanged(result);
+    } finally {
+      minutesCtrl.dispose();
+      secondsCtrl.dispose();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (diedAtSeconds == null)
+          OutlinedButton.icon(
+            icon: const Icon(Icons.timer_outlined),
+            label: const Text('mark now'),
+            onPressed: () => onDiedAtSecondsChanged(liveSecondsRemaining.value),
+          )
+        else
+          InkWell(
+            onTap: () => _editTime(context),
+            child: Chip(
+              avatar: const Icon(Icons.timer_outlined, size: 18),
+              label: Text('died at ${formatMmSs(diedAtSeconds!)}'),
+            ),
+          ),
+        const SizedBox(height: AppTheme.spacingSm),
+        TextField(
+          controller: reasonController,
+          maxLines: 2,
+          decoration: const InputDecoration(
+            labelText: 'Reason (optional)',
+            border: OutlineInputBorder(),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// The "cause of defense" label plus segmented control shown under a
+/// Defense Rating slider on both forms, once the rating is above 0 — a
+/// cause is meaningless at 0. Shared so the two copies can't drift.
+class DefenseCauseSelector extends StatelessWidget {
+  final String? cause;
+  final ValueChanged<String?> onChanged;
+
+  const DefenseCauseSelector({
+    super.key,
+    required this.cause,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: AppTheme.spacingSm),
+        Text(
+          "cause of defense",
+          style: theme.textTheme.labelLarge?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: AppTheme.spacingSm),
+        SegmentedButton<String>(
+          segments: const [
+            ButtonSegment(value: 'broke', label: Text('robot broke')),
+            ButtonSegment(value: 'strategic', label: Text('strategic')),
+          ],
+          selected: cause == null ? const {} : {cause!},
+          emptySelectionAllowed: true,
+          onSelectionChanged: (val) =>
+              onChanged(val.isEmpty ? null : val.first),
+        ),
+        const SizedBox(height: AppTheme.spacingMd),
+      ],
+    );
+  }
+}
 
 abstract class ScoutingFormWidget extends ConsumerStatefulWidget {
   final String eventId;
@@ -52,8 +325,13 @@ mixin KeyboardDismissMixin<T extends ScoutingFormWidget> on ConsumerState<T> {
 class ScoutingFormBrandBand extends StatelessWidget
     implements PreferredSizeWidget {
   final MatchTimerController timerController;
+  final ValueChanged<Color>? onPhaseChanged;
 
-  const ScoutingFormBrandBand({super.key, required this.timerController});
+  const ScoutingFormBrandBand({
+    super.key,
+    required this.timerController,
+    this.onPhaseChanged,
+  });
 
   @override
   Size get preferredSize => Size.fromHeight(
@@ -67,7 +345,7 @@ class ScoutingFormBrandBand extends StatelessWidget
       mainAxisSize: MainAxisSize.min,
       children: [
         ColorBar(brand: BrandScope.of(context)),
-        MatchTimer(controller: timerController),
+        MatchTimer(controller: timerController, onPhaseChanged: onPhaseChanged),
       ],
     );
   }

@@ -12,6 +12,26 @@ class ExportService {
   static bool _isFtc(MatchReport m) =>
       m.gameData.containsKey('artifacts_auto');
 
+  /// Label for a stored 'broke'/'strategic' defense_cause value, matching
+  /// the wording sheets_service.py uses for the same field on the backend
+  /// export. An unset or unrecognized cause renders as an empty string.
+  static const Map<String, String> _defenseCauseLabels = {
+    'broke': 'Robot Broke',
+    'strategic': 'Strategic',
+  };
+
+  /// Formats a died_at_seconds value (seconds remaining on the match
+  /// clock) as mm:ss, matching RobotDiedTimeAndReason.formatMmSs and the
+  /// backend export's _format_died_at. Returns '' when the robot never
+  /// died.
+  static String _formatDiedAt(dynamic secondsRemaining) {
+    if (secondsRemaining is! num) return '';
+    final total = secondsRemaining.toInt();
+    final minutes = total ~/ 60;
+    final secs = (total % 60).toString().padLeft(2, '0');
+    return '$minutes:$secs';
+  }
+
   /// Returns column headers appropriate for the program type.
   static List<String> _headers(bool ftc) => ftc
       ? [
@@ -27,6 +47,13 @@ class ExportService {
           'Base Expansion',
           'Driver Quality',
           'Robot Died',
+          'Defense Rating',
+          'Drivetrain Speed',
+          'Intake Speed',
+          'Shooter Speed',
+          'Defense Cause',
+          'Died At',
+          'Died Reason',
           'Comments',
         ]
       : [
@@ -41,6 +68,12 @@ class ExportService {
           'Defense',
           'Driver Skill',
           'Robot Died',
+          'Drivetrain Speed',
+          'Intake Speed',
+          'Shooter Speed',
+          'Defense Cause',
+          'Died At',
+          'Died Reason',
           'Comments',
         ];
 
@@ -61,6 +94,13 @@ class ExportService {
         (gd['base_expansion'] ?? false).toString(),
         (gd['driver_quality'] ?? 0).toString(),
         (gd['robot_died'] ?? false).toString(),
+        (gd['defense_rating'] ?? 0).toString(),
+        (gd['drivetrain_speed'] ?? 0).toString(),
+        (gd['intake_speed'] ?? 0).toString(),
+        (gd['shooter_speed'] ?? 0).toString(),
+        _defenseCauseLabels[gd['defense_cause']] ?? '',
+        _formatDiedAt(gd['died_at_seconds']),
+        (gd['died_reason'] ?? '').toString(),
         m.comments,
       ];
     }
@@ -76,6 +116,12 @@ class ExportService {
       (gd['defense_rating'] ?? 0).toString(),
       (gd['driver_skill'] ?? 0).toString(),
       (gd['robot_died'] ?? false).toString(),
+      (gd['drivetrain_speed'] ?? 0).toString(),
+      (gd['intake_speed'] ?? 0).toString(),
+      (gd['shooter_speed'] ?? 0).toString(),
+      _defenseCauseLabels[gd['defense_cause']] ?? '',
+      _formatDiedAt(gd['died_at_seconds']),
+      (gd['died_reason'] ?? '').toString(),
       m.comments,
     ];
   }
@@ -227,7 +273,7 @@ class ExportService {
 
       pdf.addPage(
         pw.MultiPage(
-          pageFormat: PdfPageFormat.a4,
+          pageFormat: PdfPageFormat.a4.landscape,
           build: (pw.Context context) {
             return [
               pw.Header(

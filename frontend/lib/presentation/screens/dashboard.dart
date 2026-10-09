@@ -367,7 +367,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       ),
       bottomNavigationBar: BrandActionBar(
         brand: BrandScope.of(context),
-        label: 'scout match',
+        label: 'start scouting',
         onPressed: () async {
           try {
             AppHaptics.medium();
