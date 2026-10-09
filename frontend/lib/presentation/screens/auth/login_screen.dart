@@ -63,255 +63,275 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
     return Scaffold(
       backgroundColor: ink,
-      body: Column(
-        children: [
-          // The mascot stands in for a logo. Full-bleed, so it sits outside the
-          // form's padding.
-          SafeArea(
-            bottom: false,
-            child: MascotPlate(
-              brand: brand,
-              name: Mascots.peepo,
-              width: double.infinity,
-              height: 300,
-            ),
-          ),
-          // The 15° cut. The Initiative composes its splash pages as a diagonal
-          // slice rather than a stack of bands, and sign-in is the splash page.
-          // This carries the same four accents as the flat ColorBar it replaces,
-          // so the ownership mark is intact — the guide notes the colour bar
-          // "does not have to be a bar".
-          BrandSkewField(brand: brand, height: 84, background: ink),
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          // The hero scales with the viewport. A fixed 300 + 84 left a short
+          // phone screen (mobile web with browser chrome or a keyboard up)
+          // almost no room, and the sign-in button scrolled out of sight.
+          final heroHeight = (constraints.maxHeight * 0.26).clamp(96.0, 300.0);
+          final skewHeight = (constraints.maxHeight * 0.09).clamp(32.0, 84.0);
+          final compact = constraints.maxHeight < 560;
+          return Column(
+            children: [
+              // The mascot stands in for a logo. Full-bleed, so it sits outside the
+              // form's padding.
+              SafeArea(
+                bottom: false,
+                child: MascotPlate(
+                  brand: brand,
+                  name: Mascots.peepo,
+                  width: double.infinity,
+                  height: heroHeight,
+                ),
+              ),
+              // The 15° cut. The Initiative composes its splash pages as a diagonal
+              // slice rather than a stack of bands, and sign-in is the splash page.
+              // This carries the same four accents as the flat ColorBar it replaces,
+              // so the ownership mark is intact — the guide notes the colour bar
+              // "does not have to be a bar".
+              BrandSkewField(brand: brand, height: skewHeight, background: ink),
 
-          Expanded(
-            child: Material(
-              color: ink,
-              child: SafeArea(
-                top: false,
-                child: Padding(
-                  padding: const EdgeInsets.all(AppTheme.spacingLg),
-                  child: Form(
-                    key: _formKey,
-                    child: SingleChildScrollView(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const SizedBox(height: AppTheme.spacingLg),
-
-                          Align(
-                            alignment: Alignment.centerLeft,
-                            child: Text(
-                              'sushiscout 26',
-                              style: AppTheme.display(
-                                brand,
-                                size: 46,
-                                letterSpacing: -0.01,
-                                height: 0.94,
-                                color: onInk,
+              Expanded(
+                child: Material(
+                  color: ink,
+                  child: SafeArea(
+                    top: false,
+                    child: Padding(
+                      padding: const EdgeInsets.all(AppTheme.spacingLg),
+                      child: Form(
+                        key: _formKey,
+                        child: SingleChildScrollView(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              SizedBox(
+                                height: compact ? 0 : AppTheme.spacingLg,
                               ),
-                            ),
-                          ),
-                          const SizedBox(height: AppTheme.spacingSm),
-                          Align(
-                            alignment: Alignment.centerLeft,
-                            child: Text(
-                              'FRC + FTC scouting · ${brand.name}',
-                              style: AppTheme.helper(
-                                brand,
-                                size: 17,
-                                color: brand.accents[3],
-                              ),
-                            ),
-                          ),
 
-                          const SizedBox(height: AppTheme.spacingXl),
-
-                          if (authState.hasError) ...[
-                            Container(
-                              padding: const EdgeInsets.all(AppTheme.spacingMd),
-                              decoration: BoxDecoration(
-                                border: Border.all(
-                                  color: colorScheme.error,
-                                  width: AppTheme.ruleWidth,
+                              Align(
+                                alignment: Alignment.centerLeft,
+                                child: Text(
+                                  'sushiscout 26',
+                                  style: AppTheme.display(
+                                    brand,
+                                    size: 46,
+                                    letterSpacing: -0.01,
+                                    height: 0.94,
+                                    color: onInk,
+                                  ),
                                 ),
                               ),
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    Icons.error_outline,
-                                    color: colorScheme.error,
+                              const SizedBox(height: AppTheme.spacingSm),
+                              Align(
+                                alignment: Alignment.centerLeft,
+                                child: Text(
+                                  'FRC + FTC scouting · ${brand.name}',
+                                  style: AppTheme.helper(
+                                    brand,
+                                    size: 17,
+                                    color: brand.accents[3],
                                   ),
-                                  const SizedBox(width: AppTheme.spacingSm),
-                                  Expanded(
-                                    child: Text(
-                                      authState.errorMessage ??
-                                          'An error occurred',
-                                      style: AppTheme.body(
-                                        brand,
-                                        size: 15,
-                                        color: colorScheme.error,
-                                      ),
+                                ),
+                              ),
+
+                              SizedBox(
+                                height: compact
+                                    ? AppTheme.spacingMd
+                                    : AppTheme.spacingXl,
+                              ),
+
+                              if (authState.hasError) ...[
+                                Container(
+                                  padding: const EdgeInsets.all(
+                                    AppTheme.spacingMd,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    border: Border.all(
+                                      color: colorScheme.error,
+                                      width: AppTheme.ruleWidth,
                                     ),
                                   ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: AppTheme.spacingMd),
-                          ],
-
-                          if (_isDesktop) ...[
-                            TextFormField(
-                              controller: _emailController,
-                              style: TextStyle(color: onInk),
-                              decoration: _darkField(
-                                brand,
-                                colorScheme,
-                                label: 'Email',
-                                icon: Icons.email,
-                              ),
-                              keyboardType: TextInputType.emailAddress,
-                              validator: (value) {
-                                if (value == null || value.isEmpty) {
-                                  return 'Please enter your email';
-                                }
-                                if (!value.contains('@')) {
-                                  return 'Please enter a valid email';
-                                }
-                                return null;
-                              },
-                            ),
-                            const SizedBox(height: AppTheme.spacingMd),
-                            TextFormField(
-                              controller: _passwordController,
-                              style: TextStyle(color: onInk),
-                              decoration: _darkField(
-                                brand,
-                                colorScheme,
-                                label: 'Password',
-                                icon: Icons.lock,
-                                suffix: IconButton(
-                                  icon: Icon(
-                                    _obscurePassword
-                                        ? Icons.visibility
-                                        : Icons.visibility_off,
-                                    color: brand.neutralOnInk,
-                                  ),
-                                  onPressed: () {
-                                    setState(() {
-                                      _obscurePassword = !_obscurePassword;
-                                    });
-                                  },
-                                  tooltip: _obscurePassword
-                                      ? 'Show password'
-                                      : 'Hide password',
-                                ),
-                              ),
-                              obscureText: _obscurePassword,
-                              onFieldSubmitted: (_) => _signIn(),
-                              validator: (value) {
-                                if (value == null || value.isEmpty) {
-                                  return 'Please enter your password';
-                                }
-                                return null;
-                              },
-                            ),
-                            const SizedBox(height: AppTheme.spacingSm),
-                            Align(
-                              alignment: Alignment.centerRight,
-                              child: TextButton(
-                                onPressed: _isLoading
-                                    ? null
-                                    : () => _sendPasswordReset(context),
-                                style: TextButton.styleFrom(
-                                  foregroundColor: brand.accentHighlight,
-                                ),
-                                child: const Text('Forgot Password?'),
-                              ),
-                            ),
-                            const SizedBox(height: AppTheme.spacingMd),
-                            SizedBox(
-                              width: double.infinity,
-                              height: 60,
-                              child: FilledButton(
-                                onPressed: _isLoading ? null : _signIn,
-                                style: FilledButton.styleFrom(
-                                  backgroundColor: onInk,
-                                  foregroundColor: ink,
-                                ),
-                                child: _isLoading
-                                    ? SizedBox(
-                                        width: 20,
-                                        height: 20,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          color: ink,
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.error_outline,
+                                        color: colorScheme.error,
+                                      ),
+                                      const SizedBox(width: AppTheme.spacingSm),
+                                      Expanded(
+                                        child: Text(
+                                          authState.errorMessage ??
+                                              'An error occurred',
+                                          style: AppTheme.body(
+                                            brand,
+                                            size: 15,
+                                            color: colorScheme.error,
+                                          ),
                                         ),
-                                      )
-                                    : const Text('Sign In'),
-                              ),
-                            ),
-                          ] else ...[
-                            SizedBox(
-                              width: double.infinity,
-                              height: 60,
-                              child: FilledButton(
-                                onPressed:
-                                    authState.status == AuthStatus.loading
-                                    ? null
-                                    : () => ref
-                                          .read(authProvider.notifier)
-                                          .signInWithGoogle(),
-                                style: FilledButton.styleFrom(
-                                  backgroundColor: onInk,
-                                  foregroundColor: ink,
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                                child: authState.status == AuthStatus.loading
-                                    ? Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
-                                        children: [
-                                          SizedBox(
+                                const SizedBox(height: AppTheme.spacingMd),
+                              ],
+
+                              if (_isDesktop) ...[
+                                TextFormField(
+                                  controller: _emailController,
+                                  style: TextStyle(color: onInk),
+                                  decoration: _darkField(
+                                    brand,
+                                    colorScheme,
+                                    label: 'Email',
+                                    icon: Icons.email,
+                                  ),
+                                  keyboardType: TextInputType.emailAddress,
+                                  validator: (value) {
+                                    if (value == null || value.isEmpty) {
+                                      return 'Please enter your email';
+                                    }
+                                    if (!value.contains('@')) {
+                                      return 'Please enter a valid email';
+                                    }
+                                    return null;
+                                  },
+                                ),
+                                const SizedBox(height: AppTheme.spacingMd),
+                                TextFormField(
+                                  controller: _passwordController,
+                                  style: TextStyle(color: onInk),
+                                  decoration: _darkField(
+                                    brand,
+                                    colorScheme,
+                                    label: 'Password',
+                                    icon: Icons.lock,
+                                    suffix: IconButton(
+                                      icon: Icon(
+                                        _obscurePassword
+                                            ? Icons.visibility
+                                            : Icons.visibility_off,
+                                        color: brand.neutralOnInk,
+                                      ),
+                                      onPressed: () {
+                                        setState(() {
+                                          _obscurePassword = !_obscurePassword;
+                                        });
+                                      },
+                                      tooltip: _obscurePassword
+                                          ? 'Show password'
+                                          : 'Hide password',
+                                    ),
+                                  ),
+                                  obscureText: _obscurePassword,
+                                  onFieldSubmitted: (_) => _signIn(),
+                                  validator: (value) {
+                                    if (value == null || value.isEmpty) {
+                                      return 'Please enter your password';
+                                    }
+                                    return null;
+                                  },
+                                ),
+                                const SizedBox(height: AppTheme.spacingSm),
+                                Align(
+                                  alignment: Alignment.centerRight,
+                                  child: TextButton(
+                                    onPressed: _isLoading
+                                        ? null
+                                        : () => _sendPasswordReset(context),
+                                    style: TextButton.styleFrom(
+                                      foregroundColor: brand.accentHighlight,
+                                    ),
+                                    child: const Text('Forgot Password?'),
+                                  ),
+                                ),
+                                const SizedBox(height: AppTheme.spacingMd),
+                                SizedBox(
+                                  width: double.infinity,
+                                  height: 60,
+                                  child: FilledButton(
+                                    onPressed: _isLoading ? null : _signIn,
+                                    style: FilledButton.styleFrom(
+                                      backgroundColor: onInk,
+                                      foregroundColor: ink,
+                                    ),
+                                    child: _isLoading
+                                        ? SizedBox(
                                             width: 20,
                                             height: 20,
                                             child: CircularProgressIndicator(
                                               strokeWidth: 2,
                                               color: ink,
                                             ),
-                                          ),
-                                          const SizedBox(
-                                            width: AppTheme.spacingSm,
-                                          ),
-                                          const Text('Signing in...'),
-                                        ],
-                                      )
-                                    : const Text('sign in with google'),
+                                          )
+                                        : const Text('Sign In'),
+                                  ),
+                                ),
+                              ] else ...[
+                                SizedBox(
+                                  width: double.infinity,
+                                  height: 60,
+                                  child: FilledButton(
+                                    onPressed:
+                                        authState.status == AuthStatus.loading
+                                        ? null
+                                        : () => ref
+                                              .read(authProvider.notifier)
+                                              .signInWithGoogle(),
+                                    style: FilledButton.styleFrom(
+                                      backgroundColor: onInk,
+                                      foregroundColor: ink,
+                                    ),
+                                    child:
+                                        authState.status == AuthStatus.loading
+                                        ? Row(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.center,
+                                            children: [
+                                              SizedBox(
+                                                width: 20,
+                                                height: 20,
+                                                child:
+                                                    CircularProgressIndicator(
+                                                      strokeWidth: 2,
+                                                      color: ink,
+                                                    ),
+                                              ),
+                                              const SizedBox(
+                                                width: AppTheme.spacingSm,
+                                              ),
+                                              const Text('Signing in...'),
+                                            ],
+                                          )
+                                        : const Text('sign in with google'),
+                                  ),
+                                ),
+                              ],
+
+                              const SizedBox(height: AppTheme.spacingLg),
+
+                              Text(
+                                _isDesktop
+                                    ? 'first time? sign in on mobile/web with google first'
+                                    : 'sign-in is required for team data',
+                                style: AppTheme.helper(
+                                  brand,
+                                  color: brand.neutralOnInk,
+                                ),
+                                textAlign: TextAlign.center,
                               ),
-                            ),
-                          ],
 
-                          const SizedBox(height: AppTheme.spacingLg),
-
-                          Text(
-                            _isDesktop
-                                ? 'first time? sign in on mobile/web with google first'
-                                : 'sign-in is required for team data',
-                            style: AppTheme.helper(
-                              brand,
-                              color: brand.neutralOnInk,
-                            ),
-                            textAlign: TextAlign.center,
+                              const SizedBox(height: AppTheme.spacingLg),
+                            ],
                           ),
-
-                          const SizedBox(height: AppTheme.spacingLg),
-                        ],
+                        ),
                       ),
                     ),
                   ),
                 ),
               ),
-            ),
-          ),
-        ],
+            ],
+          );
+        },
       ),
     );
   }

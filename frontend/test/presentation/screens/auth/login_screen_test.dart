@@ -8,13 +8,13 @@ import 'package:frontend/presentation/providers/auth_provider.dart';
 
 void main() {
   group('LoginScreen', () {
-    testWidgets('shows Google Sign-In button on mobile platforms', (tester) async {
+    testWidgets('shows Google Sign-In button on mobile platforms', (
+      tester,
+    ) async {
       debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
       await tester.pumpWidget(
         ProviderScope(
-          overrides: [
-            authProvider.overrideWith(() => _TestAuthNotifier()),
-          ],
+          overrides: [authProvider.overrideWith(() => _TestAuthNotifier())],
           child: const MaterialApp(home: LoginScreen()),
         ),
       );
@@ -23,13 +23,13 @@ void main() {
       debugDefaultTargetPlatformOverride = null;
     });
 
-    testWidgets('shows email and password fields on Windows/Linux', (tester) async {
+    testWidgets('shows email and password fields on Windows/Linux', (
+      tester,
+    ) async {
       debugDefaultTargetPlatformOverride = TargetPlatform.windows;
       await tester.pumpWidget(
         ProviderScope(
-          overrides: [
-            authProvider.overrideWith(() => _TestAuthNotifier()),
-          ],
+          overrides: [authProvider.overrideWith(() => _TestAuthNotifier())],
           child: const MaterialApp(home: LoginScreen()),
         ),
       );
@@ -44,9 +44,7 @@ void main() {
       debugDefaultTargetPlatformOverride = TargetPlatform.windows;
       await tester.pumpWidget(
         ProviderScope(
-          overrides: [
-            authProvider.overrideWith(() => _TestAuthNotifier()),
-          ],
+          overrides: [authProvider.overrideWith(() => _TestAuthNotifier())],
           child: const MaterialApp(home: LoginScreen()),
         ),
       );
@@ -59,9 +57,7 @@ void main() {
       debugDefaultTargetPlatformOverride = TargetPlatform.windows;
       await tester.pumpWidget(
         ProviderScope(
-          overrides: [
-            authProvider.overrideWith(() => _TestAuthNotifier()),
-          ],
+          overrides: [authProvider.overrideWith(() => _TestAuthNotifier())],
           child: const MaterialApp(home: LoginScreen()),
         ),
       );
@@ -69,6 +65,30 @@ void main() {
       expect(find.textContaining('Sign In'), findsOneWidget);
       debugDefaultTargetPlatformOverride = null;
     });
+
+    for (final size in const [Size(360, 560), Size(390, 664), Size(320, 480)]) {
+      testWidgets(
+        'keeps the sign-in button on screen at ${size.width}x${size.height}',
+        (tester) async {
+          debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+          tester.view.physicalSize = size;
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.resetPhysicalSize);
+          addTearDown(tester.view.resetDevicePixelRatio);
+          await tester.pumpWidget(
+            ProviderScope(
+              overrides: [authProvider.overrideWith(() => _TestAuthNotifier())],
+              child: const MaterialApp(home: LoginScreen()),
+            ),
+          );
+
+          final rect = tester.getRect(find.byType(FilledButton));
+          expect(rect.bottom, lessThanOrEqualTo(size.height));
+          expect(rect.top, greaterThanOrEqualTo(0));
+          debugDefaultTargetPlatformOverride = null;
+        },
+      );
+    }
   });
 }
 
