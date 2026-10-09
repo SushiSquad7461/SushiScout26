@@ -78,7 +78,7 @@ FTC_HEADERS = [
 
 # Pixel width per column, by header. Anything not listed gets the default.
 _COLUMN_WIDTHS = {
-    "Timestamp": 150, "Match ID": 110, "Match #": 70, "Team #": 75,
+    "Timestamp": 150, "Match #": 70, "Team #": 75,
     "Alliance": 80, "Scouter": 110, "Climb Level": 100,
     "Base Expansion": 120, "Defense Cause": 120, "Died At": 80,
     "Died Reason": 200, "Comments": 300,
@@ -87,6 +87,8 @@ _DEFAULT_COLUMN_WIDTH = 95
 # Free-text columns: left-aligned and wrapped. Every other column is a short
 # value (number, Yes/No, 1-5 rating), so it is centered and clipped.
 _TEXT_COLUMNS = {"Timestamp", "Scouter", "Died Reason", "Comments"}
+# Kept for row identity, not for reading.
+_HIDDEN_COLUMNS = {"Match ID"}
 _WRAP_COLUMNS = {"Died Reason", "Comments"}
 
 _HEADER_BG = {'red': 0.122, 'green': 0.161, 'blue': 0.216}
@@ -381,8 +383,14 @@ class SheetsService:
         for idx, name in enumerate(headers):
             requests.append({'updateDimensionProperties': {
                 'range': {'sheetId': sheet_id, 'dimension': 'COLUMNS', 'startIndex': idx, 'endIndex': idx + 1},
-                'properties': {'pixelSize': _COLUMN_WIDTHS.get(name, _DEFAULT_COLUMN_WIDTH)},
-                'fields': 'pixelSize',
+                'properties': {
+                    'pixelSize': _COLUMN_WIDTHS.get(name, _DEFAULT_COLUMN_WIDTH),
+                    # Match ID is hidden, not removed: find_row_by_report_id
+                    # reads it (column B) to find a report's row, so deleting
+                    # it would turn every update into a duplicate append.
+                    'hiddenByUser': name in _HIDDEN_COLUMNS,
+                },
+                'fields': 'pixelSize,hiddenByUser',
             }})
             requests.append({'repeatCell': {
                 'range': {**cols(idx, idx + 1), 'startRowIndex': 1},

@@ -608,3 +608,13 @@ class TestSheetStyling(unittest.TestCase):
         kinds = [next(iter(r)) for r in self._requests(svc)]
         self.assertLess(kinds.index('deleteBanding'), kinds.index('addBanding'))
 
+    def test_match_id_is_hidden_not_removed(self):
+        for program, headers in (('FRC', FRC_HEADERS), ('FTC', FTC_HEADERS)):
+            svc = self._service()
+            svc._style_sheet('sid', 7, program)
+            col = headers.index('Match ID')
+            self.assertEqual(col, 1)  # find_row_by_report_id reads column B
+            hidden = [r['updateDimensionProperties'] for r in self._requests(svc)
+                      if r.get('updateDimensionProperties', {}).get('properties', {}).get('hiddenByUser')]
+            self.assertEqual([h['range']['startIndex'] for h in hidden], [col])
+
