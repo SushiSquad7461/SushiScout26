@@ -70,6 +70,7 @@ dev_dependencies:
   integration_test:
     sdk: flutter
   fake_cloud_firestore: ^4.2.0
+  flutter_launcher_icons: ^0.14.4
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -99,6 +100,22 @@ flutter:
     - family: SushiSans
       fonts:
         - asset: assets/fonts/SushiSans-Regular.ttf
+
+flutter_launcher_icons:
+  image_path: "assets/icon/app_icon.png"
+  android: true
+  ios: true
+  macos:
+    generate: true
+    image_path: "assets/icon/app_icon.png"
+  windows:
+    generate: true
+    image_path: "assets/icon/app_icon.png"
+  web:
+    generate: true
+    image_path: "assets/icon/app_icon.png"
+    background_color: "#81f4e1"
+    theme_color: "#81f4e1"
 
   # To add custom fonts to your application, add a fonts section here,
   # in this "flutter" section. Each entry in this list should have a
