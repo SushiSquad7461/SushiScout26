@@ -188,7 +188,7 @@ class RobotDiedTimeAndReason extends StatelessWidget {
                 final seconds = int.tryParse(secondsCtrl.text) ?? 0;
                 final total = (minutes * 60 + seconds).clamp(
                   0,
-                  MatchTimer.totalDurationSeconds,
+                  MatchTimer.clockStartSeconds,
                 );
                 Navigator.pop(ctx, total);
               },

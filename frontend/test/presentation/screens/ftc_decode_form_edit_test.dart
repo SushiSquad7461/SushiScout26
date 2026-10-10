@@ -282,7 +282,7 @@ void main() {
         final matches = await repo.getMatches(_eventId);
         expect(matches, hasLength(1));
         // The timer was never started, so it's still at the full duration.
-        expect(matches.single.gameData['died_at_seconds'], 153);
+        expect(matches.single.gameData['died_at_seconds'], 150);
         expect(matches.single.gameData['died_reason'], 'wheel fell off');
       },
     );
