@@ -308,9 +308,9 @@ or fewer.
 ## Testing
 
 - Run `flutter test` from `frontend/` to run the full Dart suite
-  (currently 371 tests). The repository tests use `fake_cloud_firestore`.
+  (currently 450 tests). The repository tests use `fake_cloud_firestore`.
 - Run `./venv/bin/python -m pytest tests/` from `functions/` to run the
-  Python suite (currently 117 tests).
+  Python suite (currently 133 tests).
 - The Firestore rules have an automated isolation suite (37 tests). Run
   it with `firebase emulators:exec --only firestore "cd
   test/firestore-rules && ./node_modules/.bin/jest --runInBand"`, from
