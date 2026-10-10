@@ -618,3 +618,35 @@ class TestSheetStyling(unittest.TestCase):
                       if r.get('updateDimensionProperties', {}).get('properties', {}).get('hiddenByUser')]
             self.assertEqual([h['range']['startIndex'] for h in hidden], [col])
 
+    def test_unfrozen_tab_with_our_color_is_not_restyled(self):
+        svc = self._service()
+        svc._style_existing_sheet = Mock()
+        svc._ensure_column_count = Mock()
+        svc.service.spreadsheets().get().execute.return_value = {'sheets': [{'properties': {
+            'title': 'evt', 'sheetId': 3,
+            'gridProperties': {'columnCount': 25},  # user unfroze the header
+            'tabColorStyle': {'rgbColor': {'red': 0.122, 'green': 0.161, 'blue': 0.216}},
+        }}]}
+        svc.get_or_create_sheet('sid', 'evt', 'FRC')
+        svc._style_existing_sheet.assert_not_called()
+
+    def test_a_foreign_tab_color_does_not_count_as_styled(self):
+        svc = self._service()
+        svc._style_existing_sheet = Mock()
+        svc._ensure_column_count = Mock()
+        svc.service.spreadsheets().get().execute.return_value = {'sheets': [{'properties': {
+            'title': 'evt', 'sheetId': 3,
+            'gridProperties': {'columnCount': 25},
+            'tabColorStyle': {'rgbColor': {'red': 1.0}},
+        }}]}
+        svc.get_or_create_sheet('sid', 'evt', 'FRC')
+        svc._style_existing_sheet.assert_called_once()
+
+    def test_styling_sets_the_tab_color_marker(self):
+        svc = self._service()
+        svc._style_sheet('sid', 7, 'FRC')
+        props = [r['updateSheetProperties'] for r in self._requests(svc)
+                 if 'updateSheetProperties' in r][0]
+        self.assertIn('tabColorStyle', props['properties'])
+        self.assertIn('tabColorStyle', props['fields'])
+

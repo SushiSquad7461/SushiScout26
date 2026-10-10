@@ -212,11 +212,13 @@ class SheetsService:
                     # Sheet exists, ensure it has enough columns
                     existing_id = sheet['properties']['sheetId']
                     self._ensure_column_count(spreadsheet_id, existing_id, len(headers))
-                    # A frozen header row is our marker that the tab is
-                    # already styled, so this costs nothing after the first
-                    # write and brings pre-existing tabs up to date once.
-                    frozen = sheet['properties'].get('gridProperties', {}).get('frozenRowCount', 0)
-                    if frozen < 1:
+                    # A tab we have styled carries a frozen header row and our
+                    # tab color. Either one counts as the marker, so a user
+                    # who unfreezes the header does not make every later
+                    # write restyle the tab (and stack up duplicate
+                    # highlight rules). The cost after the first write is
+                    # one dict lookup.
+                    if not self._is_styled(sheet['properties']):
                         banding = [b['bandedRangeId'] for b in sheet.get('bandedRanges', [])]
                         self._style_existing_sheet(
                             spreadsheet_id, sheet_name, existing_id, program_type, banding
@@ -300,6 +302,19 @@ class SheetsService:
         ).execute()
         
 
+    @staticmethod
+    def _is_styled(sheet_properties: Dict[str, Any]) -> bool:
+        """True if a tab already went through _style_sheet."""
+        if sheet_properties.get('gridProperties', {}).get('frozenRowCount', 0) >= 1:
+            return True
+        color = (sheet_properties.get('tabColorStyle') or {}).get('rgbColor') or \
+            sheet_properties.get('tabColor') or {}
+        # The API omits zero-valued channels, so default each to 0.
+        return all(
+            abs(color.get(c, 0.0) - _HEADER_BG[c]) < 0.01
+            for c in ('red', 'green', 'blue')
+        ) and bool(color)
+
     def _style_existing_sheet(self, spreadsheet_id: str, sheet_name: str, sheet_id: int,
                               program_type: str, banding_ids: List[int]):
         """Style a tab that predates the styling pass.
@@ -365,8 +380,13 @@ class SheetsService:
                 'fields': 'pixelSize',
             }},
             {'updateSheetProperties': {
-                'properties': {'sheetId': sheet_id, 'gridProperties': {'frozenRowCount': 1}},
-                'fields': 'gridProperties.frozenRowCount',
+                'properties': {
+                    'sheetId': sheet_id,
+                    'gridProperties': {'frozenRowCount': 1},
+                    # Second "already styled" marker; see _is_styled.
+                    'tabColorStyle': {'rgbColor': _HEADER_BG},
+                },
+                'fields': 'gridProperties.frozenRowCount,tabColorStyle',
             }},
             {'setBasicFilter': {'filter': {'range': {**cols(), 'startRowIndex': 0}}}},
             # Alternating row shading, open-ended so appended rows inherit it.
