@@ -191,11 +191,7 @@ void main() {
           home: MediaQuery(
             data: const MediaQueryData(textScaler: TextScaler.linear(1.3)),
             child: Scaffold(
-              body: CounterCard(
-                label: 'Score',
-                value: 100,
-                onChanged: (_) {},
-              ),
+              body: CounterCard(label: 'Score', value: 100, onChanged: (_) {}),
             ),
           ),
         ),
@@ -260,14 +256,44 @@ void main() {
       await gesture.up();
       await tester.pump();
 
-      expect(currentValue, 3);
+      // 1 immediate step when the long press begins + 3 repeat ticks.
+      expect(currentValue, 4);
     });
+
+    testWidgets(
+      'a hold released before the first repeat tick still counts once',
+      (tester) async {
+        int currentValue = 0;
+
+        await tester.pumpWidget(
+          buildTestWidget(
+            value: currentValue,
+            onChanged: (v) => currentValue = v,
+          ),
+        );
+
+        // Long enough to become a long press (which cancels the tap), short
+        // of the first 1s repeat tick: the scout still expects +1.
+        final gesture = await tester.startGesture(
+          tester.getCenter(find.byIcon(Icons.add)),
+        );
+        await tester.pump(kLongPressTimeout);
+        await tester.pump(const Duration(milliseconds: 300));
+        await gesture.up();
+        await tester.pump();
+
+        expect(currentValue, 1);
+      },
+    );
 
     testWidgets('releasing the button stops the repeat', (tester) async {
       int currentValue = 0;
 
       await tester.pumpWidget(
-        buildTestWidget(value: currentValue, onChanged: (v) => currentValue = v),
+        buildTestWidget(
+          value: currentValue,
+          onChanged: (v) => currentValue = v,
+        ),
       );
 
       final gesture = await tester.startGesture(
@@ -278,7 +304,7 @@ void main() {
       await gesture.up();
       await tester.pump(const Duration(seconds: 2));
 
-      expect(currentValue, 1);
+      expect(currentValue, 2);
     });
 
     testWidgets('cancelling the long press (pointer cancel) stops the repeat', (
@@ -287,7 +313,10 @@ void main() {
       int currentValue = 0;
 
       await tester.pumpWidget(
-        buildTestWidget(value: currentValue, onChanged: (v) => currentValue = v),
+        buildTestWidget(
+          value: currentValue,
+          onChanged: (v) => currentValue = v,
+        ),
       );
 
       final gesture = await tester.startGesture(
@@ -301,23 +330,27 @@ void main() {
       await gesture.cancel();
       await tester.pump(const Duration(seconds: 2));
 
-      expect(currentValue, 1);
+      expect(currentValue, 2);
     });
 
-    testWidgets('a plain tap still increments by one, not by the repeat timer', (
-      tester,
-    ) async {
-      int currentValue = 5;
+    testWidgets(
+      'a plain tap still increments by one, not by the repeat timer',
+      (tester) async {
+        int currentValue = 5;
 
-      await tester.pumpWidget(
-        buildTestWidget(value: currentValue, onChanged: (v) => currentValue = v),
-      );
+        await tester.pumpWidget(
+          buildTestWidget(
+            value: currentValue,
+            onChanged: (v) => currentValue = v,
+          ),
+        );
 
-      await tester.tap(find.byIcon(Icons.add));
-      await tester.pump();
+        await tester.tap(find.byIcon(Icons.add));
+        await tester.pump();
 
-      expect(currentValue, 6);
-    });
+        expect(currentValue, 6);
+      },
+    );
 
     testWidgets(
       'a repeat timer left running from before the button disabled does '

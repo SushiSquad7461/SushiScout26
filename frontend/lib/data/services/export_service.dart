@@ -9,8 +9,7 @@ import '../models/match_report.dart';
 
 class ExportService {
   /// Detects whether match data is FTC based on the presence of FTC-specific keys.
-  static bool _isFtc(MatchReport m) =>
-      m.gameData.containsKey('artifacts_auto');
+  static bool _isFtc(MatchReport m) => m.gameData.containsKey('artifacts_auto');
 
   /// Label for a stored 'broke'/'strategic' defense_cause value, matching
   /// the wording sheets_service.py uses for the same field on the backend
@@ -168,8 +167,7 @@ class ExportService {
       final file = File('${directory.path}/sushiscout_export.csv');
       await file.writeAsString(content);
 
-      await SharePlus.instance
-          .share(ShareParams(files: [XFile(file.path)]));
+      await SharePlus.instance.share(ShareParams(files: [XFile(file.path)]));
     } on ArgumentError {
       rethrow;
     } catch (e) {
@@ -236,8 +234,7 @@ class ExportService {
       final file = File('${directory.path}/sushiscout_export.xlsx');
       await file.writeAsBytes(fileBytes);
 
-      await SharePlus.instance
-          .share(ShareParams(files: [XFile(file.path)]));
+      await SharePlus.instance.share(ShareParams(files: [XFile(file.path)]));
     } on ArgumentError {
       rethrow;
     } catch (e) {
@@ -261,33 +258,33 @@ class ExportService {
     try {
       final ftc = _isFtc(matches.first);
       final headers = _headers(ftc);
-      // PDF table does not need Comments column (too wide); drop it.
-      final pdfHeaders = headers.where((h) => h != 'Comments').toList();
+      // The PDF table drops the free-text columns (Died Reason, Comments):
+      // they are too wide for a fixed-width table row.
+      const freeTextColumns = {'Died Reason', 'Comments'};
+      final keepIdx = [
+        for (var i = 0; i < headers.length; i++)
+          if (!freeTextColumns.contains(headers[i])) i,
+      ];
+      final pdfHeaders = [for (final i in keepIdx) headers[i]];
 
-      final fontData =
-          await rootBundle.load('assets/fonts/Roboto-Regular.ttf');
+      final fontData = await rootBundle.load('assets/fonts/Roboto-Regular.ttf');
       final ttf = pw.Font.ttf(fontData);
-      final pdf = pw.Document(
-        theme: pw.ThemeData.withFont(base: ttf),
-      );
+      final pdf = pw.Document(theme: pw.ThemeData.withFont(base: ttf));
 
       pdf.addPage(
         pw.MultiPage(
           pageFormat: PdfPageFormat.a4.landscape,
           build: (pw.Context context) {
             return [
-              pw.Header(
-                level: 0,
-                child: pw.Text('SushiScout Match Reports'),
-              ),
+              pw.Header(level: 0, child: pw.Text('SushiScout Match Reports')),
               pw.TableHelper.fromTextArray(
                 context: context,
                 data: <List<String>>[
                   pdfHeaders,
                   ...matches.map((m) {
                     final row = _rowStrings(m, ftc);
-                    // Remove the last element (Comments) to match pdfHeaders.
-                    return row.sublist(0, row.length - 1);
+                    // Keep only the columns that pdfHeaders kept.
+                    return [for (final i in keepIdx) row[i]];
                   }),
                 ],
               ),
@@ -300,8 +297,7 @@ class ExportService {
       final file = File('${directory.path}/sushiscout_export.pdf');
       await file.writeAsBytes(await pdf.save());
 
-      await SharePlus.instance
-          .share(ShareParams(files: [XFile(file.path)]));
+      await SharePlus.instance.share(ShareParams(files: [XFile(file.path)]));
     } on ArgumentError {
       rethrow;
     } catch (e) {

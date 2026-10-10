@@ -1,6 +1,7 @@
 """Google Sheets service for syncing match reports."""
 
 import json
+import math
 import os
 from datetime import datetime
 from typing import List, Optional, Dict, Any
@@ -32,17 +33,17 @@ FRC_HEADERS = [
     "Auto L1 Hang",
     "Teleop Fuel",
     "Climb Level",
-    "Defense Rating",
-    "Driver Skill",
+    "Defense Rating (/5)",
+    "Driver Skill (/5)",
     "Robot Died",
     "Trench Traverse",
     "Bump Traverse",
     "Shooting Close",
     "Shooting Mid",
     "Shooting Far",
-    "Drivetrain Speed",
-    "Intake Speed",
-    "Shooter Speed",
+    "Drivetrain Speed (/5)",
+    "Intake Speed (/5)",
+    "Shooter Speed (/5)",
     "Defense Cause",
     "Died At",
     "Died Reason",
@@ -63,17 +64,39 @@ FTC_HEADERS = [
     "Teleop Artifacts",
     "Teleop Indexing",
     "Base Expansion",
-    "Driver Quality",
+    "Driver Quality (/5)",
     "Robot Died",
-    "Defense Rating",
-    "Drivetrain Speed",
-    "Intake Speed",
-    "Shooter Speed",
+    "Defense Rating (/5)",
+    "Drivetrain Speed (/5)",
+    "Intake Speed (/5)",
+    "Shooter Speed (/5)",
     "Defense Cause",
     "Died At",
     "Died Reason",
     "Comments"
 ]
+
+# Pixel width per column, by header. Anything not listed gets the default.
+_COLUMN_WIDTHS = {
+    "Timestamp": 150, "Match #": 70, "Team #": 75,
+    "Alliance": 80, "Scouter": 110, "Climb Level": 100,
+    "Base Expansion": 120, "Defense Cause": 120, "Died At": 80,
+    "Died Reason": 200, "Comments": 300,
+}
+_DEFAULT_COLUMN_WIDTH = 95
+# Free-text columns: left-aligned and wrapped. Every other column is a short
+# value (number, Yes/No, 1-5 rating), so it is centered and clipped.
+_TEXT_COLUMNS = {"Timestamp", "Scouter", "Died Reason", "Comments"}
+# Kept for row identity, not for reading.
+_HIDDEN_COLUMNS = {"Match ID"}
+_WRAP_COLUMNS = {"Died Reason", "Comments"}
+
+_HEADER_BG = {'red': 0.122, 'green': 0.161, 'blue': 0.216}
+_HEADER_FG = {'red': 1.0, 'green': 1.0, 'blue': 1.0}
+_BAND_ALT = {'red': 0.953, 'green': 0.957, 'blue': 0.965}
+_BAND_WHITE = {'red': 1.0, 'green': 1.0, 'blue': 1.0}
+_RED_TINT = {'red': 0.957, 'green': 0.780, 'blue': 0.765}
+_BLUE_TINT = {'red': 0.788, 'green': 0.855, 'blue': 0.973}
 
 DEFENSE_CAUSE_LABELS = {'broke': 'Robot Broke', 'strategic': 'Strategic'}
 
@@ -85,6 +108,21 @@ def _col_letter(n: int) -> str:
         n, remainder = divmod(n - 1, 26)
         result = chr(65 + remainder) + result
     return result
+
+
+def _rating(value: Any) -> Any:
+    """A 0-5 rating as a plain number, so the sheet can sort and average it.
+    The "/5" scale lives in the column header. A missing rating is a blank
+    cell, not 0, so it cannot drag an AVERAGE down."""
+    if value is None or value == '':
+        return ''
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return ''
+    if not math.isfinite(number):
+        return ''
+    return int(number) if number.is_integer() else number
 
 
 def _format_died_at(seconds_remaining: Optional[int]) -> str:
@@ -172,8 +210,20 @@ class SheetsService:
             for sheet in spreadsheet.get('sheets', []):
                 if sheet['properties']['title'] == sheet_name:
                     # Sheet exists, ensure it has enough columns
-                    self._ensure_column_count(spreadsheet_id, sheet['properties']['sheetId'], len(headers))
-                    return sheet['properties']['sheetId']
+                    existing_id = sheet['properties']['sheetId']
+                    self._ensure_column_count(spreadsheet_id, existing_id, len(headers))
+                    # A tab we have styled carries a frozen header row and our
+                    # tab color. Either one counts as the marker, so a user
+                    # who unfreezes the header does not make every later
+                    # write restyle the tab (and stack up duplicate
+                    # highlight rules). The cost after the first write is
+                    # one dict lookup.
+                    if not self._is_styled(sheet['properties']):
+                        banding = [b['bandedRangeId'] for b in sheet.get('bandedRanges', [])]
+                        self._style_existing_sheet(
+                            spreadsheet_id, sheet_name, existing_id, program_type, banding
+                        )
+                    return existing_id
             
             # Create new sheet
             body = {
@@ -199,6 +249,7 @@ class SheetsService:
             
             # Add headers to new sheet
             self._write_headers(spreadsheet_id, sheet_name, program_type)
+            self._style_sheet(spreadsheet_id, sheet_id, program_type)
             
             return sheet_id
             
@@ -250,100 +301,156 @@ class SheetsService:
             body=body
         ).execute()
         
-        # Format headers as bold with color
-        self._format_headers(spreadsheet_id, sheet_name, len(headers))
-        
-        # Set column widths
-        self._set_column_widths(spreadsheet_id, sheet_name, program_type)
-    
-    def _format_headers(self, spreadsheet_id: str, sheet_name: str, column_count: int):
-        """Apply bold formatting and background color to header row."""
-        sheet_id = self._get_sheet_id(spreadsheet_id, sheet_name)
-        
+
+    @staticmethod
+    def _is_styled(sheet_properties: Dict[str, Any]) -> bool:
+        """True if a tab already went through _style_sheet."""
+        if sheet_properties.get('gridProperties', {}).get('frozenRowCount', 0) >= 1:
+            return True
+        color = (sheet_properties.get('tabColorStyle') or {}).get('rgbColor') or \
+            sheet_properties.get('tabColor') or {}
+        # The API omits zero-valued channels, so default each to 0.
+        return all(
+            abs(color.get(c, 0.0) - _HEADER_BG[c]) < 0.01
+            for c in ('red', 'green', 'blue')
+        ) and bool(color)
+
+    def _style_existing_sheet(self, spreadsheet_id: str, sheet_name: str, sheet_id: int,
+                              program_type: str, banding_ids: List[int]):
+        """Style a tab that predates the styling pass.
+
+        Its header row is rewritten only when it is the same column layout
+        as today's, differing at most in the "(/5)" rating labels. A tab
+        with a different layout keeps its headers (relabeling would put the
+        wrong names over its data) and skips the highlight rules, which
+        address columns by the current layout."""
+        headers = self.get_headers(program_type)
+        same_layout = False
+        try:
+            result = self.service.spreadsheets().values().get(
+                spreadsheetId=spreadsheet_id, range=f"'{sheet_name}'!1:1"
+            ).execute()
+            current = (result.get('values') or [[]])[0]
+            strip = lambda hs: [h.replace(' (/5)', '') for h in hs]
+            same_layout = strip(current) == strip(headers)
+            if same_layout and current != headers:
+                self._write_headers(spreadsheet_id, sheet_name, program_type)
+        except Exception as e:
+            import logging
+            logging.warning(f"Could not check headers of {sheet_name!r}: {e}")
+        self._style_sheet(spreadsheet_id, sheet_id, program_type, banding_ids, highlight=same_layout)
+
+    def _style_sheet(self, spreadsheet_id: str, sheet_id: int, program_type: str = 'FRC',
+                     existing_banding_ids: Optional[List[int]] = None,
+                     highlight: bool = True):
+        """Make a tab readable: styled and frozen header, filter, row banding,
+        per-column width and alignment, and highlights for dead robots and
+        alliance color.
+
+        Formatting only — it never writes cell values. All requests go out in
+        one batchUpdate, so the frozen header row (which get_or_create_sheet
+        uses as the "already styled" marker) lands atomically with the rest.
+        A failure is logged, not raised: a cosmetic problem must never drop
+        a scout's match row."""
+        headers = self.get_headers(program_type)
+        n = len(headers)
+
+        def cols(start=0, end=n):
+            return {'sheetId': sheet_id, 'startColumnIndex': start, 'endColumnIndex': end}
+
         requests = [
-            # Bold and background
-            {
-                'repeatCell': {
-                    'range': {
-                        'sheetId': sheet_id,
-                        'startRowIndex': 0,
-                        'endRowIndex': 1,
-                        'startColumnIndex': 0,
-                        'endColumnIndex': column_count
-                    },
-                    'cell': {
-                        'userEnteredFormat': {
-                            'textFormat': {'bold': True},
-                            'backgroundColor': {
-                                'red': 0.2,
-                                'green': 0.4,
-                                'blue': 0.6
-                            },
-                            'horizontalAlignment': 'CENTER'
-                        }
-                    },
-                    'fields': 'userEnteredFormat(textFormat,backgroundColor,horizontalAlignment)'
-                }
-            },
-            # Wrap text for comments (last column)
-            {
-                'repeatCell': {
-                    'range': {
-                        'sheetId': sheet_id,
-                        'startRowIndex': 1,
-                        'endRowIndex': 1000,
-                        'startColumnIndex': column_count - 1,
-                        'endColumnIndex': column_count
-                    },
-                    'cell': {
-                        'userEnteredFormat': {
-                            'wrapStrategy': 'WRAP'
-                        }
-                    },
-                    'fields': 'userEnteredFormat(wrapStrategy)'
-                }
-            }
+            # A banded range cannot overlap another, so clear any first. This
+            # keeps the pass re-runnable on a tab someone already banded.
+            *({'deleteBanding': {'bandedRangeId': i}} for i in (existing_banding_ids or [])),
+            # Header row.
+            {'repeatCell': {
+                'range': {**cols(), 'startRowIndex': 0, 'endRowIndex': 1},
+                'cell': {'userEnteredFormat': {
+                    'backgroundColor': _HEADER_BG,
+                    'textFormat': {'bold': True, 'foregroundColor': _HEADER_FG},
+                    'horizontalAlignment': 'CENTER',
+                    'verticalAlignment': 'MIDDLE',
+                    'wrapStrategy': 'WRAP',
+                }},
+                'fields': 'userEnteredFormat(backgroundColor,textFormat,horizontalAlignment,verticalAlignment,wrapStrategy)',
+            }},
+            {'updateDimensionProperties': {
+                'range': {'sheetId': sheet_id, 'dimension': 'ROWS', 'startIndex': 0, 'endIndex': 1},
+                'properties': {'pixelSize': 44},
+                'fields': 'pixelSize',
+            }},
+            {'updateSheetProperties': {
+                'properties': {
+                    'sheetId': sheet_id,
+                    'gridProperties': {'frozenRowCount': 1},
+                    # Second "already styled" marker; see _is_styled.
+                    'tabColorStyle': {'rgbColor': _HEADER_BG},
+                },
+                'fields': 'gridProperties.frozenRowCount,tabColorStyle',
+            }},
+            {'setBasicFilter': {'filter': {'range': {**cols(), 'startRowIndex': 0}}}},
+            # Alternating row shading, open-ended so appended rows inherit it.
+            {'addBanding': {'bandedRange': {
+                'range': {**cols(), 'startRowIndex': 1},
+                'rowProperties': {
+                    'firstBandColor': _BAND_WHITE,
+                    'secondBandColor': _BAND_ALT,
+                },
+            }}},
         ]
-        
-        self.service.spreadsheets().batchUpdate(
-            spreadsheetId=spreadsheet_id,
-            body={'requests': requests}
-        ).execute()
-    
-    def _set_column_widths(self, spreadsheet_id: str, sheet_name: str, program_type: str = 'FRC'):
-        """Set appropriate column widths."""
-        frc_widths = [160, 140, 60, 70, 70, 100, 80, 90, 90, 90, 100, 100, 85, 90, 90, 90, 90, 90, 90, 90, 90, 110, 90, 160, 250]
-        ftc_widths = [160, 140, 60, 70, 70, 100, 70, 100, 90, 110, 100, 110, 100, 85, 85, 90, 90, 90, 110, 90, 160, 250]
-        assert len(frc_widths) == len(FRC_HEADERS), f"frc_widths has {len(frc_widths)} entries, FRC_HEADERS has {len(FRC_HEADERS)}"
-        assert len(ftc_widths) == len(FTC_HEADERS), f"ftc_widths has {len(ftc_widths)} entries, FTC_HEADERS has {len(FTC_HEADERS)}"
+
+        # Column widths, plus alignment/wrapping for the body of each column.
+        for idx, name in enumerate(headers):
+            requests.append({'updateDimensionProperties': {
+                'range': {'sheetId': sheet_id, 'dimension': 'COLUMNS', 'startIndex': idx, 'endIndex': idx + 1},
+                'properties': {
+                    'pixelSize': _COLUMN_WIDTHS.get(name, _DEFAULT_COLUMN_WIDTH),
+                    # Match ID is hidden, not removed: find_row_by_report_id
+                    # reads it (column B) to find a report's row, so deleting
+                    # it would turn every update into a duplicate append.
+                    'hiddenByUser': name in _HIDDEN_COLUMNS,
+                },
+                'fields': 'pixelSize,hiddenByUser',
+            }})
+            requests.append({'repeatCell': {
+                'range': {**cols(idx, idx + 1), 'startRowIndex': 1},
+                'cell': {'userEnteredFormat': {
+                    'horizontalAlignment': 'LEFT' if name in _TEXT_COLUMNS else 'CENTER',
+                    'verticalAlignment': 'MIDDLE',
+                    'wrapStrategy': 'WRAP' if name in _WRAP_COLUMNS else 'CLIP',
+                }},
+                'fields': 'userEnteredFormat(horizontalAlignment,verticalAlignment,wrapStrategy)',
+            }})
+
+        # Highlights. Row 2 is the first data row; the formula is relative.
+        died_idx = headers.index("Robot Died")
+        alliance_idx = headers.index("Alliance")
+        died, alliance = _col_letter(died_idx + 1), _col_letter(alliance_idx + 1)
+        for col_idx, formula, color in () if not highlight else (
+            (died_idx, f'=${died}2="Yes"', _RED_TINT),
+            (alliance_idx, f'=LOWER(${alliance}2)="red"', _RED_TINT),
+            (alliance_idx, f'=LOWER(${alliance}2)="blue"', _BLUE_TINT),
+        ):
+            requests.append({'addConditionalFormatRule': {
+                'index': 0,
+                'rule': {
+                    'ranges': [{**cols(col_idx, col_idx + 1), 'startRowIndex': 1}],
+                    'booleanRule': {
+                        'condition': {'type': 'CUSTOM_FORMULA', 'values': [{'userEnteredValue': formula}]},
+                        'format': {'backgroundColor': color},
+                    },
+                },
+            }})
 
         try:
-            sheet_id = self._get_sheet_id(spreadsheet_id, sheet_name)
-            widths = ftc_widths if program_type == 'FTC' else frc_widths
-
-            requests = []
-            for col_idx, width in enumerate(widths):
-                requests.append({
-                    'updateDimensionProperties': {
-                        'range': {
-                            'sheetId': sheet_id,
-                            'dimension': 'COLUMNS',
-                            'startIndex': col_idx,
-                            'endIndex': col_idx + 1
-                        },
-                        'properties': {'pixelSize': width},
-                        'fields': 'pixelSize'
-                    }
-                })
-            
             self.service.spreadsheets().batchUpdate(
                 spreadsheetId=spreadsheet_id,
-                body={'requests': requests}
+                body={'requests': requests},
             ).execute()
         except Exception as e:
             import logging
-            logging.warning(f"Could not set column widths: {e}")
-    
+            logging.warning(f"Could not style sheet {sheet_id}: {e}")
+
     def sheet_exists(self, spreadsheet_id: str, sheet_name: str) -> bool:
         """True if a tab named `sheet_name` already exists in the workbook.
 
@@ -507,17 +614,17 @@ class SheetsService:
             'Yes' if game_data.get('auto_tower_l1', False) else 'No',
             game_data.get('teleop_fuel', 0),
             climb_str,
-            f"{game_data.get('defense_rating', 0)}/5",
-            f"{game_data.get('driver_skill', 0)}/5",
+            _rating(game_data.get('defense_rating')),
+            _rating(game_data.get('driver_skill')),
             'Yes' if game_data.get('robot_died', False) else 'No',
             'Yes' if game_data.get('trench_traverse', False) else 'No',
             'Yes' if game_data.get('bump_traverse', False) else 'No',
             'Yes' if game_data.get('shooting_range_close', False) else 'No',
             'Yes' if game_data.get('shooting_range_mid', False) else 'No',
             'Yes' if game_data.get('shooting_range_far', False) else 'No',
-            f"{game_data.get('drivetrain_speed', 0)}/5",
-            f"{game_data.get('intake_speed', 0)}/5",
-            f"{game_data.get('shooter_speed', 0)}/5",
+            _rating(game_data.get('drivetrain_speed')),
+            _rating(game_data.get('intake_speed')),
+            _rating(game_data.get('shooter_speed')),
             DEFENSE_CAUSE_LABELS.get(game_data.get('defense_cause'), ''),
             _format_died_at(game_data.get('died_at_seconds')),
             game_data.get('died_reason', ''),
@@ -540,12 +647,12 @@ class SheetsService:
             game_data.get('artifacts_teleop', 0),
             'Yes' if game_data.get('indexing_teleop', False) else 'No',
             game_data.get('base_expansion', 'None'),
-            f"{int(game_data.get('driver_quality', 0))}/5",
+            _rating(game_data.get('driver_quality')),
             'Yes' if game_data.get('robot_died', False) else 'No',
-            f"{game_data.get('defense_rating', 0)}/5",
-            f"{game_data.get('drivetrain_speed', 0)}/5",
-            f"{game_data.get('intake_speed', 0)}/5",
-            f"{game_data.get('shooter_speed', 0)}/5",
+            _rating(game_data.get('defense_rating')),
+            _rating(game_data.get('drivetrain_speed')),
+            _rating(game_data.get('intake_speed')),
+            _rating(game_data.get('shooter_speed')),
             DEFENSE_CAUSE_LABELS.get(game_data.get('defense_cause'), ''),
             _format_died_at(game_data.get('died_at_seconds')),
             game_data.get('died_reason', ''),

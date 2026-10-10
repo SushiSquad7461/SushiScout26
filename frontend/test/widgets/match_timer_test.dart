@@ -29,10 +29,10 @@ void main() {
       );
     }
 
-    testWidgets('displays initial timer at 2:33', (tester) async {
+    testWidgets('displays initial timer at 2:30', (tester) async {
       await tester.pumpWidget(buildTestWidget());
 
-      expect(find.text('2:33'), findsOneWidget);
+      expect(find.text('2:30'), findsOneWidget);
     });
 
     testWidgets('displays PRE-MATCH phase initially', (tester) async {
@@ -62,7 +62,7 @@ void main() {
       await tester.tap(find.byIcon(Icons.play_arrow_rounded));
       await tester.pump(const Duration(seconds: 2));
 
-      expect(find.text('2:31'), findsOneWidget);
+      expect(find.text('2:28'), findsOneWidget);
     });
 
     testWidgets('controller can start timer', (tester) async {
@@ -70,7 +70,7 @@ void main() {
 
       await tester.pumpWidget(buildTestWidget(controller: controller));
 
-      expect(find.text('2:33'), findsOneWidget);
+      expect(find.text('2:30'), findsOneWidget);
 
       controller.start();
       await tester.pump();
@@ -110,6 +110,34 @@ void main() {
       await tester.tap(find.byIcon(Icons.pause_rounded));
       await tester.pump();
       expect(find.byIcon(Icons.play_arrow_rounded), findsOneWidget);
+    });
+
+    test(
+      'clockSeconds: auto 2:30->2:16, holds 2:15 through transition, then teleop',
+      () {
+        expect(MatchTimer.clockSeconds(153), 150); // 2:30 at the start
+        expect(MatchTimer.clockSeconds(139), 136); // last auto second
+        expect(MatchTimer.clockSeconds(138), 135); // transition: 2:15
+        expect(MatchTimer.clockSeconds(137), 135);
+        expect(MatchTimer.clockSeconds(136), 135);
+        expect(MatchTimer.clockSeconds(135), 135); // teleop starts at 2:15
+        expect(MatchTimer.clockSeconds(134), 134);
+        expect(MatchTimer.clockSeconds(30), 30); // endgame is 0:30 on the clock
+        expect(MatchTimer.clockSeconds(0), 0);
+      },
+    );
+
+    testWidgets('holds 2:15 on the clock for the 3s transition', (
+      tester,
+    ) async {
+      await tester.pumpWidget(buildTestWidget());
+      await tester.tap(find.byIcon(Icons.play_arrow_rounded));
+      await tester.pump(const Duration(seconds: 15));
+      expect(find.text('2:15'), findsOneWidget);
+      expect(find.text('transition'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 2));
+      expect(find.text('2:15'), findsOneWidget);
+      expect(find.text('transition'), findsOneWidget);
     });
 
     testWidgets('exposes the total duration as a public constant', (
@@ -152,27 +180,28 @@ void main() {
       expect(flashed, isNotNull);
     });
 
-    testWidgets('calls onPhaseChanged when reset returns the phase to PRE-MATCH', (
-      tester,
-    ) async {
-      Color? flashed;
-      await tester.pumpWidget(
-        buildTestWidget(onPhaseChanged: (c) => flashed = c),
-      );
+    testWidgets(
+      'calls onPhaseChanged when reset returns the phase to PRE-MATCH',
+      (tester) async {
+        Color? flashed;
+        await tester.pumpWidget(
+          buildTestWidget(onPhaseChanged: (c) => flashed = c),
+        );
 
-      await tester.tap(find.byIcon(Icons.play_arrow_rounded));
-      await tester.pump(const Duration(seconds: 1));
-      // flashed is already null here — the first tick's PRE-MATCH -> AUTO
-      // transition is correctly suppressed. No reassignment needed; this
-      // comment just makes that assumption explicit for the reset assertion
-      // below.
+        await tester.tap(find.byIcon(Icons.play_arrow_rounded));
+        await tester.pump(const Duration(seconds: 1));
+        // flashed is already null here — the first tick's PRE-MATCH -> AUTO
+        // transition is correctly suppressed. No reassignment needed; this
+        // comment just makes that assumption explicit for the reset assertion
+        // below.
 
-      await tester.tap(find.byIcon(Icons.replay_rounded));
-      await tester.pump();
+        await tester.tap(find.byIcon(Icons.replay_rounded));
+        await tester.pump();
 
-      expect(find.text('pre-match'), findsOneWidget);
-      expect(flashed, isNotNull);
-    });
+        expect(find.text('pre-match'), findsOneWidget);
+        expect(flashed, isNotNull);
+      },
+    );
 
     testWidgets('delivers a distinct saturated flash color per phase', (
       tester,
@@ -243,15 +272,15 @@ void main() {
 
       expect(
         controller.secondsRemaining.value,
-        MatchTimer.totalDurationSeconds - 3,
+        MatchTimer.clockStartSeconds - 3,
       );
     });
   });
 
   group('MatchTimerController', () {
-    test('secondsRemaining starts at the total match duration', () {
+    test('secondsRemaining starts at the 2:30 clock reading', () {
       final controller = MatchTimerController();
-      expect(controller.secondsRemaining.value, MatchTimer.totalDurationSeconds);
+      expect(controller.secondsRemaining.value, 150);
     });
 
     test('notifies listeners when start is called', () {

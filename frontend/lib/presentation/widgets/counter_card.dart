@@ -240,8 +240,14 @@ class _CounterButtonState extends State<_CounterButton> {
   // and Flutter updates `widget` on the existing State across that rebuild.
   // Capturing the callback in a local at press-start would keep calling the
   // stale, first-press value forever instead of incrementing.
+  //
+  // The long press also cancels the tap, so the press that starts it must
+  // count on its own: step once now, then once per second while held.
+  // Without the immediate step, a hold released before the first tick
+  // changed nothing.
   void _startRepeating() {
     _repeatTimer?.cancel();
+    widget.onPressed?.call();
     _repeatTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       widget.onPressed?.call();
     });
