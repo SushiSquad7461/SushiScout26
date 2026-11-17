@@ -4,6 +4,66 @@ import '../../core/animations.dart';
 import '../theme/app_theme.dart';
 import '../theme/team_brand.dart';
 
+/// The phase lengths of one program's match. [MatchTimer] takes one of these
+/// so the FRC and FTC forms can share the widget and still follow their own
+/// field clock.
+class MatchTiming {
+  final int autoSeconds;
+
+  /// The field-disabled pause between auto and teleop. The match clock holds
+  /// through it.
+  final int transitionSeconds;
+
+  /// Teleop length, including the endgame window.
+  final int teleopSeconds;
+
+  /// How many seconds before the end the ENDGAME phase starts.
+  final int endgameSeconds;
+
+  const MatchTiming({
+    required this.autoSeconds,
+    required this.transitionSeconds,
+    required this.teleopSeconds,
+    required this.endgameSeconds,
+  });
+
+  /// FRC: 15s auto, 3s transition, 2:15 teleop, last 30s is endgame.
+  static const MatchTiming frc = MatchTiming(
+    autoSeconds: 15,
+    transitionSeconds: 3,
+    teleopSeconds: 135,
+    endgameSeconds: 30,
+  );
+
+  /// FTC 2026-27 BIOBUZZ: 30s auto, 8s transition, 2:00 teleop. The endgame
+  /// signal sounds with 20s left.
+  static const MatchTiming ftc = MatchTiming(
+    autoSeconds: 30,
+    transitionSeconds: 8,
+    teleopSeconds: 120,
+    endgameSeconds: 20,
+  );
+
+  /// The internal tick count that drives phases and progress. This is NOT
+  /// the clock the scout sees — see [clockSeconds].
+  int get totalSeconds => autoSeconds + transitionSeconds + teleopSeconds;
+
+  /// What the match clock reads before the match starts.
+  int get clockStartSeconds => autoSeconds + teleopSeconds;
+
+  /// The match clock reading for [remaining] internal ticks. Auto counts
+  /// down from [clockStartSeconds]. The clock then holds at the teleop
+  /// length through the transition, as on a real field, and teleop counts
+  /// down to 0:00. Teleop and endgame readings equal the internal count.
+  int clockSeconds(int remaining) {
+    if (remaining > totalSeconds - autoSeconds) {
+      return remaining - transitionSeconds;
+    }
+    if (remaining > teleopSeconds) return teleopSeconds;
+    return remaining;
+  }
+}
+
 /// Match timer.
 ///
 /// **This widget is mounted as `AppBar(bottom: MatchTimer(...))` by both
@@ -55,40 +115,39 @@ class MatchTimer extends StatefulWidget implements PreferredSizeWidget {
   /// to PRE-MATCH.
   final ValueChanged<Color>? onPhaseChanged;
 
+  /// The phase lengths this timer runs. Defaults to FRC; the FTC form passes
+  /// [MatchTiming.ftc].
+  final MatchTiming timing;
+
   const MatchTimer({
     super.key,
     this.onMatchFinished,
     this.controller,
     this.onPhaseChanged,
+    this.timing = MatchTiming.frc,
   });
 
-  /// Total match length: 15s auto + 3s field-disabled transition + 2:15
+  /// FRC total match length: 15s auto + 3s field-disabled transition + 2:15
   /// teleop (including the 30s endgame window). This is the internal tick
   /// count that drives phases and progress, NOT the clock the scout sees —
-  /// see [clockSeconds].
+  /// see [clockSeconds]. The FRC values stay here as constants; a timer
+  /// with another [timing] reads its own lengths from that object.
   static const int totalDurationSeconds = 153;
 
   static const int autoSeconds = 15;
   static const int transitionSeconds = 3;
 
   /// What the match clock reads before the match starts: 2:30, as on a real
-  /// FRC field timer.
+  /// field timer. FRC (15s + 2:15) and FTC (30s + 2:00) both start at 2:30.
   static const int clockStartSeconds = 150;
 
-  /// The match clock reading for [remaining] internal ticks. Auto counts
+  /// The FRC match clock reading for [remaining] internal ticks. Auto counts
   /// 2:30 down to 2:15. The clock then holds at 2:15 through the 3s
   /// field-disabled transition, as on a real field, and teleop counts 2:15
   /// down to 0:00. Teleop and endgame readings equal the internal count, so
   /// the 30s endgame window still lines up with 0:30 on the clock.
-  static int clockSeconds(int remaining) {
-    if (remaining > totalDurationSeconds - autoSeconds) {
-      return remaining - transitionSeconds;
-    }
-    if (remaining > totalDurationSeconds - autoSeconds - transitionSeconds) {
-      return totalDurationSeconds - autoSeconds - transitionSeconds;
-    }
-    return remaining;
-  }
+  static int clockSeconds(int remaining) =>
+      MatchTiming.frc.clockSeconds(remaining);
 
   @override
   State<MatchTimer> createState() => _MatchTimerState();
@@ -99,22 +158,22 @@ class MatchTimer extends StatefulWidget implements PreferredSizeWidget {
 
 class _MatchTimerState extends State<MatchTimer> {
   Timer? _timer;
-  int _secondsRemaining = MatchTimer.totalDurationSeconds;
+  late int _secondsRemaining = widget.timing.totalSeconds;
   bool _isRunning = false;
-  static const int _totalDuration = MatchTimer.totalDurationSeconds;
-  static const int _autoDuration = MatchTimer.autoSeconds;
-  static const int _transitionDuration = MatchTimer.transitionSeconds;
+  MatchTiming get _timing => widget.timing;
+  int get _totalDuration => _timing.totalSeconds;
   String? _lastNotifiedPhase;
 
   String get _currentPhase {
     if (!_isRunning && _secondsRemaining == _totalDuration) return "PRE-MATCH";
-    if (_secondsRemaining > _totalDuration - _autoDuration) return "AUTO";
-    if (_secondsRemaining <= 0) return "FINISHED";
-    if (_secondsRemaining >
-        _totalDuration - _autoDuration - _transitionDuration) {
-      return "TRANSITION"; // 3s field-disabled pause before teleop
+    if (_secondsRemaining > _totalDuration - _timing.autoSeconds) {
+      return "AUTO";
     }
-    if (_secondsRemaining <= 30) return "ENDGAME"; // Last 30s
+    if (_secondsRemaining <= 0) return "FINISHED";
+    if (_secondsRemaining > _timing.teleopSeconds) {
+      return "TRANSITION"; // field-disabled pause before teleop
+    }
+    if (_secondsRemaining <= _timing.endgameSeconds) return "ENDGAME";
     return "TELEOP";
   }
 
@@ -167,7 +226,7 @@ class _MatchTimerState extends State<MatchTimer> {
     super.initState();
     widget.controller?.addListener(_handleControllerStart);
     _lastNotifiedPhase = _currentPhase;
-    widget.controller?.secondsRemaining.value = MatchTimer.clockSeconds(
+    widget.controller?.secondsRemaining.value = _timing.clockSeconds(
       _secondsRemaining,
     );
   }
@@ -181,7 +240,7 @@ class _MatchTimerState extends State<MatchTimer> {
   /// PRE-MATCH from any other phase still notifies, matching every other
   /// phase change.
   void _syncControllerAndNotifyPhase() {
-    widget.controller?.secondsRemaining.value = MatchTimer.clockSeconds(
+    widget.controller?.secondsRemaining.value = _timing.clockSeconds(
       _secondsRemaining,
     );
     final newPhase = _currentPhase;
@@ -262,7 +321,7 @@ class _MatchTimerState extends State<MatchTimer> {
     // the chip keeps the true phase colour.
     final phaseAccent = AppTheme.legibleOn(chrome, phaseFill, onChrome);
 
-    final clock = MatchTimer.clockSeconds(_secondsRemaining);
+    final clock = _timing.clockSeconds(_secondsRemaining);
     final minutes = clock ~/ 60;
     final seconds = (clock % 60).toString().padLeft(2, '0');
     final progress = 1.0 - (_secondsRemaining / _totalDuration);

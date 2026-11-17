@@ -9,6 +9,7 @@ void main() {
       MatchTimerController? controller,
       VoidCallback? onMatchFinished,
       ValueChanged<Color>? onPhaseChanged,
+      MatchTiming timing = MatchTiming.frc,
     }) {
       return MaterialApp(
         theme: ThemeData(
@@ -22,6 +23,7 @@ void main() {
               controller: controller,
               onMatchFinished: onMatchFinished,
               onPhaseChanged: onPhaseChanged,
+              timing: timing,
             ),
           ),
           body: const SizedBox(),
@@ -138,6 +140,69 @@ void main() {
       await tester.pump(const Duration(seconds: 2));
       expect(find.text('2:15'), findsOneWidget);
       expect(find.text('transition'), findsOneWidget);
+    });
+
+    test('MatchTiming.frc matches the FRC constants on MatchTimer', () {
+      expect(MatchTiming.frc.totalSeconds, MatchTimer.totalDurationSeconds);
+      expect(MatchTiming.frc.clockStartSeconds, MatchTimer.clockStartSeconds);
+      expect(MatchTiming.frc.autoSeconds, MatchTimer.autoSeconds);
+      expect(MatchTiming.frc.transitionSeconds, MatchTimer.transitionSeconds);
+    });
+
+    test('MatchTiming.ftc: 30s auto, 8s transition, 2:00 teleop', () {
+      const ftc = MatchTiming.ftc;
+      expect(ftc.totalSeconds, 158);
+      expect(ftc.clockStartSeconds, 150); // 2:30
+      expect(ftc.clockSeconds(158), 150); // 2:30 at the start
+      expect(ftc.clockSeconds(129), 121); // last auto second
+      expect(ftc.clockSeconds(128), 120); // transition holds 2:00
+      expect(ftc.clockSeconds(121), 120);
+      expect(ftc.clockSeconds(120), 120); // teleop starts at 2:00
+      expect(ftc.clockSeconds(119), 119);
+      expect(ftc.clockSeconds(0), 0);
+    });
+
+    testWidgets('FTC timing: auto runs 30s, then holds 2:00 for 8s', (
+      tester,
+    ) async {
+      final controller = MatchTimerController();
+      await tester.pumpWidget(
+        buildTestWidget(controller: controller, timing: MatchTiming.ftc),
+      );
+      expect(find.text('2:30'), findsOneWidget);
+
+      await tester.tap(find.byIcon(Icons.play_arrow_rounded));
+      await tester.pump(const Duration(seconds: 29));
+      expect(find.text('2:01'), findsOneWidget);
+      expect(find.text('auto'), findsOneWidget);
+
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.text('2:00'), findsOneWidget);
+      expect(find.text('transition'), findsOneWidget);
+
+      // Still held on the last transition second.
+      await tester.pump(const Duration(seconds: 7));
+      expect(find.text('2:00'), findsOneWidget);
+      expect(find.text('transition'), findsOneWidget);
+      expect(controller.secondsRemaining.value, 120);
+
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.text('2:00'), findsOneWidget);
+      expect(find.text('teleop'), findsOneWidget);
+
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.text('1:59'), findsOneWidget);
+    });
+
+    testWidgets('FTC timing: endgame starts with 20s left', (tester) async {
+      await tester.pumpWidget(buildTestWidget(timing: MatchTiming.ftc));
+      await tester.tap(find.byIcon(Icons.play_arrow_rounded));
+      await tester.pump(const Duration(seconds: 30 + 8 + 99));
+      expect(find.text('0:21'), findsOneWidget);
+      expect(find.text('teleop'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.text('0:20'), findsOneWidget);
+      expect(find.text('endgame'), findsOneWidget);
     });
 
     testWidgets('exposes the total duration as a public constant', (

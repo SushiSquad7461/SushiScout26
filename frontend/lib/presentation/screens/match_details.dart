@@ -83,11 +83,9 @@ class MatchDetailsScreen extends ConsumerWidget {
     final brand = BrandScope.of(context);
     final allianceColor = AppTheme.allianceColor(match.alliance);
 
-    // Determine program type: prefer top-level field, fall back to key detection
-    final isFtc =
-        match.programType == 'FTC' ||
-        (match.programType.isEmpty &&
-            match.gameData.containsKey('artifacts_auto'));
+    // Program type: the top-level field first, then FTC gameData keys
+    // (BIOBUZZ, or a legacy DECODE report).
+    final isFtc = match.isFtc;
 
     return Scaffold(
       body: CustomScrollView(
@@ -372,22 +370,15 @@ class MatchDetailsScreen extends ConsumerWidget {
   }
 
   List<Widget> _buildFtcSections(BuildContext context, Color allianceColor) {
-    final data = match.gameData;
+    String yesNo(bool v) => v ? "Yes" : "No";
 
     return [
       _SectionCard(
         title: "autonomous",
         accentColor: allianceColor,
         children: [
-          _DataRow(
-            label: "Leave",
-            value: (data['leave'] ?? false) ? "Yes" : "No",
-          ),
-          _DataRow(label: "Artifacts", value: "${data['artifacts_auto'] ?? 0}"),
-          _DataRow(
-            label: "Indexing",
-            value: (data['indexing_auto'] ?? false) ? "Yes" : "No",
-          ),
+          _DataRow(label: "Leave", value: yesNo(match.leave)),
+          _DataRow(label: "Hive Tips", value: "${match.hiveTipsAuto}"),
         ],
       ),
       const SizedBox(height: AppTheme.spacingMd),
@@ -395,14 +386,21 @@ class MatchDetailsScreen extends ConsumerWidget {
         title: "teleop",
         accentColor: allianceColor,
         children: [
+          _DataRow(label: "Hive Tips", value: "${match.hiveTipsTeleop}"),
+        ],
+      ),
+      const SizedBox(height: AppTheme.spacingMd),
+      _SectionCard(
+        title: "capabilities",
+        accentColor: allianceColor,
+        children: [
+          _DataRow(label: "Can Score Flowers", value: yesNo(match.flowerScore)),
           _DataRow(
-            label: "Artifacts",
-            value: "${data['artifacts_teleop'] ?? 0}",
+            label: "Can Descore Flowers",
+            value: yesNo(match.flowerDescore),
           ),
-          _DataRow(
-            label: "Indexing",
-            value: (data['indexing_teleop'] ?? false) ? "Yes" : "No",
-          ),
+          _DataRow(label: "Pollen Shooter", value: yesNo(match.pollenShooter)),
+          _DataRow(label: "Nectar Shooter", value: yesNo(match.nectarShooter)),
         ],
       ),
       const SizedBox(height: AppTheme.spacingMd),
@@ -410,13 +408,10 @@ class MatchDetailsScreen extends ConsumerWidget {
         title: "endgame",
         accentColor: allianceColor,
         children: [
-          _DataRow(
-            label: "Base Expansion",
-            value: "${data['base_expansion'] ?? 'None'}",
-          ),
+          _DataRow(label: "Park", value: yesNo(match.park)),
           _RatingRow(
             label: "Driver Quality",
-            value: (data['driver_quality'] ?? 0).toInt(),
+            value: match.driverQuality.toInt(),
           ),
         ],
       ),

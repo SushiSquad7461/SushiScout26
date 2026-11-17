@@ -185,8 +185,8 @@ void main() {
         'teleop_fuel': 15,
         'defense_rating': 4,
         'driver_skill': 5,
-        'artifacts_auto': 3,
-        'artifacts_teleop': 8,
+        'hive_tips_auto': 3,
+        'hive_tips_teleop': 8,
         'climbed': true,
         'parked': false,
       };
@@ -369,6 +369,77 @@ void main() {
         expect(report.createdAt, DateTime(2026, 3, 15, 17, 0));
         expect(report.isSynced, false);
         expect(report.isDeleted, true);
+      });
+    });
+
+    group('FTC BIOBUZZ', () {
+      MatchReport build(
+        Map<String, dynamic> gameData, {
+        String programType = 'FRC',
+      }) => MatchReport(
+        id: 'b1',
+        matchId: 'qm1',
+        matchNumber: 1,
+        teamNumber: 12345,
+        alliance: 'Red',
+        scouterName: 'Scouter',
+        gameData: gameData,
+        createdAt: DateTime(2026, 11, 1),
+        programType: programType,
+      );
+
+      test('getters read every BIOBUZZ key', () {
+        final r = build({
+          'leave': true,
+          'hive_tips_auto': 2,
+          'hive_tips_teleop': 4,
+          'flower_score': true,
+          'flower_descore': true,
+          'pollen_shooter': true,
+          'nectar_shooter': true,
+          'park': true,
+          'driver_quality': 3,
+        });
+        expect(r.leave, isTrue);
+        expect(r.hiveTipsAuto, 2);
+        expect(r.hiveTipsTeleop, 4);
+        expect(r.flowerScore, isTrue);
+        expect(r.flowerDescore, isTrue);
+        expect(r.pollenShooter, isTrue);
+        expect(r.nectarShooter, isTrue);
+        expect(r.park, isTrue);
+        expect(r.driverQuality, 3.0);
+      });
+
+      test('getters default when keys are missing', () {
+        final r = build({});
+        expect(r.hiveTipsAuto, 0);
+        expect(r.hiveTipsTeleop, 0);
+        expect(r.flowerScore, isFalse);
+        expect(r.flowerDescore, isFalse);
+        expect(r.pollenShooter, isFalse);
+        expect(r.nectarShooter, isFalse);
+        expect(r.park, isFalse);
+      });
+
+      test('a num stored as a double still reads as an int count', () {
+        expect(build({'hive_tips_auto': 2.0}).hiveTipsAuto, 2);
+      });
+
+      test('isFtc is true for a hive_tips_auto map', () {
+        expect(build({'hive_tips_auto': 1}).isFtc, isTrue);
+      });
+
+      test('isFtc is true for a legacy DECODE artifacts_auto map', () {
+        expect(build({'artifacts_auto': 1}).isFtc, isTrue);
+      });
+
+      test('isFtc is true for programType FTC with no FTC keys', () {
+        expect(build({}, programType: 'FTC').isFtc, isTrue);
+      });
+
+      test('isFtc is false for an FRC map', () {
+        expect(build({'auto_fuel': 3}).isFtc, isFalse);
       });
     });
   });

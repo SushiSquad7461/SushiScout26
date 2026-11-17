@@ -66,7 +66,7 @@ void main() {
     test('programType is persisted rather than inferred', () async {
       await repo.createMatch(
         'teamA_evt',
-        buildMatch(id: 'm1', programType: 'FTC', gameData: {'artifacts_auto': 2}),
+        buildMatch(id: 'm1', programType: 'FTC', gameData: {'hive_tips_auto': 2}),
       );
 
       final matches = await repo.getMatches('teamA_evt');

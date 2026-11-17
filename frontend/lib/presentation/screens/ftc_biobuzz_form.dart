@@ -14,9 +14,12 @@ import '../../data/local/preferences.dart';
 import '../theme/app_theme.dart';
 import '../../core/animations.dart';
 
-/// FTC "DECODE" scouting form with Material 3 styling.
-class FtcDecodeForm extends ScoutingFormWidget {
-  const FtcDecodeForm({
+/// FTC 2026-27 "BIOBUZZ" scouting form with Material 3 styling.
+///
+/// Robots launch POLLEN and NECTAR into the HIVE to tip it, score in the
+/// FLOWERS on the wall, and PARK in the loading zone at match end.
+class FtcBioBuzzForm extends ScoutingFormWidget {
+  const FtcBioBuzzForm({
     super.key,
     required super.eventId,
     required super.event,
@@ -24,13 +27,13 @@ class FtcDecodeForm extends ScoutingFormWidget {
   });
 
   @override
-  ConsumerState<FtcDecodeForm> createState() => _FtcDecodeFormState();
+  ConsumerState<FtcBioBuzzForm> createState() => _FtcBioBuzzFormState();
 
   @override
   Map<String, dynamic> collectGameData() => {};
 }
 
-class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm>
+class _FtcBioBuzzFormState extends ConsumerState<FtcBioBuzzForm>
     with KeyboardDismissMixin {
   final PageController _pageController = PageController();
   final MatchTimerController _timerController = MatchTimerController();
@@ -46,21 +49,23 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm>
   String _alliance = 'Red';
   final _scouterNameCtrl = TextEditingController();
 
-  // FTC DECODE Fields
+  // FTC BIOBUZZ Fields
   // Auto
-  int _autoArtifacts = 0;
-  bool _autoIndexing = false;
   bool _leave = false;
+  int _autoHiveTips = 0;
 
   // Teleop
-  int _teleArtifacts = 0;
-  bool _teleIndexing = false;
+  int _teleHiveTips = 0;
+  bool _flowerScore = false;
+  bool _flowerDescore = false;
+  bool _pollenShooter = false;
+  bool _nectarShooter = false;
   bool _robotDied = false;
   int? _diedAtSeconds;
   final _diedReasonCtrl = TextEditingController();
 
   // Endgame
-  String _baseExpansion = 'None';
+  bool _park = false;
   double _driverQuality = 0;
   int _defenseRating = 0;
   String? _defenseCause;
@@ -80,15 +85,17 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm>
       _matchNumberCtrl.text = '${existing.matchNumber}';
       _teamNumberCtrl.text = '${existing.teamNumber}';
       _alliance = existing.alliance;
-      _autoArtifacts = existing.artifactsAuto;
-      _autoIndexing = existing.indexingAuto;
       _leave = existing.leave;
-      _teleArtifacts = existing.artifactsTeleop;
-      _teleIndexing = existing.indexingTeleop;
+      _autoHiveTips = existing.hiveTipsAuto;
+      _teleHiveTips = existing.hiveTipsTeleop;
+      _flowerScore = existing.flowerScore;
+      _flowerDescore = existing.flowerDescore;
+      _pollenShooter = existing.pollenShooter;
+      _nectarShooter = existing.nectarShooter;
       _robotDied = existing.robotDied;
       _diedAtSeconds = existing.diedAtSeconds;
       _diedReasonCtrl.text = existing.diedReason;
-      _baseExpansion = existing.baseExpansion;
+      _park = existing.park;
       _driverQuality = existing.driverQuality;
       _defenseRating = existing.defenseRating;
       _defenseCause = existing.defenseCause;
@@ -168,6 +175,8 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm>
               bottom: ScoutingFormBrandBand(
                 timerController: _timerController,
                 onPhaseChanged: _phaseFlashController.flash,
+                // BIOBUZZ: 30s auto, 8s transition, 2:00 teleop.
+                timing: MatchTiming.ftc,
               ),
             ),
             body: SafeArea(
@@ -427,22 +436,11 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm>
         const SizedBox(height: AppTheme.spacingMd),
 
         CounterCard(
-          label: "Auto Artifacts",
-          helperText: "Pieces scored during autonomous",
-          value: _autoArtifacts,
-          onChanged: (v) => setState(() => _autoArtifacts = v),
+          label: "Auto Hive Tips",
+          helperText: "Times the hive tipped during autonomous",
+          value: _autoHiveTips,
+          onChanged: (v) => setState(() => _autoHiveTips = v),
           accentColor: Theme.of(context).colorScheme.tertiary,
-        ),
-
-        const SizedBox(height: AppTheme.spacingMd),
-
-        Card(
-          child: SwitchListTile(
-            title: const Text("Auto Indexing"),
-            subtitle: const Text("Successfully indexed samples"),
-            value: _autoIndexing,
-            onChanged: (v) => setState(() => _autoIndexing = v),
-          ),
         ),
       ],
     );
@@ -454,21 +452,10 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm>
     return Column(
       children: [
         CounterCard(
-          label: "Teleop Artifacts",
-          helperText: "Pieces scored during teleop",
-          value: _teleArtifacts,
-          onChanged: (v) => setState(() => _teleArtifacts = v),
-        ),
-
-        const SizedBox(height: AppTheme.spacingMd),
-
-        Card(
-          child: SwitchListTile(
-            title: const Text("Teleop Indexing"),
-            subtitle: const Text("Successfully indexed samples"),
-            value: _teleIndexing,
-            onChanged: (v) => setState(() => _teleIndexing = v),
-          ),
+          label: "Teleop Hive Tips",
+          helperText: "Times the hive tipped during teleop",
+          value: _teleHiveTips,
+          onChanged: (v) => setState(() => _teleHiveTips = v),
         ),
 
         const SizedBox(height: AppTheme.spacingMd),
@@ -516,6 +503,57 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm>
             ],
           ),
         ),
+
+        const SizedBox(height: AppTheme.spacingMd),
+
+        // Same heading-over-card layout as the FRC form's Mobility and
+        // Shooting Range groups.
+        Align(
+          alignment: Alignment.centerLeft,
+          child: Text(
+            "Capabilities",
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+        ),
+        const SizedBox(height: AppTheme.spacingSm),
+
+        Card(
+          child: Column(
+            children: [
+              CheckboxListTile(
+                title: const Text("Can Score Flowers"),
+                subtitle: const Text("Places pollen or nectar in a flower"),
+                value: _flowerScore,
+                onChanged: (v) => setState(() => _flowerScore = v!),
+                controlAffinity: ListTileControlAffinity.leading,
+              ),
+              const Divider(height: 1),
+              CheckboxListTile(
+                title: const Text("Can Descore Flowers"),
+                subtitle: const Text("Removes pollen through a flower's base"),
+                value: _flowerDescore,
+                onChanged: (v) => setState(() => _flowerDescore = v!),
+                controlAffinity: ListTileControlAffinity.leading,
+              ),
+              const Divider(height: 1),
+              CheckboxListTile(
+                title: const Text("Pollen Shooter"),
+                subtitle: const Text("Launches pollen into the hive"),
+                value: _pollenShooter,
+                onChanged: (v) => setState(() => _pollenShooter = v!),
+                controlAffinity: ListTileControlAffinity.leading,
+              ),
+              const Divider(height: 1),
+              CheckboxListTile(
+                title: const Text("Nectar Shooter"),
+                subtitle: const Text("Launches nectar into the hive"),
+                value: _nectarShooter,
+                onChanged: (v) => setState(() => _nectarShooter = v!),
+                controlAffinity: ListTileControlAffinity.leading,
+              ),
+            ],
+          ),
+        ),
       ],
     );
   }
@@ -526,19 +564,14 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        DropdownButtonFormField<String>(
-          initialValue: _baseExpansion,
-          decoration: const InputDecoration(
-            labelText: "Base Expansion",
-            prefixIcon: Icon(Icons.open_in_full),
-            border: OutlineInputBorder(),
+        Card(
+          child: CheckboxListTile(
+            title: const Text("Park"),
+            subtitle: const Text("Robot parked in the loading zone at the end"),
+            value: _park,
+            onChanged: (v) => setState(() => _park = v!),
+            controlAffinity: ListTileControlAffinity.leading,
           ),
-          items: const [
-            DropdownMenuItem(value: 'None', child: Text("None")),
-            DropdownMenuItem(value: 'Partial', child: Text("Partial")),
-            DropdownMenuItem(value: 'Full', child: Text("Full")),
-          ],
-          onChanged: (v) => setState(() => _baseExpansion = v!),
         ),
 
         const SizedBox(height: AppTheme.spacingLg),
@@ -700,19 +733,27 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm>
             child: Column(
               children: [
                 _ReviewRow(label: "Leave", value: _leave ? "Yes" : "No"),
-                _ReviewRow(label: "Auto Artifacts", value: "$_autoArtifacts"),
+                _ReviewRow(label: "Auto Hive Tips", value: "$_autoHiveTips"),
+                const Divider(height: AppTheme.spacingLg),
+                _ReviewRow(label: "Teleop Hive Tips", value: "$_teleHiveTips"),
                 _ReviewRow(
-                  label: "Auto Indexing",
-                  value: _autoIndexing ? "Yes" : "No",
+                  label: "Can Score Flowers",
+                  value: _flowerScore ? "Yes" : "No",
+                ),
+                _ReviewRow(
+                  label: "Can Descore Flowers",
+                  value: _flowerDescore ? "Yes" : "No",
+                ),
+                _ReviewRow(
+                  label: "Pollen Shooter",
+                  value: _pollenShooter ? "Yes" : "No",
+                ),
+                _ReviewRow(
+                  label: "Nectar Shooter",
+                  value: _nectarShooter ? "Yes" : "No",
                 ),
                 const Divider(height: AppTheme.spacingLg),
-                _ReviewRow(label: "Teleop Artifacts", value: "$_teleArtifacts"),
-                _ReviewRow(
-                  label: "Teleop Indexing",
-                  value: _teleIndexing ? "Yes" : "No",
-                ),
-                const Divider(height: AppTheme.spacingLg),
-                _ReviewRow(label: "Base Expansion", value: _baseExpansion),
+                _ReviewRow(label: "Park", value: _park ? "Yes" : "No"),
                 _ReviewRow(
                   label: "Driver Quality",
                   value: "${_driverQuality.toInt()}/5",
@@ -776,11 +817,13 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm>
     setState(() => _submitting = true);
     final gameData = {
       'leave': _leave,
-      'artifacts_auto': _autoArtifacts,
-      'indexing_auto': _autoIndexing,
-      'artifacts_teleop': _teleArtifacts,
-      'indexing_teleop': _teleIndexing,
-      'base_expansion': _baseExpansion,
+      'hive_tips_auto': _autoHiveTips,
+      'hive_tips_teleop': _teleHiveTips,
+      'flower_score': _flowerScore,
+      'flower_descore': _flowerDescore,
+      'pollen_shooter': _pollenShooter,
+      'nectar_shooter': _nectarShooter,
+      'park': _park,
       'driver_quality': _driverQuality,
       'defense_rating': _defenseRating,
       'defense_cause': _defenseCause,
@@ -813,6 +856,10 @@ class _FtcDecodeFormState extends ConsumerState<FtcDecodeForm>
             teamNumber: int.tryParse(_teamNumberCtrl.text) ?? 0,
             alliance: _alliance,
             scouterName: _scouterNameCtrl.text,
+            // This wizard only ever produces FTC-shaped gameData. Without
+            // this, MatchReport defaults to FRC, and the repository copies
+            // that into a brand-new event doc on the first save.
+            programType: 'FTC',
             gameData: gameData,
             comments: _commentsCtrl.text,
             createdAt: DateTime.now(),

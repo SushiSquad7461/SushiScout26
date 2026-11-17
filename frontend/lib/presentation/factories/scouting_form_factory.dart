@@ -2,7 +2,7 @@ import '../../data/models/event.dart';
 import '../../data/models/match_report.dart';
 import '../widgets/scouting_form_widget.dart';
 import '../screens/frc_rebuilt_form.dart';
-import '../screens/ftc_decode_form.dart';
+import '../screens/ftc_biobuzz_form.dart';
 
 class ScoutingFormFactory {
   static ScoutingFormWidget create(Event event, {MatchReport? existingMatch}) {
@@ -20,7 +20,7 @@ class ScoutingFormFactory {
           existingMatch: existingMatch,
         );
       case 'FTC':
-        return FtcDecodeForm(
+        return FtcBioBuzzForm(
           eventId: event.id,
           event: event,
           existingMatch: existingMatch,

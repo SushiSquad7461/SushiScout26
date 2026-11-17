@@ -10,7 +10,7 @@ import 'package:frontend/data/models/event.dart';
 import 'package:frontend/data/models/match_report.dart';
 import 'package:frontend/data/repositories/firestore_repository.dart';
 import 'package:frontend/data/repositories/providers.dart';
-import 'package:frontend/presentation/screens/ftc_decode_form.dart';
+import 'package:frontend/presentation/screens/ftc_biobuzz_form.dart';
 import 'package:frontend/presentation/theme/app_theme.dart';
 import 'package:frontend/presentation/widgets/counter_card.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -48,11 +48,13 @@ MatchReport _ftcMatch({String id = 'm1'}) {
     scouterName: 'original scout',
     gameData: {
       'leave': true,
-      'artifacts_auto': 5,
-      'indexing_auto': true,
-      'artifacts_teleop': 9,
-      'indexing_teleop': false,
-      'base_expansion': 'Full',
+      'hive_tips_auto': 5,
+      'hive_tips_teleop': 9,
+      'flower_score': true,
+      'flower_descore': false,
+      'pollen_shooter': true,
+      'nectar_shooter': false,
+      'park': true,
       'driver_quality': 4.0,
       'robot_died': false,
     },
@@ -98,7 +100,7 @@ void main() {
         // banner colour bug only shows up under AppTheme's hand-written
         // colour scheme.
         theme: AppTheme.dark(AppTheme.brandFor(null)),
-        home: FtcDecodeForm(
+        home: FtcBioBuzzForm(
           eventId: _eventId,
           event: _event,
           existingMatch: existingMatch,
@@ -107,7 +109,7 @@ void main() {
     );
   }
 
-  group('FtcDecodeForm edit mode', () {
+  group('FtcBioBuzzForm edit mode', () {
     testWidgets(
       'skips the setup page and opens directly on autonomous with prefilled values',
       (tester) async {
@@ -129,6 +131,99 @@ void main() {
           tester.widget<CheckboxListTile>(find.byType(CheckboxListTile)).value,
           isTrue,
         );
+      },
+    );
+
+    testWidgets(
+      'prefills the teleop hive tips, the four capabilities, and park',
+      (tester) async {
+        await tester.pumpWidget(await buildForm(existingMatch: _ftcMatch()));
+        await tester.pumpAndSettle();
+
+        // autonomous -> teleop
+        await tester.tap(find.text('next'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Capabilities'), findsOneWidget);
+        expect(
+          find.descendant(
+            of: find.byType(CounterCard),
+            matching: find.text('9'),
+          ),
+          findsOneWidget,
+        );
+        bool checked(String title) => tester
+            .widget<CheckboxListTile>(
+              find.widgetWithText(CheckboxListTile, title),
+            )
+            .value!;
+        expect(checked('Can Score Flowers'), isTrue);
+        expect(checked('Can Descore Flowers'), isFalse);
+        expect(checked('Pollen Shooter'), isTrue);
+        expect(checked('Nectar Shooter'), isFalse);
+
+        // teleop -> endgame
+        await tester.tap(find.text('next'));
+        await tester.pumpAndSettle();
+        expect(checked('Park'), isTrue);
+      },
+    );
+
+    testWidgets(
+      'saving an unchanged edit writes every BIOBUZZ key back with its type',
+      (tester) async {
+        await repo.createMatch(_eventId, _ftcMatch());
+
+        await tester.pumpWidget(await buildForm(existingMatch: _ftcMatch()));
+        await tester.pumpAndSettle();
+
+        for (var i = 0; i < 3; i++) {
+          await tester.tap(find.text('next'));
+          await tester.pumpAndSettle();
+        }
+        await tester.tap(find.text('save'));
+        await tester.pumpAndSettle();
+
+        final gd = (await repo.getMatches(_eventId)).single.gameData;
+        expect(gd['leave'], isTrue);
+        expect(gd['hive_tips_auto'], 5);
+        expect(gd['hive_tips_teleop'], 9);
+        expect(gd['flower_score'], isTrue);
+        expect(gd['flower_descore'], isFalse);
+        expect(gd['pollen_shooter'], isTrue);
+        expect(gd['nectar_shooter'], isFalse);
+        expect(gd['park'], isTrue);
+      },
+    );
+
+    testWidgets(
+      'editing a legacy DECODE report keeps its old keys and adds the new ones',
+      (tester) async {
+        final legacy = _ftcMatch().copyWith(
+          gameData: {
+            'leave': true,
+            'artifacts_auto': 4,
+            'base_expansion': 'Full',
+            'robot_died': false,
+          },
+        );
+        await repo.createMatch(_eventId, legacy);
+
+        await tester.pumpWidget(await buildForm(existingMatch: legacy));
+        await tester.pumpAndSettle();
+
+        for (var i = 0; i < 3; i++) {
+          await tester.tap(find.text('next'));
+          await tester.pumpAndSettle();
+        }
+        await tester.tap(find.text('save'));
+        await tester.pumpAndSettle();
+
+        final gd = (await repo.getMatches(_eventId)).single.gameData;
+        expect(gd['artifacts_auto'], 4);
+        expect(gd['base_expansion'], 'Full');
+        expect(gd['hive_tips_auto'], 0);
+        expect(gd['park'], isFalse);
       },
     );
 
@@ -409,10 +504,15 @@ void main() {
           of: find.text('Defense Rating'),
           matching: find.byType(Card),
         );
-        await tester.drag(
-          find.descendant(of: defenseCard, matching: find.byType(Slider)),
-          const Offset(-1000, 0),
+        final defenseSlider = find.descendant(
+          of: defenseCard,
+          matching: find.byType(Slider),
         );
+        // The Park card sits above this slider, so scroll it into the
+        // test viewport before the drag.
+        await tester.ensureVisible(defenseSlider);
+        await tester.pumpAndSettle();
+        await tester.drag(defenseSlider, const Offset(-1000, 0));
         await tester.pumpAndSettle();
 
         // The segmented button (and its stale value) should no longer be
