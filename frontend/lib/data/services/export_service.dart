@@ -8,8 +8,9 @@ import 'package:share_plus/share_plus.dart';
 import '../models/match_report.dart';
 
 class ExportService {
-  /// Detects whether match data is FTC based on the presence of FTC-specific keys.
-  static bool _isFtc(MatchReport m) => m.gameData.containsKey('artifacts_auto');
+  /// Detects an FTC match with the same rule as [MatchReport.isFtc]:
+  /// programType first, then the BIOBUZZ or legacy DECODE gameData keys.
+  static bool _isFtc(MatchReport m) => m.isFtc;
 
   /// Label for a stored 'broke'/'strategic' defense_cause value, matching
   /// the wording sheets_service.py uses for the same field on the backend
@@ -39,11 +40,13 @@ class ExportService {
           'Alliance',
           'Scouter',
           'Leave',
-          'Artifacts Auto',
-          'Indexing Auto',
-          'Artifacts Teleop',
-          'Indexing Teleop',
-          'Base Expansion',
+          'Auto Hive Tips',
+          'Teleop Hive Tips',
+          'Flower Score',
+          'Flower Descore',
+          'Pollen Shooter',
+          'Nectar Shooter',
+          'Park',
           'Driver Quality',
           'Robot Died',
           'Defense Rating',
@@ -86,11 +89,13 @@ class ExportService {
         m.alliance,
         m.scouterName,
         (gd['leave'] ?? false).toString(),
-        (gd['artifacts_auto'] ?? 0).toString(),
-        (gd['indexing_auto'] ?? 0).toString(),
-        (gd['artifacts_teleop'] ?? 0).toString(),
-        (gd['indexing_teleop'] ?? 0).toString(),
-        (gd['base_expansion'] ?? false).toString(),
+        m.hiveTipsAuto.toString(),
+        m.hiveTipsTeleop.toString(),
+        m.flowerScore.toString(),
+        m.flowerDescore.toString(),
+        m.pollenShooter.toString(),
+        m.nectarShooter.toString(),
+        m.park.toString(),
         (gd['driver_quality'] ?? 0).toString(),
         (gd['robot_died'] ?? false).toString(),
         (gd['defense_rating'] ?? 0).toString(),
@@ -129,7 +134,7 @@ class ExportService {
   // CSV
   // ---------------------------------------------------------------------------
 
-  /// Detects whether a match was scouted for FTC based on game data keys.
+  /// Detects whether a match was scouted for FTC ([MatchReport.isFtc]).
   /// Exposed for tests.
   static bool isFtc(MatchReport m) => _isFtc(m);
 

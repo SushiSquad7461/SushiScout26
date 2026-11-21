@@ -524,9 +524,9 @@ class _MatchCard extends ConsumerWidget {
     if (match.gameData.containsKey('auto_fuel')) {
       summary =
           "auto ${match.gameData['auto_fuel']} · tele ${match.gameData['teleop_fuel']}";
-    } else if (match.gameData.containsKey('artifacts_auto')) {
+    } else if (match.isFtc) {
       summary =
-          "auto ${match.gameData['artifacts_auto']} · tele ${match.gameData['artifacts_teleop']}";
+          "hive tips: auto ${match.hiveTipsAuto} · tele ${match.hiveTipsTeleop}";
     } else {
       summary = "no data recorded";
     }

@@ -67,20 +67,16 @@ class TestSheetsService(unittest.TestCase):
         self.assertEqual(FRC_HEADERS[24], "Comments")
 
     def test_ftc_headers(self):
-        """Test that FTC headers match the 22-column schema."""
-        self.assertEqual(len(FTC_HEADERS), 22)
-        self.assertEqual(FTC_HEADERS[0], "Timestamp")
-        self.assertEqual(FTC_HEADERS[6], "Leave")
-        self.assertEqual(FTC_HEADERS[7], "Auto Artifacts")
-        self.assertEqual(FTC_HEADERS[11], "Base Expansion")
-        self.assertEqual(FTC_HEADERS[14], "Defense Rating (/5)")
-        self.assertEqual(FTC_HEADERS[15], "Drivetrain Speed (/5)")
-        self.assertEqual(FTC_HEADERS[16], "Intake Speed (/5)")
-        self.assertEqual(FTC_HEADERS[17], "Shooter Speed (/5)")
-        self.assertEqual(FTC_HEADERS[18], "Defense Cause")
-        self.assertEqual(FTC_HEADERS[19], "Died At")
-        self.assertEqual(FTC_HEADERS[20], "Died Reason")
-        self.assertEqual(FTC_HEADERS[21], "Comments")
+        """Test that FTC headers match the 24-column BioBuzz schema."""
+        self.assertEqual(FTC_HEADERS, [
+            "Timestamp", "Match ID", "Match #", "Team #", "Alliance", "Scouter",
+            "Leave", "Auto Hive Tips", "Teleop Hive Tips", "Flower Score",
+            "Flower Descore", "Pollen Shooter", "Nectar Shooter", "Park",
+            "Driver Quality (/5)", "Robot Died", "Defense Rating (/5)",
+            "Drivetrain Speed (/5)", "Intake Speed (/5)", "Shooter Speed (/5)",
+            "Defense Cause", "Died At", "Died Reason", "Comments",
+        ])
+        self.assertEqual(len(FTC_HEADERS), 24)
 
     def test_transform_frc_report(self):
         """Test transforming FRC match report to row format."""
@@ -188,11 +184,13 @@ class TestSheetsService(unittest.TestCase):
             'programType': 'FTC',
             'gameData': {
                 'leave': True,
-                'artifacts_auto': 3,
-                'indexing_auto': True,
-                'artifacts_teleop': 8,
-                'indexing_teleop': False,
-                'base_expansion': 'Full',
+                'hive_tips_auto': 3,
+                'hive_tips_teleop': 8,
+                'flower_score': True,
+                'flower_descore': False,
+                'pollen_shooter': True,
+                'nectar_shooter': False,
+                'park': True,
                 'driver_quality': 4.0,
                 'robot_died': False,
                 'defense_rating': 2,
@@ -207,24 +205,44 @@ class TestSheetsService(unittest.TestCase):
 
         result = service.transform_match_report(report_data)
 
-        self.assertEqual(len(result), len(FTC_HEADERS))  # 22 columns
+        self.assertEqual(len(result), len(FTC_HEADERS))  # 24 columns
         self.assertEqual(result[1], 'ftc_qm1_12345')  # Match ID
         self.assertEqual(result[4], 'Blue')             # Alliance
         self.assertEqual(result[6], 'Yes')              # Leave
-        self.assertEqual(result[7], 3)                  # Auto Artifacts
-        self.assertEqual(result[8], 'Yes')              # Auto Indexing
-        self.assertEqual(result[9], 8)                  # Teleop Artifacts
-        self.assertEqual(result[10], 'No')              # Teleop Indexing
-        self.assertEqual(result[11], 'Full')            # Base Expansion
-        self.assertEqual(result[12], 4)             # Driver Quality
-        self.assertEqual(result[13], 'No')              # Robot Died
-        self.assertEqual(result[14], 2)             # Defense Rating
-        self.assertEqual(result[15], 3)             # Drivetrain Speed
-        self.assertEqual(result[16], 3)             # Intake Speed
-        self.assertEqual(result[17], 3)             # Shooter Speed
-        self.assertEqual(result[18], 'Strategic')       # Defense Cause
-        self.assertEqual(result[19], '')                # Died At (not set)
-        self.assertEqual(result[20], '')                # Died Reason (not set)
+        self.assertEqual(result[7], 3)                  # Auto Hive Tips
+        self.assertEqual(result[8], 8)                  # Teleop Hive Tips
+        self.assertEqual(result[9], 'Yes')              # Flower Score
+        self.assertEqual(result[10], 'No')              # Flower Descore
+        self.assertEqual(result[11], 'Yes')             # Pollen Shooter
+        self.assertEqual(result[12], 'No')              # Nectar Shooter
+        self.assertEqual(result[13], 'Yes')             # Park
+        self.assertEqual(result[14], 4)             # Driver Quality
+        self.assertEqual(result[15], 'No')              # Robot Died
+        self.assertEqual(result[16], 2)             # Defense Rating
+        self.assertEqual(result[17], 3)             # Drivetrain Speed
+        self.assertEqual(result[18], 3)             # Intake Speed
+        self.assertEqual(result[19], 3)             # Shooter Speed
+        self.assertEqual(result[20], 'Strategic')       # Defense Cause
+        self.assertEqual(result[21], '')                # Died At (not set)
+        self.assertEqual(result[22], '')                # Died Reason (not set)
+        self.assertEqual(result[23], 'Solid match')     # Comments
+
+    def test_transform_ftc_report_defaults_missing_game_data(self):
+        """An empty gameData yields zeros and 'No', never an exception."""
+        with patch('services.sheets_service.build'), \
+             patch('services.sheets_service.service_account.Credentials'):
+            service = SheetsService(self.mock_credentials)
+
+        result = service.transform_match_report({
+            'matchId': 'ftc_qm2_1', 'matchNumber': 2, 'teamNumber': 1,
+            'alliance': 'Red', 'programType': 'FTC', 'gameData': {},
+            'createdAt': datetime(2026, 3, 1, 14, 0, 0),
+        })
+
+        self.assertEqual(len(result), len(FTC_HEADERS))
+        self.assertEqual(result[6:8], ['No', 0])
+        self.assertEqual(result[8], 0)
+        self.assertEqual(result[9:14], ['No'] * 5)
 
     def test_transform_frc_robot_died_true(self):
         """Test robot died field reads from gameData.robot_died."""

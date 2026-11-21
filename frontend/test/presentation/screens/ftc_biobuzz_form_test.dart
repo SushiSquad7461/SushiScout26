@@ -7,7 +7,7 @@ import 'package:frontend/data/local/preferences.dart';
 import 'package:frontend/data/models/event.dart';
 import 'package:frontend/data/repositories/firestore_repository.dart';
 import 'package:frontend/data/repositories/providers.dart';
-import 'package:frontend/presentation/screens/ftc_decode_form.dart';
+import 'package:frontend/presentation/screens/ftc_biobuzz_form.dart';
 import 'package:frontend/presentation/theme/app_theme.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -58,7 +58,7 @@ void main() {
                 onPressed: () => Navigator.of(context).push(
                   MaterialPageRoute(
                     builder: (_) =>
-                        FtcDecodeForm(eventId: _eventId, event: _event),
+                        FtcBioBuzzForm(eventId: _eventId, event: _event),
                   ),
                 ),
                 child: const Text('open'),
@@ -70,7 +70,7 @@ void main() {
     );
   }
 
-  group('FtcDecodeForm back navigation', () {
+  group('FtcBioBuzzForm back navigation', () {
     testWidgets(
       'the hardware back button moves to the previous page instead of closing the form',
       (tester) async {
@@ -98,7 +98,7 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(find.text('setup'), findsOneWidget);
-        expect(find.byType(FtcDecodeForm), findsOneWidget);
+        expect(find.byType(FtcBioBuzzForm), findsOneWidget);
       },
     );
 
@@ -108,16 +108,103 @@ void main() {
       await tester.pumpWidget(await buildApp());
       await tester.tap(find.text('open'));
       await tester.pumpAndSettle();
-      expect(find.byType(FtcDecodeForm), findsOneWidget);
+      expect(find.byType(FtcBioBuzzForm), findsOneWidget);
 
       await _pressHardwareBackButton(tester);
       await tester.pumpAndSettle();
 
-      expect(find.byType(FtcDecodeForm), findsNothing);
+      expect(find.byType(FtcBioBuzzForm), findsNothing);
     });
   });
 
-  group('FtcDecodeForm setup validation messages', () {
+  group('FtcBioBuzzForm new match save', () {
+    Future<void> tapVisible(WidgetTester tester, Finder finder) async {
+      await tester.ensureVisible(finder);
+      await tester.pumpAndSettle();
+      await tester.tap(finder);
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('writes every BIOBUZZ key with the right type', (tester) async {
+      await tester.pumpWidget(await buildApp());
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'scouter name'),
+        'Test Scouter',
+      );
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'match #'),
+        '7',
+      );
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'team #'),
+        '12345',
+      );
+      await tester.tap(find.text('next'));
+      await tester.pumpAndSettle();
+
+      // autonomous: leave + one auto hive tip
+      expect(find.text('Auto Hive Tips'), findsOneWidget);
+      await tapVisible(tester, find.byType(CheckboxListTile));
+      await tapVisible(tester, find.byIcon(Icons.add));
+      await tester.tap(find.text('next'));
+      await tester.pumpAndSettle();
+
+      // teleop: two teleop hive tips + three of four capabilities
+      expect(find.text('Teleop Hive Tips'), findsOneWidget);
+      expect(find.text('Capabilities'), findsOneWidget);
+      await tapVisible(tester, find.byIcon(Icons.add));
+      await tapVisible(tester, find.byIcon(Icons.add));
+      await tapVisible(tester, find.text('Can Score Flowers'));
+      await tapVisible(tester, find.text('Can Descore Flowers'));
+      await tapVisible(tester, find.text('Nectar Shooter'));
+      await tester.tap(find.text('next'));
+      await tester.pumpAndSettle();
+
+      // endgame: park
+      await tapVisible(tester, find.text('Park'));
+      await tester.tap(find.text('next'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('submit'));
+      await tester.pumpAndSettle();
+
+      final matches = await repo.getMatches(_eventId);
+      expect(matches, hasLength(1));
+      final gd = matches.single.gameData;
+      expect(gd['leave'], isA<bool>().having((v) => v, 'leave', isTrue));
+      expect(gd['hive_tips_auto'], isA<int>().having((v) => v, 'auto', 1));
+      expect(gd['hive_tips_teleop'], isA<int>().having((v) => v, 'tele', 2));
+      expect(gd['flower_score'], isTrue);
+      expect(gd['flower_descore'], isTrue);
+      expect(gd['pollen_shooter'], isA<bool>().having((v) => v, 'p', isFalse));
+      expect(gd['nectar_shooter'], isTrue);
+      expect(gd['park'], isA<bool>().having((v) => v, 'park', isTrue));
+      expect(gd['driver_quality'], isA<double>());
+      for (final removed in const [
+        'artifacts_auto',
+        'indexing_auto',
+        'artifacts_teleop',
+        'indexing_teleop',
+        'base_expansion',
+      ]) {
+        expect(gd.containsKey(removed), isFalse, reason: removed);
+      }
+      expect(matches.single.isFtc, isTrue);
+
+      // The event doc did not exist, so this first save creates it. The
+      // repository copies the match's programType into the new event. A
+      // match with no programType defaults to FRC, which once created a
+      // new FTC event as FRC and then opened the FRC wizard on edit.
+      expect(matches.single.programType, 'FTC');
+      final eventDoc = await fake.collection('events').doc(_eventId).get();
+      expect(eventDoc.data()!['programType'], 'FTC');
+    });
+  });
+
+  group('FtcBioBuzzForm setup validation messages', () {
     testWidgets('the whole match number error renders without truncation', (
       tester,
     ) async {

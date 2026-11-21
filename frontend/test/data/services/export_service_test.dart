@@ -50,11 +50,13 @@ MatchReport _ftcMatch({
     scouterName: scouter,
     gameData: const {
       'leave': true,
-      'artifacts_auto': 5,
-      'indexing_auto': 1,
-      'artifacts_teleop': 10,
-      'indexing_teleop': 2,
-      'base_expansion': false,
+      'hive_tips_auto': 5,
+      'hive_tips_teleop': 10,
+      'flower_score': true,
+      'flower_descore': false,
+      'pollen_shooter': true,
+      'nectar_shooter': false,
+      'park': true,
       'driver_quality': 4,
       'robot_died': false,
       'defense_rating': 3,
@@ -72,8 +74,20 @@ MatchReport _ftcMatch({
 
 void main() {
   group('ExportService.isFtc', () {
-    test('detects FTC match via artifacts_auto key', () {
+    test('detects FTC match via hive_tips_auto key', () {
       expect(ExportService.isFtc(_ftcMatch()), isTrue);
+    });
+
+    test('detects a legacy DECODE match via artifacts_auto key', () {
+      final legacy = _frcMatch().copyWith(
+        gameData: const {'artifacts_auto': 2, 'base_expansion': 'Full'},
+      );
+      expect(ExportService.isFtc(legacy), isTrue);
+    });
+
+    test('detects FTC match via programType with no FTC keys', () {
+      final bare = _frcMatch().copyWith(gameData: const {}, programType: 'FTC');
+      expect(ExportService.isFtc(bare), isTrue);
     });
 
     test('rejects FRC match without FTC key', () {
@@ -86,20 +100,47 @@ void main() {
       final headers = ExportService.headers(ftc: false);
       expect(headers, contains('Auto Fuel'));
       expect(headers, contains('Teleop Tower'));
-      expect(headers, isNot(contains('Artifacts Auto')));
+      expect(headers, isNot(contains('Auto Hive Tips')));
     });
 
-    test('FTC headers contain Artifacts and Base Expansion', () {
+    test('FTC headers list the BIOBUZZ columns in order', () {
       final headers = ExportService.headers(ftc: true);
-      expect(headers, contains('Artifacts Auto'));
-      expect(headers, contains('Base Expansion'));
+      expect(headers, [
+        'Match',
+        'Team',
+        'Alliance',
+        'Scouter',
+        'Leave',
+        'Auto Hive Tips',
+        'Teleop Hive Tips',
+        'Flower Score',
+        'Flower Descore',
+        'Pollen Shooter',
+        'Nectar Shooter',
+        'Park',
+        'Driver Quality',
+        'Robot Died',
+        'Defense Rating',
+        'Drivetrain Speed',
+        'Intake Speed',
+        'Shooter Speed',
+        'Defense Cause',
+        'Died At',
+        'Died Reason',
+        'Comments',
+      ]);
       expect(headers, isNot(contains('Auto Fuel')));
     });
 
     test('both headers start with Match, Team, Alliance, Scouter', () {
       for (final ftc in [true, false]) {
         final headers = ExportService.headers(ftc: ftc);
-        expect(headers.take(4).toList(), ['Match', 'Team', 'Alliance', 'Scouter']);
+        expect(headers.take(4).toList(), [
+          'Match',
+          'Team',
+          'Alliance',
+          'Scouter',
+        ]);
       }
     });
 
@@ -114,14 +155,17 @@ void main() {
         'columns', () {
       for (final ftc in [true, false]) {
         final headers = ExportService.headers(ftc: ftc);
-        expect(headers, containsAll([
-          'Drivetrain Speed',
-          'Intake Speed',
-          'Shooter Speed',
-          'Defense Cause',
-          'Died At',
-          'Died Reason',
-        ]));
+        expect(
+          headers,
+          containsAll([
+            'Drivetrain Speed',
+            'Intake Speed',
+            'Shooter Speed',
+            'Defense Cause',
+            'Died At',
+            'Died Reason',
+          ]),
+        );
       }
     });
 
@@ -153,8 +197,10 @@ void main() {
         _frcMatch(matchNumber: 3),
       ]);
       // Header + 3 data rows + trailing newline → 4 non-empty lines.
-      final nonEmptyLines =
-          csv.split(RegExp(r'\r?\n')).where((l) => l.isNotEmpty).toList();
+      final nonEmptyLines = csv
+          .split(RegExp(r'\r?\n'))
+          .where((l) => l.isNotEmpty)
+          .toList();
       expect(nonEmptyLines.length, 4);
     });
 
@@ -165,16 +211,43 @@ void main() {
       expect(csv, contains('12'));
     });
 
-    test('embeds FTC gameData values', () {
+    test('embeds FTC gameData values in header order', () {
       final csv = ExportService.buildCsvString([_ftcMatch()]);
-      // artifacts_auto=5, artifacts_teleop=10.
-      expect(csv, contains('5'));
-      expect(csv, contains('10'));
+      final row = csv.split('\n')[1].split(',');
+      // Leave .. Park, right after the four common columns.
+      expect(row.sublist(4, 12), [
+        'true',
+        '5',
+        '10',
+        'true',
+        'false',
+        'true',
+        'false',
+        'true',
+      ]);
+    });
+
+    test('a legacy DECODE match exports BIOBUZZ defaults', () {
+      final legacy = _ftcMatch().copyWith(
+        gameData: const {'leave': true, 'artifacts_auto': 7},
+      );
+      final csv = ExportService.buildCsvString([legacy]);
+      final row = csv.split('\n')[1].split(',');
+      expect(row.sublist(4, 12), [
+        'true',
+        '0',
+        '0',
+        'false',
+        'false',
+        'false',
+        'false',
+        'false',
+      ]);
     });
 
     test('detects FTC from first match', () {
       final csv = ExportService.buildCsvString([_ftcMatch()]);
-      expect(csv, contains('Artifacts Auto'));
+      expect(csv, contains('Auto Hive Tips'));
       expect(csv, isNot(contains('Auto Fuel')));
     });
 
@@ -227,8 +300,11 @@ void main() {
         final csv = ExportService.buildCsvString([
           _frcMatch(comments: '${trigger}cmd|/C calc!A0'),
         ]);
-        expect(csv, contains("'$trigger"),
-            reason: 'leading $trigger should be guarded');
+        expect(
+          csv,
+          contains("'$trigger"),
+          reason: 'leading $trigger should be guarded',
+        );
       }
     });
 

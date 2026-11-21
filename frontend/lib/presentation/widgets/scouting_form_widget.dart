@@ -9,7 +9,7 @@ import 'color_bar.dart';
 import 'match_timer.dart';
 
 /// Fixed width for both sides of a wizard's bottom bar. Both
-/// [FrcRebuiltForm] and [FtcDecodeForm] wrap their back-button slot and
+/// [FrcRebuiltForm] and [FtcBioBuzzForm] wrap their back-button slot and
 /// their [ScoutingWizardNextButton] in a [ScoutingWizardBottomSlot] of this
 /// width, so [ScoutingWizardPageIndicator] sits at the true center of the
 /// bar. Before this constant existed, the back slot was a bare
@@ -327,10 +327,14 @@ class ScoutingFormBrandBand extends StatelessWidget
   final MatchTimerController timerController;
   final ValueChanged<Color>? onPhaseChanged;
 
+  /// The phase lengths the timer runs. Defaults to FRC.
+  final MatchTiming timing;
+
   const ScoutingFormBrandBand({
     super.key,
     required this.timerController,
     this.onPhaseChanged,
+    this.timing = MatchTiming.frc,
   });
 
   @override
@@ -345,7 +349,11 @@ class ScoutingFormBrandBand extends StatelessWidget
       mainAxisSize: MainAxisSize.min,
       children: [
         ColorBar(brand: BrandScope.of(context)),
-        MatchTimer(controller: timerController, onPhaseChanged: onPhaseChanged),
+        MatchTimer(
+          controller: timerController,
+          onPhaseChanged: onPhaseChanged,
+          timing: timing,
+        ),
       ],
     );
   }

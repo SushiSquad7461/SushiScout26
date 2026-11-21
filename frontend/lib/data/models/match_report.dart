@@ -19,8 +19,14 @@ class MatchReport {
 
   // Common
   bool get robotDied => gameData['robot_died'] ?? false;
+
+  /// True for an FTC report. The key checks catch a report whose
+  /// programType was never set: `hive_tips_auto` marks a BIOBUZZ report,
+  /// and `artifacts_auto` marks a legacy DECODE report still in Firestore.
   bool get isFtc =>
-      programType == 'FTC' || gameData.containsKey('artifacts_auto');
+      programType == 'FTC' ||
+      gameData.containsKey('hive_tips_auto') ||
+      gameData.containsKey('artifacts_auto');
   int? get diedAtSeconds => (gameData['died_at_seconds'] as num?)?.toInt();
   String get diedReason => gameData['died_reason'] ?? '';
 
@@ -41,13 +47,16 @@ class MatchReport {
   bool get shootingRangeMid => gameData['shooting_range_mid'] ?? false;
   bool get shootingRangeFar => gameData['shooting_range_far'] ?? false;
 
-  // FTC getters
+  // FTC getters (2026-27 BIOBUZZ)
   bool get leave => gameData['leave'] ?? false;
-  int get artifactsAuto => gameData['artifacts_auto'] ?? 0;
-  bool get indexingAuto => gameData['indexing_auto'] ?? false;
-  int get artifactsTeleop => gameData['artifacts_teleop'] ?? 0;
-  bool get indexingTeleop => gameData['indexing_teleop'] ?? false;
-  String get baseExpansion => gameData['base_expansion'] ?? 'None';
+  int get hiveTipsAuto => (gameData['hive_tips_auto'] as num?)?.toInt() ?? 0;
+  int get hiveTipsTeleop =>
+      (gameData['hive_tips_teleop'] as num?)?.toInt() ?? 0;
+  bool get flowerScore => gameData['flower_score'] ?? false;
+  bool get flowerDescore => gameData['flower_descore'] ?? false;
+  bool get pollenShooter => gameData['pollen_shooter'] ?? false;
+  bool get nectarShooter => gameData['nectar_shooter'] ?? false;
+  bool get park => gameData['park'] ?? false;
   double get driverQuality => (gameData['driver_quality'] ?? 0).toDouble();
 
   MatchReport({
