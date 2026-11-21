@@ -42,6 +42,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _backfilling = false;
   bool _sheetLoadFailed = false;
 
+  /// The team that the sheet state above belongs to. The Team section on
+  /// this same screen can switch the active team, so every async result
+  /// checks this id before it writes state. Without the check, a late
+  /// result for the old team shows that team's sheet to the new team. An
+  /// admin could then save it and attach the old team's spreadsheet.
+  String? _sheetTeamId;
+
   @override
   void initState() {
     super.initState();
@@ -51,15 +58,31 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     _loadTeamSheet();
   }
 
+  /// Drops every piece of sheet state that belongs to the previous team, then
+  /// loads the new team's sheet.
+  void _onActiveTeamChanged() {
+    setState(() {
+      _sheetId = null;
+      _sheetError = null;
+      _sheetLoadFailed = false;
+      _saving = false;
+      _backfilling = false;
+      _sheetCtrl.clear();
+    });
+    _loadTeamSheet();
+  }
+
   void _loadTeamSheet() {
     final String teamId;
     try {
       final id = ref.read(currentTeamIdProvider);
+      _sheetTeamId = id;
       if (id == null) return;
       teamId = id;
     } catch (_) {
       // Auth/team providers may not be ready yet (e.g. no signed-in user) —
       // leave the export section in its "not configured" state.
+      _sheetTeamId = null;
       return;
     }
 
@@ -67,7 +90,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         .read(teamRepositoryProvider)
         .getTeamSettings(teamId)
         .then((settings) {
-          if (!mounted) return;
+          if (!mounted || _sheetTeamId != teamId) return;
           setState(() {
             _sheetId = settings?.googleSheetId;
             _sheetCtrl.text = _sheetId ?? '';
@@ -77,7 +100,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           // A genuine load failure (permission-denied, network) must not look
           // like "not configured" — that would tell an admin whose sheet IS
           // connected that exports are off.
-          if (!mounted) return;
+          if (!mounted || _sheetTeamId != teamId) return;
           setState(() => _sheetLoadFailed = true);
         });
   }
@@ -95,42 +118,48 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       final stored = await ref
           .read(teamRepositoryProvider)
           .setTeamSheet(teamId: teamId, sheetId: _sheetCtrl.text);
-      if (!mounted) return;
+      if (!mounted || _sheetTeamId != teamId) return;
       setState(() => _sheetId = stored);
     } catch (e) {
       // The callable's failed-precondition message names the service
       // account to share the sheet with — surface it verbatim, without the
       // technical "[firebase_functions/<code>]" prefix FirebaseFunctionsException
       // adds to toString().
-      if (!mounted) return;
+      if (!mounted || _sheetTeamId != teamId) return;
       final message = e is FirebaseFunctionsException
           ? (e.message ?? e.toString())
           : e.toString();
       setState(() => _sheetError = message);
     } finally {
-      if (mounted) setState(() => _saving = false);
+      // After a team switch, _saving belongs to the new team's save, if any.
+      if (mounted && _sheetTeamId == teamId) setState(() => _saving = false);
     }
   }
 
   Future<void> _backfillEvent() async {
     final eventId = ref.read(currentEventIdProvider);
+    // The backfill itself stays on the old team's event, because eventId is
+    // captured here. Only its on-screen result is dropped after a switch.
+    final teamId = _sheetTeamId;
 
     setState(() => _backfilling = true);
     try {
       await ref
           .read(teamRepositoryProvider)
           .backfillEventToSheets(eventId: eventId);
-      if (!mounted) return;
+      if (!mounted || _sheetTeamId != teamId) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text("Backfill complete")));
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || _sheetTeamId != teamId) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text("Backfill failed: $e")));
     } finally {
-      if (mounted) setState(() => _backfilling = false);
+      if (mounted && _sheetTeamId == teamId) {
+        setState(() => _backfilling = false);
+      }
     }
   }
 
@@ -147,6 +176,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final brand = BrandScope.of(context);
+
+    // The Team section below can switch the active team while this screen
+    // stays open. initState loads the sheet only once, so reload it here.
+    // On a provider error, still drop the old team's state. _loadTeamSheet
+    // then leaves the section "not configured", as initState does.
+    ref.listen<String?>(
+      currentTeamIdProvider,
+      (previous, next) {
+        if (previous != next) _onActiveTeamChanged();
+      },
+      onError: (_, _) => _onActiveTeamChanged(),
+    );
 
     return Scaffold(
       appBar: BrandAppBar(
