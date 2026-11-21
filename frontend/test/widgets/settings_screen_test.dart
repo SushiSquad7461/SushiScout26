@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -17,6 +19,20 @@ import 'package:mockito/mockito.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'settings_screen_test.mocks.dart';
+
+/// Stand-in for the active team, so a test can switch teams while
+/// `SettingsScreen` stays mounted. This mirrors the device-test path, where an
+/// admin switches teams from the Team section of this same screen.
+class _FakeActiveTeam extends Notifier<String> {
+  @override
+  String build() => 'team1';
+
+  void select(String teamId) => state = teamId;
+}
+
+final _fakeActiveTeamProvider = NotifierProvider<_FakeActiveTeam, String>(
+  _FakeActiveTeam.new,
+);
 
 /// Behavioural coverage for `SettingsScreen`, ported from the deleted
 /// `settings_sheet_test.dart` when the bottom sheet became a pushed route.
@@ -420,6 +436,271 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.textContaining('set by event'), findsNothing);
+    });
+  });
+
+  // Regression: an admin switched the active team from 7461 to 23404, and the
+  // section kept the previous team's sheet on screen: "Connected", its link,
+  // and its id prefilled in the field. The section loaded once in initState.
+  // Tapping save there would attach 7461's spreadsheet to 23404.
+  group('active team switch', () {
+    // In production isTeamAdminProvider reads the same auth state as the
+    // active team, so admin-ness follows the fake team here as well.
+    Future<ProviderContainer> pumpSwitchable(
+      WidgetTester tester, {
+      Set<String> adminOf = const {'team1', 'team2', 'team3'},
+    }) async {
+      await growViewport(tester);
+      final prefs = await SharedPreferences.getInstance();
+      await tester.pumpWidget(
+        wrap([
+          sharedPreferencesProvider.overrideWith((ref) => prefs),
+          isTeamAdminProvider.overrideWith(
+            (ref) => adminOf.contains(ref.watch(_fakeActiveTeamProvider)),
+          ),
+          currentTeamIdProvider.overrideWith(
+            (ref) => ref.watch(_fakeActiveTeamProvider),
+          ),
+          currentEventIdProvider.overrideWith(
+            (ref) => '${ref.watch(_fakeActiveTeamProvider)}_2026test',
+          ),
+          teamRepositoryProvider.overrideWith((ref) => mockTeamRepository),
+          userTeamsProvider.overrideWith((ref) async => const <Team>[]),
+        ]),
+      );
+      return ProviderScope.containerOf(
+        tester.element(find.byType(SettingsScreen)),
+      );
+    }
+
+    String sheetFieldText(WidgetTester tester) => tester
+        .widget<TextField>(
+          find.widgetWithText(TextField, 'google sheet link or id'),
+        )
+        .controller!
+        .text;
+
+    void expectNotConfigured(WidgetTester tester) {
+      expect(
+        find.text("Not configured — matches aren't being exported."),
+        findsOneWidget,
+      );
+      expect(find.text('Connected'), findsNothing);
+      expect(find.textContaining('docs.google.com'), findsNothing);
+      expect(sheetFieldText(tester), isEmpty);
+      final backfill = tester.widget<OutlinedButton>(
+        find.widgetWithText(OutlinedButton, 'backfill this event'),
+      );
+      expect(backfill.onPressed, isNull);
+    }
+
+    testWidgets("drops the previous team's sheet when the new team has none", (
+      tester,
+    ) async {
+      when(
+        mockTeamRepository.getTeamSettings('team1'),
+      ).thenAnswer((_) async => connectedSettings());
+      when(
+        mockTeamRepository.getTeamSettings('team2'),
+      ).thenAnswer((_) async => null);
+
+      final container = await pumpSwitchable(tester);
+      await tester.pumpAndSettle();
+      expect(find.text('Connected'), findsOneWidget);
+      expect(sheetFieldText(tester), 'abc123');
+
+      container.read(_fakeActiveTeamProvider.notifier).select('team2');
+      await tester.pumpAndSettle();
+
+      verify(mockTeamRepository.getTeamSettings('team2')).called(1);
+      expectNotConfigured(tester);
+    });
+
+    testWidgets('shows the new team its own sheet', (tester) async {
+      when(
+        mockTeamRepository.getTeamSettings('team1'),
+      ).thenAnswer((_) async => connectedSettings());
+      when(mockTeamRepository.getTeamSettings('team2')).thenAnswer(
+        (_) async => TeamSettings(
+          teamId: 'team2',
+          googleSheetId: 'team2sheet',
+          createdBy: 'bob',
+          createdAt: DateTime(2026, 1, 1),
+        ),
+      );
+
+      final container = await pumpSwitchable(tester);
+      await tester.pumpAndSettle();
+
+      container.read(_fakeActiveTeamProvider.notifier).select('team2');
+      await tester.pumpAndSettle();
+
+      expect(
+        find.textContaining('https://docs.google.com/spreadsheets/d/team2sheet'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('/d/abc123'), findsNothing);
+      expect(sheetFieldText(tester), 'team2sheet');
+    });
+
+    testWidgets("ignores the old team's load if it lands after the switch", (
+      tester,
+    ) async {
+      final team1Load = Completer<TeamSettings?>();
+      when(
+        mockTeamRepository.getTeamSettings('team1'),
+      ).thenAnswer((_) => team1Load.future);
+      when(
+        mockTeamRepository.getTeamSettings('team2'),
+      ).thenAnswer((_) async => null);
+
+      final container = await pumpSwitchable(tester);
+      await tester.pump();
+
+      container.read(_fakeActiveTeamProvider.notifier).select('team2');
+      await tester.pumpAndSettle();
+
+      team1Load.complete(connectedSettings());
+      await tester.pumpAndSettle();
+
+      expectNotConfigured(tester);
+    });
+
+    testWidgets("clears the old team's load-failure and save-error state", (
+      tester,
+    ) async {
+      when(
+        mockTeamRepository.getTeamSettings('team1'),
+      ).thenAnswer((_) async => throw Exception('permission-denied'));
+      when(
+        mockTeamRepository.getTeamSettings('team2'),
+      ).thenAnswer((_) async => null);
+      when(
+        mockTeamRepository.setTeamSheet(
+          teamId: anyNamed('teamId'),
+          sheetId: anyNamed('sheetId'),
+        ),
+      ).thenThrow(
+        FirebaseFunctionsException(code: 'internal', message: 'team1 error'),
+      );
+
+      final container = await pumpSwitchable(tester);
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'save'));
+      await tester.pumpAndSettle();
+      expect(find.text("Couldn't check export status"), findsOneWidget);
+      expect(find.text('team1 error'), findsOneWidget);
+
+      container.read(_fakeActiveTeamProvider.notifier).select('team2');
+      await tester.pumpAndSettle();
+
+      expect(find.text("Couldn't check export status"), findsNothing);
+      expect(find.text('team1 error'), findsNothing);
+      expectNotConfigured(tester);
+    });
+
+    testWidgets("ignores the old team's save if it lands after the switch", (
+      tester,
+    ) async {
+      final team1Save = Completer<String>();
+      when(
+        mockTeamRepository.getTeamSettings(any),
+      ).thenAnswer((_) async => null);
+      when(
+        mockTeamRepository.setTeamSheet(teamId: 'team1', sheetId: 'abc123'),
+      ).thenAnswer((_) => team1Save.future);
+
+      final container = await pumpSwitchable(tester);
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.widgetWithText(TextField, 'google sheet link or id'),
+        'abc123',
+      );
+      await tester.tap(find.widgetWithText(FilledButton, 'save'));
+      await tester.pump();
+
+      container.read(_fakeActiveTeamProvider.notifier).select('team2');
+      await tester.pumpAndSettle();
+
+      team1Save.complete('abc123');
+      await tester.pumpAndSettle();
+
+      expectNotConfigured(tester);
+      expect(find.widgetWithText(FilledButton, 'save'), findsOneWidget);
+    });
+
+    testWidgets("ignores the old team's backfill if it lands after the switch", (
+      tester,
+    ) async {
+      final team1Backfill = Completer<Map<String, dynamic>>();
+      when(
+        mockTeamRepository.getTeamSettings('team1'),
+      ).thenAnswer((_) async => connectedSettings());
+      when(mockTeamRepository.getTeamSettings('team2')).thenAnswer(
+        (_) async => TeamSettings(
+          teamId: 'team2',
+          googleSheetId: 'team2sheet',
+          createdBy: 'bob',
+          createdAt: DateTime(2026, 1, 1),
+        ),
+      );
+      when(
+        mockTeamRepository.backfillEventToSheets(eventId: 'team1_2026test'),
+      ).thenAnswer((_) => team1Backfill.future);
+
+      final container = await pumpSwitchable(tester);
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.widgetWithText(OutlinedButton, 'backfill this event'),
+      );
+      await tester.pump();
+      expect(find.text('backfilling…'), findsOneWidget);
+
+      container.read(_fakeActiveTeamProvider.notifier).select('team2');
+      await tester.pumpAndSettle();
+
+      // Team 2 has its own sheet, so its backfill button is usable at once.
+      final backfill = tester.widget<OutlinedButton>(
+        find.widgetWithText(OutlinedButton, 'backfill this event'),
+      );
+      expect(backfill.onPressed, isNotNull);
+
+      team1Backfill.complete({'synced': 5});
+      await tester.pumpAndSettle();
+
+      expect(find.text('Backfill complete'), findsNothing);
+      // The backfill still ran against team 1's own event id.
+      verify(
+        mockTeamRepository.backfillEventToSheets(eventId: 'team1_2026test'),
+      ).called(1);
+    });
+
+    testWidgets('reloads the sheet when switching through a non-admin team', (
+      tester,
+    ) async {
+      when(
+        mockTeamRepository.getTeamSettings('team1'),
+      ).thenAnswer((_) async => connectedSettings());
+      when(
+        mockTeamRepository.getTeamSettings(argThat(isNot('team1'))),
+      ).thenAnswer((_) async => null);
+
+      final container = await pumpSwitchable(
+        tester,
+        adminOf: const {'team1', 'team3'},
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Connected'), findsOneWidget);
+
+      container.read(_fakeActiveTeamProvider.notifier).select('team2');
+      await tester.pumpAndSettle();
+      expect(find.text('sheets export'), findsNothing);
+
+      container.read(_fakeActiveTeamProvider.notifier).select('team3');
+      await tester.pumpAndSettle();
+
+      expect(find.text('sheets export'), findsOneWidget);
+      expectNotConfigured(tester);
     });
   });
 }
